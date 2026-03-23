@@ -1,3 +1,3 @@
-export * from './types';
+export * from './types/index';
 export * from './interfaces/DataSource';
-export * from './config';
+export * from './config/index';
