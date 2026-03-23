@@ -1,8 +1,3 @@
-
-
-mkdir -p "client/src/app/(main)"
-
-cat > "client/src/app/(main)/page.tsx" << 'HOMEEOF'
 'use client';
 
 import { useSession } from 'next-auth/react';
