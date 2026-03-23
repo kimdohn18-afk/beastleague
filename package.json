@@ -1,0 +1,20 @@
+{
+  "name": "beastleague",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["client", "server", "collector", "shared"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=client\" \"npm run dev --workspace=server\"",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npx tsc --noEmit -p tsconfig.base.json",
+    "seed": "npx ts-node -P server/tsconfig.json -r tsconfig-paths/register server/src/scripts/seed.ts",
+    "e2e": "npx ts-node -P server/tsconfig.json -r tsconfig-paths/register server/src/scripts/e2eFlow.ts",
+    "validate-data": "npx ts-node -P collector/tsconfig.json collector/src/tools/validate.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.3.3",
+    "tsconfig-paths": "^4.2.0"
+  }
+}

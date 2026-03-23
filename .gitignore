@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+
+# Build outputs
+dist/
+.next/
+out/
+
+# Test coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# MongoDB 로컬 데이터
+data/db/
+
+# 경기 데이터 (실제 입력 데이터는 각 환경에서 직접 입력)
+collector/data/*/
+
+# 단, 디렉토리 구조 유지용 파일은 제외
+!collector/data/.gitkeep
+!collector/data/README.md
