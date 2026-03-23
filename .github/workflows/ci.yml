@@ -27,8 +27,14 @@ jobs:
 
       - run: npm ci
 
-      - name: TypeScript 타입 체크
-        run: npx tsc --noEmit
+      - name: shared 타입 체크
+        run: npx tsc --noEmit --project shared/tsconfig.json
+
+      - name: collector 타입 체크
+        run: npx tsc --noEmit --project collector/tsconfig.json
+
+      - name: server 타입 체크
+        run: npx tsc --noEmit --project server/tsconfig.json
 
       - name: shared 테스트
         run: npm test --workspace=shared
