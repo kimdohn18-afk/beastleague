@@ -1,94 +1,86 @@
 'use client';
+
+import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import api from '@/lib/api';
-import EmptyState from '@/components/EmptyState';
-import LoadingSpinner from '@/components/LoadingSpinner';
-
-interface Battle {
-  _id: string;
-  date: string;
-  result: { player1: string; player2: string };
-  xpAwarded: { player1: number; player2: number };
-  player1: { userId: string; statGain: number };
-  player2: { userId: string; statGain: number };
-}
-
-const RESULT_STYLE: Record<string, { label: string; color: string }> = {
-  win:  { label: '승리 🎉', color: 'text-green-400' },
-  lose: { label: '패배',     color: 'text-red-400'   },
-  draw: { label: '무승부',   color: 'text-yellow-400' },
-};
+import { useRouter } from 'next/navigation';
 
 export default function BattlePage() {
-  const [todayBattle, setTodayBattle] = useState<Battle | null>(null);
-  const [history, setHistory] = useState<Battle[]>([]);
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [todayBattle, setTodayBattle] = useState<any>(null);
+  const [recentBattles, setRecentBattles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    Promise.all([
-      api.get<Battle[]>('/api/battles/today').catch(() => ({ data: [] as Battle[] })),
-      api.get<Battle[]>('/api/battles/history').catch(() => ({ data: [] as Battle[] })),
-    ]).then(([today, hist]) => {
-      setTodayBattle(today.data[0] ?? null);
-      setHistory(hist.data);
-    }).finally(() => setLoading(false));
-  }, []);
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const token = (session as any)?.backendToken;
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  if (loading) return <div className="flex justify-center pt-20"><LoadingSpinner /></div>;
+  useEffect(() => {
+    if (status === 'unauthenticated') router.push('/login');
+    if (!token) return;
+    Promise.all([
+      fetch(`${apiUrl}/api/battles/today`, { headers }).then(r => r.ok ? r.json() : null),
+      fetch(`${apiUrl}/api/battles/history?limit=5`, { headers }).then(r => r.ok ? r.json() : []),
+    ]).then(([today, recent]) => {
+      setTodayBattle(today);
+      setRecentBattles(Array.isArray(recent) ? recent : []);
+    }).catch(console.error).finally(() => setLoading(false));
+  }, [token, status]);
+
+  if (status === 'loading' || loading) return <div className="min-h-screen bg-surface flex items-center justify-center"><p className="text-textSecondary">로딩 중...</p></div>;
+
+  const resultColor = (r: string) => r === 'win' ? 'text-green-400' : r === 'lose' ? 'text-red-400' : 'text-yellow-400';
+  const resultText = (r: string) => r === 'win' ? '승리!' : r === 'lose' ? '패배' : '무승부';
 
   return (
-    <div className="px-4 pt-6 max-w-lg mx-auto space-y-5">
-      <h1 className="font-black text-xl">⚔️ 대결</h1>
+    <div className="min-h-screen bg-surface p-4 pb-24">
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={() => router.push('/')} className="text-textSecondary text-xl">←</button>
+        <h1 className="text-lg font-bold text-textPrimary">대결</h1>
+      </div>
 
-      {/* 오늘 대결 */}
       {todayBattle ? (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-surfaceLight rounded-2xl p-5 border border-white/10"
-        >
-          <div className="flex justify-between items-center mb-4">
+        <div className="bg-surfaceLight rounded-xl p-6 mb-4">
+          <p className="text-center text-xs text-textSecondary mb-3">오늘의 대결</p>
+          <div className="flex items-center justify-between">
             <div className="text-center flex-1">
-              <p className="text-2xl">🐾</p>
-              <p className="text-sm font-semibold">나</p>
-              <p className="text-xs text-textSecondary">획득 {todayBattle.player1.statGain.toFixed(1)}</p>
+              <span className="text-4xl">🐾</span>
+              <p className="text-sm text-textPrimary font-bold mt-1">나</p>
+              <p className="text-xs text-textSecondary">총합 {todayBattle.myTotalStats?.toFixed(1) || '?'}</p>
             </div>
             <div className="text-center px-4">
-              <p className="text-xl font-black">VS</p>
+              <p className={`text-3xl font-black ${resultColor(todayBattle.result)}`}>{resultText(todayBattle.result)}</p>
+              <p className="text-xs text-textSecondary mt-1">XP +{todayBattle.xpGained || 0}</p>
             </div>
             <div className="text-center flex-1">
-              <p className="text-2xl">🐾</p>
-              <p className="text-sm font-semibold">상대</p>
-              <p className="text-xs text-textSecondary">획득 {todayBattle.player2.statGain.toFixed(1)}</p>
+              <span className="text-4xl">👤</span>
+              <p className="text-sm text-textPrimary font-bold mt-1">상대</p>
+              <p className="text-xs text-textSecondary">총합 {todayBattle.opponentTotalStats?.toFixed(1) || '?'}</p>
             </div>
           </div>
-          <div className="text-center">
-            <p className={`text-lg font-bold ${RESULT_STYLE[todayBattle.result.player1]?.color}`}>
-              {RESULT_STYLE[todayBattle.result.player1]?.label}
-            </p>
-            <p className="text-xs text-textSecondary mt-1">XP +{todayBattle.xpAwarded.player1}</p>
-          </div>
-        </motion.div>
+        </div>
       ) : (
-        <EmptyState emoji="⏳" title="오늘 대결이 없습니다" description="경기 종료 후 자동으로 매칭됩니다" />
+        <div className="bg-surfaceLight rounded-xl p-6 text-center mb-4">
+          <span className="text-4xl">⚔️</span>
+          <p className="text-textSecondary mt-2">오늘 배틀이 없습니다</p>
+          <p className="text-xs text-textSecondary mt-1">경기 정산 후 자동 생성됩니다</p>
+        </div>
       )}
 
-      {/* 최근 대결 이력 */}
-      {history.length > 0 && (
-        <div>
-          <h3 className="font-semibold text-sm text-textSecondary mb-3">최근 대결</h3>
-          <div className="space-y-2">
-            {history.map((b) => (
-              <div key={b._id} className="bg-surfaceLight rounded-xl p-3 border border-white/10 flex justify-between items-center">
-                <span className="text-xs text-textSecondary">{b.date}</span>
-                <span className={`text-sm font-bold ${RESULT_STYLE[b.result.player1]?.color}`}>
-                  {RESULT_STYLE[b.result.player1]?.label}
-                </span>
-                <span className="text-xs text-accent">+{b.xpAwarded.player1} XP</span>
+      <h3 className="text-sm font-bold text-textPrimary mb-2">최근 대결</h3>
+      {recentBattles.length === 0 ? (
+        <p className="text-center text-textSecondary text-sm py-4">대결 기록이 없습니다</p>
+      ) : (
+        <div className="space-y-2">
+          {recentBattles.map((b, i) => (
+            <div key={i} className="bg-surfaceLight rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-textSecondary">{new Date(b.createdAt || b.date).toLocaleDateString('ko-KR')}</p>
+                <p className={`text-sm font-bold ${resultColor(b.result)}`}>{resultText(b.result)}</p>
               </div>
-            ))}
-          </div>
+              <p className="text-xs text-textSecondary">XP +{b.xpGained || 0}</p>
+            </div>
+          ))}
         </div>
       )}
     </div>

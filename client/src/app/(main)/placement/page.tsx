@@ -1,187 +1,125 @@
 'use client';
+
+import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import api from '@/lib/api';
-import { useToast } from '@/components/Toast';
-import GameCard from '@/components/GameCard';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import EmptyState from '@/components/EmptyState';
-import type { GameData, TeamCode, BatterGroupType } from '@beastleague/shared';
-
-const GROUP_INFO: Record<string, { label: string; hint: string; emoji: string }> = {
-  leadoff:          { label: '상위타선', hint: '1~2번 | Skill·Mind', emoji: '🎯' },
-  cleanup:          { label: '클린업',   hint: '3~5번 | Power',      emoji: '💥' },
-  lower:            { label: '하위타선', hint: '6~9번 | Agility',    emoji: '⚡' },
-  starter_pitcher:  { label: '선발투수', hint: '투수 | Stamina',     emoji: '⚾' },
-};
-
-function todayDate() {
-  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-}
 
 export default function PlacementPage() {
+  const { data: session, status } = useSession();
   const router = useRouter();
-  const toast = useToast();
-  const [games, setGames] = useState<GameData[]>([]);
+  const [games, setGames] = useState<any[]>([]);
+  const [step, setStep] = useState(1);
+  const [selectedGame, setSelectedGame] = useState<any>(null);
+  const [selectedTeam, setSelectedTeam] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState('');
   const [loading, setLoading] = useState(true);
-  const [step, setStep] = useState(0);
-  const [selected, setSelected] = useState<{ game?: GameData; team?: TeamCode; groupType?: BatterGroupType }>({});
-  const [popularity, setPopularity] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState<{msg:string;type:string}|null>(null);
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const token = (session as any)?.backendToken;
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
   useEffect(() => {
-    api.get<GameData[]>(`/api/games?date=${todayDate()}`)
-      .then((r) => setGames(r.data))
-      .catch(() => setGames([]))
-      .finally(() => setLoading(false));
-  }, []);
+    if (status === 'unauthenticated') router.push('/login');
+    if (!token) return;
+    fetch(`${apiUrl}/api/games?date=today`, { headers })
+      .then(r => r.json()).then(setGames).catch(console.error).finally(() => setLoading(false));
+  }, [token, status]);
 
-  const loadPopularity = async (gameId: string) => {
-    try {
-      const res = await api.get<Array<{ _id: { team: string; groupType: string }; count: number }>>(
-        `/api/games/${gameId}/popularity`
-      );
-      const map: Record<string, number> = {};
-      res.data.forEach((r) => { map[`${r._id.team}-${r._id.groupType}`] = r.count; });
-      setPopularity(map);
-    } catch { /* ignore */ }
-  };
-
-  const handleSelectGame = (game: GameData) => {
-    setSelected({ game });
-    loadPopularity(game.gameId);
-    setStep(1);
-  };
-
-  const handleSelectTeam = (team: TeamCode) => {
-    setSelected((s) => ({ ...s, team }));
-    setStep(2);
-  };
-
-  const handleSelectGroup = (groupType: BatterGroupType) => {
-    setSelected((s) => ({ ...s, groupType }));
-    setStep(3);
-  };
-
-  const handleConfirm = async () => {
+  async function submit() {
     setSubmitting(true);
     try {
-      await api.post('/api/placements', {
-        gameId: selected.game!.gameId,
-        team: selected.team,
-        groupType: selected.groupType,
+      const res = await fetch(`${apiUrl}/api/placements`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ gameId: selectedGame._id, team: selectedTeam, groupType: selectedGroup }),
       });
-      toast('배치 완료! 오늘 경기를 응원하세요 ⚾', 'success');
-      router.push('/');
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? '배치 실패';
-      toast(msg, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+      const data = await res.json();
+      if (res.ok) {
+        setToast({ msg: '배치 완료!', type: 'success' });
+        setTimeout(() => router.push('/'), 1500);
+      } else {
+        setToast({ msg: data.error || '배치 실패', type: 'error' });
+      }
+    } catch (e) { setToast({ msg: '서버 오류', type: 'error' }); }
+    setSubmitting(false);
+    setTimeout(() => setToast(null), 3000);
+  }
 
-  if (loading) return <div className="flex justify-center pt-20"><LoadingSpinner /></div>;
+  if (status === 'loading' || loading) return <div className="min-h-screen bg-surface flex items-center justify-center"><p className="text-textSecondary">로딩 중...</p></div>;
+
+  const groups = [
+    { key: 'top', label: '상위타선 (1-3번)', desc: '타격 스탯 보너스', icon: '🔥' },
+    { key: 'cleanup', label: '클린업 (4-6번)', desc: '파워 스탯 보너스', icon: '💪' },
+    { key: 'lower', label: '하위타선 (7-9번)', desc: '민첩 스탯 보너스', icon: '🏃' },
+    { key: 'pitcher', label: '투수', desc: '멘탈+체력 보너스', icon: '⚾' },
+  ];
 
   return (
-    <div className="px-4 pt-6 max-w-lg mx-auto">
-      {/* 스텝 인디케이터 */}
-      <div className="flex gap-2 mb-6">
-        {['경기', '팀', '그룹', '확인'].map((label, i) => (
-          <div key={i} className={`flex-1 h-1.5 rounded-full ${i <= step ? 'bg-primary' : 'bg-surfaceLight'}`} />
-        ))}
+    <div className="min-h-screen bg-surface p-4 pb-24">
+      {toast && <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg text-sm font-medium ${toast.type==='success'?'bg-green-600':'bg-red-600'} text-white`}>{toast.msg}</div>}
+
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={() => step > 1 ? setStep(step-1) : router.push('/')} className="text-textSecondary text-xl">←</button>
+        <h1 className="text-lg font-bold text-textPrimary">배치하기 ({step}/4)</h1>
       </div>
 
-      <AnimatePresence mode="wait">
-        {/* Step 0: 경기 선택 */}
-        {step === 0 && (
-          <motion.div key="step0" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <h2 className="font-bold text-lg mb-4">오늘 경기 선택</h2>
-            {games.length === 0
-              ? <EmptyState emoji="📅" title="오늘 예정된 경기가 없습니다" />
-              : <div className="space-y-3">
-                  {games.map((g) => (
-                    <GameCard key={g.gameId} {...g} onClick={() => handleSelectGame(g)} />
-                  ))}
-                </div>
-            }
-          </motion.div>
-        )}
-
-        {/* Step 1: 팀 선택 */}
-        {step === 1 && selected.game && (
-          <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <button onClick={() => setStep(0)} className="text-textSecondary text-sm mb-4">← 경기 다시 선택</button>
-            <h2 className="font-bold text-lg mb-4">팀 선택</h2>
-            <div className="grid grid-cols-2 gap-3">
-              {([selected.game.awayTeam, selected.game.homeTeam] as TeamCode[]).map((team) => (
-                <button
-                  key={team}
-                  onClick={() => handleSelectTeam(team)}
-                  className="p-5 rounded-2xl border border-white/10 bg-surfaceLight hover:border-primary font-bold text-lg active:scale-95 transition-all"
-                >
-                  {team}
-                  <p className="text-xs text-textSecondary font-normal mt-1">
-                    {popularity[`${team}-leadoff`] !== undefined
-                      ? `${Object.entries(popularity).filter(([k]) => k.startsWith(team)).reduce((a, [, v]) => a + v, 0)}명 배치`
-                      : ''}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* Step 2: 그룹 선택 */}
-        {step === 2 && (
-          <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <button onClick={() => setStep(1)} className="text-textSecondary text-sm mb-4">← 팀 다시 선택</button>
-            <h2 className="font-bold text-lg mb-4">타순 그룹 선택</h2>
-            <div className="space-y-3">
-              {(Object.entries(GROUP_INFO) as [BatterGroupType, typeof GROUP_INFO[string]][]).map(([type, info]) => {
-                const key = `${selected.team}-${type}`;
-                const count = popularity[key] ?? 0;
-                return (
-                  <button
-                    key={type}
-                    onClick={() => handleSelectGroup(type)}
-                    className="w-full p-4 rounded-xl border border-white/10 bg-surfaceLight hover:border-primary flex items-center gap-3 text-left active:scale-95 transition-all"
-                  >
-                    <span className="text-3xl">{info.emoji}</span>
-                    <div className="flex-1">
-                      <p className="font-semibold">{info.label}</p>
-                      <p className="text-xs text-textSecondary">{info.hint}</p>
-                    </div>
-                    {count > 0 && <span className="text-xs text-accent">{count}명</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-
-        {/* Step 3: 확인 */}
-        {step === 3 && selected.game && selected.team && selected.groupType && (
-          <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <button onClick={() => setStep(2)} className="text-textSecondary text-sm mb-4">← 그룹 다시 선택</button>
-            <div className="bg-surfaceLight rounded-2xl p-5 border border-white/10 mb-5">
-              <p className="text-textSecondary text-sm mb-3">배치 확인</p>
-              <p className="text-2xl font-black mb-1">
-                {selected.team} {GROUP_INFO[selected.groupType]?.label}
-              </p>
-              <p className="text-textSecondary text-sm">{selected.game.awayTeam} vs {selected.game.homeTeam}</p>
-            </div>
-            <button
-              onClick={handleConfirm}
-              disabled={submitting}
-              className="w-full py-4 bg-primary rounded-xl font-bold text-white disabled:opacity-50"
-            >
-              {submitting ? '배치 중...' : '배치 확정 ⚾'}
+      {step === 1 && (
+        <div className="space-y-3">
+          <p className="text-sm text-textSecondary mb-2">오늘의 경기를 선택하세요</p>
+          {games.length === 0 ? (
+            <p className="text-textSecondary text-center py-8">오늘 예정된 경기가 없습니다</p>
+          ) : games.map(g => (
+            <button key={g._id} onClick={() => { setSelectedGame(g); setStep(2); }}
+              className="w-full bg-surfaceLight rounded-xl p-4 text-left hover:ring-2 ring-primary transition">
+              <p className="text-textPrimary font-bold">{g.homeTeam} vs {g.awayTeam}</p>
+              <p className="text-xs text-textSecondary mt-1">{g.stadium} · {g.time || '18:30'}</p>
             </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          ))}
+        </div>
+      )}
+
+      {step === 2 && selectedGame && (
+        <div className="space-y-3">
+          <p className="text-sm text-textSecondary mb-2">응원할 팀을 선택하세요</p>
+          {[selectedGame.homeTeam, selectedGame.awayTeam].map(team => (
+            <button key={team} onClick={() => { setSelectedTeam(team); setStep(3); }}
+              className="w-full bg-surfaceLight rounded-xl p-4 text-center hover:ring-2 ring-primary transition">
+              <p className="text-textPrimary font-bold text-lg">{team}</p>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="space-y-3">
+          <p className="text-sm text-textSecondary mb-2">라인업 그룹을 선택하세요</p>
+          {groups.map(g => (
+            <button key={g.key} onClick={() => { setSelectedGroup(g.key); setStep(4); }}
+              className="w-full bg-surfaceLight rounded-xl p-4 text-left hover:ring-2 ring-primary transition">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{g.icon}</span>
+                <div>
+                  <p className="text-textPrimary font-bold">{g.label}</p>
+                  <p className="text-xs text-textSecondary">{g.desc}</p>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {step === 4 && (
+        <div className="bg-surfaceLight rounded-xl p-6 text-center space-y-4">
+          <p className="text-sm text-textSecondary">배치 확인</p>
+          <p className="text-textPrimary font-bold text-lg">{selectedGame.homeTeam} vs {selectedGame.awayTeam}</p>
+          <p className="text-primary font-bold">{selectedTeam} · {groups.find(g=>g.key===selectedGroup)?.label}</p>
+          <button onClick={submit} disabled={submitting}
+            className="w-full bg-primary text-white py-3 rounded-xl font-bold text-lg disabled:opacity-50">
+            {submitting ? '배치 중...' : '배치 확정!'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

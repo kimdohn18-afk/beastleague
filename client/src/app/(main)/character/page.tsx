@@ -1,142 +1,104 @@
 'use client';
+
+import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
-import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } from 'recharts';
-import api from '@/lib/api';
-import ProgressBar from '@/components/ProgressBar';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import EmptyState from '@/components/EmptyState';
-import StatBadge from '@/components/StatBadge';
-import type { Character } from '@beastleague/shared';
-
-const ANIMAL_EMOJI: Record<string, string> = {
-  bear: '🐻', tiger: '🐯', eagle: '🦅', wolf: '🐺', dragon: '🐲',
-};
-
-function xpForNextLevel(level: number) {
-  let xp = 100;
-  for (let i = 1; i < level; i++) xp = Math.ceil(xp * 1.15);
-  return xp;
-}
-
-type Tab = 'stats' | 'placements' | 'battles';
+import { useRouter } from 'next/navigation';
 
 export default function CharacterPage() {
-  const [character, setCharacter] = useState<Character | null>(null);
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [character, setCharacter] = useState<any>(null);
+  const [tab, setTab] = useState<'stats'|'placements'|'battles'>('stats');
+  const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>('stats');
-  const [history, setHistory] = useState<unknown[]>([]);
-  const [placements, setPlacements] = useState<unknown[]>([]);
-  const [battles, setBattles] = useState<unknown[]>([]);
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const token = (session as any)?.backendToken;
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
   useEffect(() => {
-    api.get<Character>('/api/characters/me')
-      .then((r) => setCharacter(r.data))
-      .catch(() => setCharacter(null))
-      .finally(() => setLoading(false));
-  }, []);
+    if (status === 'unauthenticated') router.push('/login');
+    if (!token) return;
+    fetch(`${apiUrl}/api/characters/me`, { headers })
+      .then(r => r.json()).then(setCharacter).catch(console.error).finally(() => setLoading(false));
+  }, [token, status]);
 
   useEffect(() => {
-    if (tab === 'stats') api.get<unknown[]>('/api/characters/me/history').then((r) => setHistory(r.data)).catch(() => {});
-    if (tab === 'placements') api.get<unknown[]>('/api/placements/history').then((r) => setPlacements(r.data)).catch(() => {});
-    if (tab === 'battles') api.get<unknown[]>('/api/battles/history').then((r) => setBattles(r.data)).catch(() => {});
-  }, [tab]);
+    if (!token) return;
+    const endpoints: Record<string,string> = {
+      stats: '/api/characters/me/history?limit=20',
+      placements: '/api/placements/history?limit=20',
+      battles: '/api/battles/history?limit=20',
+    };
+    fetch(`${apiUrl}${endpoints[tab]}`, { headers })
+      .then(r => r.json()).then(d => setHistory(Array.isArray(d) ? d : [])).catch(() => setHistory([]));
+  }, [tab, token]);
 
-  if (loading) return <div className="flex justify-center pt-20"><LoadingSpinner /></div>;
-  if (!character) return (
-    <div className="flex justify-center pt-20">
-      <EmptyState emoji="🐾" title="캐릭터가 없습니다" description="홈 화면에서 캐릭터를 먼저 만들어주세요" />
-    </div>
-  );
+  if (status === 'loading' || loading) return <div className="min-h-screen bg-surface flex items-center justify-center"><p className="text-textSecondary">로딩 중...</p></div>;
+  if (!character) return <div className="min-h-screen bg-surface flex items-center justify-center"><p className="text-textSecondary">캐릭터가 없습니다</p></div>;
 
-  const radarData = [
-    { stat: 'Power',   value: character.stats.power },
-    { stat: 'Agility', value: character.stats.agility },
-    { stat: 'Skill',   value: character.stats.skill },
-    { stat: 'Stamina', value: character.stats.stamina },
-    { stat: 'Mind',    value: character.stats.mind },
+  const animals: Record<string,string> = { bear:'🐻', tiger:'🐯', eagle:'🦅', wolf:'🐺', dragon:'🐲' };
+  const stats = character.stats || {};
+  const statList = [
+    { key:'power', label:'파워', icon:'💪', val: stats.power||0 },
+    { key:'agility', label:'민첩', icon:'🏃', val: stats.agility||0 },
+    { key:'skill', label:'기술', icon:'🎯', val: stats.skill||0 },
+    { key:'stamina', label:'체력', icon:'❤️', val: stats.stamina||0 },
+    { key:'mind', label:'멘탈', icon:'🧠', val: stats.mind||0 },
   ];
-
-  const nextXp = xpForNextLevel(character.level);
+  const maxStat = Math.max(...statList.map(s => s.val), 1);
 
   return (
-    <div className="px-4 pt-6 max-w-lg mx-auto space-y-5">
-      {/* 프로필 */}
-      <div className="bg-surfaceLight rounded-2xl p-5 border border-white/10 text-center">
-        <span className="text-7xl">{ANIMAL_EMOJI[character.animalType] ?? '🐾'}</span>
-        <h2 className="font-black text-xl mt-2">{character.name}</h2>
-        <p className="text-textSecondary text-sm">Lv.{character.level}</p>
-        <div className="mt-4">
-          <ProgressBar value={(character.xp / nextXp) * 100} label={`${character.xp} / ${nextXp} XP`} />
+    <div className="min-h-screen bg-surface p-4 pb-24">
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={() => router.push('/')} className="text-textSecondary text-xl">←</button>
+        <h1 className="text-lg font-bold text-textPrimary">내 캐릭터</h1>
+      </div>
+
+      <div className="bg-surfaceLight rounded-xl p-6 text-center mb-4">
+        <span className="text-6xl">{animals[character.animalType]||'🐾'}</span>
+        <h2 className="text-xl font-bold text-textPrimary mt-2">{character.name}</h2>
+        <p className="text-sm text-textSecondary">Lv.{character.level} · XP {character.xp}/{(character.level||1)*115}</p>
+        <div className="w-full bg-surface rounded-full h-3 mt-2">
+          <div className="bg-primary h-3 rounded-full transition-all" style={{width:`${Math.min((character.xp/((character.level||1)*115))*100,100)}%`}}/>
         </div>
       </div>
 
-      {/* 레이더 차트 */}
-      <div className="bg-surfaceLight rounded-2xl p-4 border border-white/10">
-        <ResponsiveContainer width="100%" height={220}>
-          <RadarChart data={radarData}>
-            <PolarGrid stroke="#2a2a3e" />
-            <PolarAngleAxis dataKey="stat" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-            <Radar dataKey="value" stroke="#6366f1" fill="#6366f1" fillOpacity={0.35} />
-          </RadarChart>
-        </ResponsiveContainer>
+      <div className="bg-surfaceLight rounded-xl p-4 mb-4">
+        <h3 className="text-sm font-bold text-textPrimary mb-3">스탯</h3>
+        {statList.map(s => (
+          <div key={s.key} className="flex items-center gap-2 mb-2">
+            <span className="w-6 text-center">{s.icon}</span>
+            <span className="w-10 text-xs text-textSecondary">{s.label}</span>
+            <div className="flex-1 bg-surface rounded-full h-4">
+              <div className="bg-primary h-4 rounded-full transition-all" style={{width:`${(s.val/maxStat)*100}%`}}/>
+            </div>
+            <span className="w-12 text-right text-xs text-textPrimary font-mono">{s.val.toFixed(1)}</span>
+          </div>
+        ))}
       </div>
 
-      {/* 탭 */}
-      <div className="flex border-b border-white/10">
-        {([['stats','성장 기록'],['placements','배치 이력'],['battles','대결 기록']] as [Tab,string][]).map(([t, label]) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`flex-1 py-2.5 text-sm font-medium transition-colors
-              ${tab === t ? 'text-primary border-b-2 border-primary' : 'text-textSecondary'}`}
-          >
-            {label}
+      <div className="flex gap-1 mb-3">
+        {(['stats','placements','battles'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg ${tab===t?'bg-primary text-white':'bg-surfaceLight text-textSecondary'}`}>
+            {t==='stats'?'성장기록':t==='placements'?'배치기록':'대결기록'}
           </button>
         ))}
       </div>
 
-      {/* 탭 컨텐츠 */}
-      {tab === 'stats' && (
-        <div className="space-y-2 pb-4">
-          {history.length === 0
-            ? <EmptyState emoji="📊" title="아직 기록이 없습니다" />
-            : (history as Array<{ _id: string; source: string; createdAt: string; after: Record<string, number>; before: Record<string, number> }>).map((log) => (
-                <div key={log._id} className="bg-surfaceLight rounded-xl p-3 border border-white/10">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-textSecondary">{log.source}</span>
-                    <span className="text-xs text-textSecondary">{new Date(log.createdAt).toLocaleDateString('ko')}</span>
-                  </div>
-                  <div className="flex gap-2 mt-1 flex-wrap">
-                    {(['power','agility','skill','stamina','mind'] as const).map((k) => {
-                      const diff = (log.after?.[k] ?? 0) - (log.before?.[k] ?? 0);
-                      return diff !== 0 ? <StatBadge key={k} value={diff} /> : null;
-                    })}
-                  </div>
-                </div>
-              ))}
-        </div>
-      )}
-
-      {tab === 'placements' && (
-        <div className="space-y-2 pb-4">
-          {placements.length === 0
-            ? <EmptyState emoji="⚾" title="배치 이력이 없습니다" />
-            : (placements as Array<{ _id: string; team: string; groupType: string; date: string; status: string }>).map((p) => (
-                <div key={p._id} className="bg-surfaceLight rounded-xl p-3 border border-white/10 flex justify-between">
-                  <span className="text-sm font-medium">{p.team} {p.groupType}</span>
-                  <span className="text-xs text-textSecondary">{p.date}</span>
-                </div>
-              ))}
-        </div>
-      )}
-
-      {tab === 'battles' && (
-        <div className="space-y-2 pb-4">
-          {battles.length === 0
-            ? <EmptyState emoji="⚔️" title="대결 기록이 없습니다" />
-            : <EmptyState emoji="⚔️" title="대결 기록" description="경기 종료 후 자동 매칭됩니다" />}
-        </div>
-      )}
+      <div className="space-y-2">
+        {history.length === 0 ? (
+          <p className="text-center text-textSecondary text-sm py-4">기록이 없습니다</p>
+        ) : history.map((h, i) => (
+          <div key={i} className="bg-surfaceLight rounded-lg p-3">
+            <p className="text-xs text-textSecondary">{new Date(h.createdAt || h.date).toLocaleDateString('ko-KR')}</p>
+            {tab === 'stats' && <p className="text-sm text-textPrimary">파워 {h.changes?.power > 0 ? '+' : ''}{h.changes?.power?.toFixed(1) || 0} | 민첩 {h.changes?.agility > 0 ? '+' : ''}{h.changes?.agility?.toFixed(1) || 0}</p>}
+            {tab === 'placements' && <p className="text-sm text-textPrimary">{h.team} · {h.groupType} · {h.status}</p>}
+            {tab === 'battles' && <p className="text-sm text-textPrimary">{h.result === 'win' ? '승리' : h.result === 'lose' ? '패배' : '무승부'} · XP +{h.xpGained || 0}</p>}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
