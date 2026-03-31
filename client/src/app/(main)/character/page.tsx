@@ -1,104 +1,94 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function CharacterPage() {
-  const { data: session, status } = useSession();
+const ANIMALS = [
+  { type: 'bear', emoji: '🐻', name: '곰' },
+  { type: 'tiger', emoji: '🐯', name: '호랑이' },
+  { type: 'eagle', emoji: '🦅', name: '독수리' },
+  { type: 'wolf', emoji: '🐺', name: '늑대' },
+  { type: 'dragon', emoji: '🐲', name: '용' },
+];
+
+export default function CharacterCreatePage() {
+  const { data: session } = useSession();
   const router = useRouter();
-  const [character, setCharacter] = useState<any>(null);
-  const [tab, setTab] = useState<'stats'|'placements'|'battles'>('stats');
-  const [history, setHistory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken;
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  useEffect(() => {
-    if (status === 'unauthenticated') router.push('/login');
-    if (!token) return;
-    fetch(`${apiUrl}/api/characters/me`, { headers })
-      .then(r => r.json()).then(setCharacter).catch(console.error).finally(() => setLoading(false));
-  }, [token, status]);
-
-  useEffect(() => {
-    if (!token) return;
-    const endpoints: Record<string,string> = {
-      stats: '/api/characters/me/history?limit=20',
-      placements: '/api/placements/history?limit=20',
-      battles: '/api/battles/history?limit=20',
-    };
-    fetch(`${apiUrl}${endpoints[tab]}`, { headers })
-      .then(r => r.json()).then(d => setHistory(Array.isArray(d) ? d : [])).catch(() => setHistory([]));
-  }, [tab, token]);
-
-  if (status === 'loading' || loading) return <div className="min-h-screen bg-surface flex items-center justify-center"><p className="text-textSecondary">로딩 중...</p></div>;
-  if (!character) return <div className="min-h-screen bg-surface flex items-center justify-center"><p className="text-textSecondary">캐릭터가 없습니다</p></div>;
-
-  const animals: Record<string,string> = { bear:'🐻', tiger:'🐯', eagle:'🦅', wolf:'🐺', dragon:'🐲' };
-  const stats = character.stats || {};
-  const statList = [
-    { key:'power', label:'파워', icon:'💪', val: stats.power||0 },
-    { key:'agility', label:'민첩', icon:'🏃', val: stats.agility||0 },
-    { key:'skill', label:'기술', icon:'🎯', val: stats.skill||0 },
-    { key:'stamina', label:'체력', icon:'❤️', val: stats.stamina||0 },
-    { key:'mind', label:'멘탈', icon:'🧠', val: stats.mind||0 },
-  ];
-  const maxStat = Math.max(...statList.map(s => s.val), 1);
+  async function handleCreate() {
+    if (!selected || !name.trim()) {
+      setError('이름과 캐릭터를 선택해주세요');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/characters`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: name.trim(), animalType: selected }),
+      });
+      if (res.ok) {
+        router.push('/');
+      } else {
+        const data = await res.json();
+        setError(data.error || '생성 실패');
+      }
+    } catch (e) {
+      setError('서버 오류');
+    }
+    setSubmitting(false);
+  }
 
   return (
-    <div className="min-h-screen bg-surface p-4 pb-24">
-      <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => router.push('/')} className="text-textSecondary text-xl">←</button>
-        <h1 className="text-lg font-bold text-textPrimary">내 캐릭터</h1>
-      </div>
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 gap-6">
+      <h1 className="text-white text-xl font-bold">캐릭터 만들기</h1>
 
-      <div className="bg-surfaceLight rounded-xl p-6 text-center mb-4">
-        <span className="text-6xl">{animals[character.animalType]||'🐾'}</span>
-        <h2 className="text-xl font-bold text-textPrimary mt-2">{character.name}</h2>
-        <p className="text-sm text-textSecondary">Lv.{character.level} · XP {character.xp}/{(character.level||1)*115}</p>
-        <div className="w-full bg-surface rounded-full h-3 mt-2">
-          <div className="bg-primary h-3 rounded-full transition-all" style={{width:`${Math.min((character.xp/((character.level||1)*115))*100,100)}%`}}/>
-        </div>
-      </div>
+      <input
+        type="text"
+        placeholder="캐릭터 이름"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        maxLength={10}
+        className="w-full max-w-xs bg-gray-900 text-white px-4 py-3 rounded-lg text-center outline-none focus:ring-1 focus:ring-yellow-400"
+      />
 
-      <div className="bg-surfaceLight rounded-xl p-4 mb-4">
-        <h3 className="text-sm font-bold text-textPrimary mb-3">스탯</h3>
-        {statList.map(s => (
-          <div key={s.key} className="flex items-center gap-2 mb-2">
-            <span className="w-6 text-center">{s.icon}</span>
-            <span className="w-10 text-xs text-textSecondary">{s.label}</span>
-            <div className="flex-1 bg-surface rounded-full h-4">
-              <div className="bg-primary h-4 rounded-full transition-all" style={{width:`${(s.val/maxStat)*100}%`}}/>
-            </div>
-            <span className="w-12 text-right text-xs text-textPrimary font-mono">{s.val.toFixed(1)}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex gap-1 mb-3">
-        {(['stats','placements','battles'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg ${tab===t?'bg-primary text-white':'bg-surfaceLight text-textSecondary'}`}>
-            {t==='stats'?'성장기록':t==='placements'?'배치기록':'대결기록'}
+      <div className="grid grid-cols-5 gap-3">
+        {ANIMALS.map((a) => (
+          <button
+            key={a.type}
+            onClick={() => setSelected(a.type)}
+            className={`flex flex-col items-center p-3 rounded-xl transition ${
+              selected === a.type
+                ? 'bg-yellow-400 scale-110'
+                : 'bg-gray-900'
+            }`}
+          >
+            <span className="text-3xl">{a.emoji}</span>
+            <span className={`text-xs mt-1 ${
+              selected === a.type ? 'text-black' : 'text-gray-500'
+            }`}>{a.name}</span>
           </button>
         ))}
       </div>
 
-      <div className="space-y-2">
-        {history.length === 0 ? (
-          <p className="text-center text-textSecondary text-sm py-4">기록이 없습니다</p>
-        ) : history.map((h, i) => (
-          <div key={i} className="bg-surfaceLight rounded-lg p-3">
-            <p className="text-xs text-textSecondary">{new Date(h.createdAt || h.date).toLocaleDateString('ko-KR')}</p>
-            {tab === 'stats' && <p className="text-sm text-textPrimary">파워 {h.changes?.power > 0 ? '+' : ''}{h.changes?.power?.toFixed(1) || 0} | 민첩 {h.changes?.agility > 0 ? '+' : ''}{h.changes?.agility?.toFixed(1) || 0}</p>}
-            {tab === 'placements' && <p className="text-sm text-textPrimary">{h.team} · {h.groupType} · {h.status}</p>}
-            {tab === 'battles' && <p className="text-sm text-textPrimary">{h.result === 'win' ? '승리' : h.result === 'lose' ? '패배' : '무승부'} · XP +{h.xpGained || 0}</p>}
-          </div>
-        ))}
-      </div>
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      <button
+        onClick={handleCreate}
+        disabled={submitting || !selected || !name.trim()}
+        className="w-full max-w-xs bg-yellow-400 text-black py-3 rounded-lg font-bold disabled:opacity-40"
+      >
+        {submitting ? '만드는 중...' : '시작하기'}
+      </button>
     </div>
   );
 }
