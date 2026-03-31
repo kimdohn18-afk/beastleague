@@ -26,7 +26,7 @@ export function createApp(): express.Application {
   app.use('/api/trainings', trainingsRouter);
   app.use('/api/battles', battlesRouter);
   app.use('/api/rankings', rankingsRouter);
-  app.use('/internal', internalRouter);
+  app.use('/api/internal', internalRouter);
 
   // 404
   app.use((_req: Request, res: Response) => {
