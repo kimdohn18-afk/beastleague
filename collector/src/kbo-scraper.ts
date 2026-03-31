@@ -339,21 +339,21 @@ async function main(): Promise<void> {
     }
     console.log(`=== 수집 완료 ===`);
 
-  } else if (command === 'debug-box') {
+    } else if (command === 'debug-box') {
     const gid = param || '20260329KTLG0';
     const year = gid.substring(0, 4);
     const url = `https://www.koreabaseball.com/futures/schedule/BoxScore.aspx?leagueId=1&seriesId=0&seasonId=${year}&gameId=${gid}`;
     const html = await fetchHtml(url);
     console.log(`HTML 길이: ${html.length}`);
-    console.log(html.substring(0, 5000));
-
-  } else {
-    console.log('사용법:');
-    console.log('  npx ts-node src/kbo-scraper.ts schedule [YYYY-MM-DD]');
-    console.log('  npx ts-node src/kbo-scraper.ts boxscore [gameId]');
-    console.log('  npx ts-node src/kbo-scraper.ts daily [YYYY-MM-DD]');
-    console.log('  npx ts-node src/kbo-scraper.ts debug-box [gameId]');
-  }
-}
-
-main().catch(console.error);
+    // 타자 키워드 근처 HTML 찾기
+    const idx = html.indexOf('타자');
+    if (idx === -1) {
+      console.log('타자 키워드 없음');
+      // table 태그 근처 출력
+      const tIdx = html.indexOf('<table');
+      console.log(`첫 table 위치: ${tIdx}`);
+      console.log(html.substring(tIdx, tIdx + 3000));
+    } else {
+      console.log(`타자 키워드 위치: ${idx}`);
+      console.log(html.substring(idx, idx + 3000));
+    }
