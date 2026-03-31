@@ -1,7 +1,7 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import { Schema, model, Document, Types } from 'mongoose';
 
 export interface ICharacter extends Document {
-  userId: mongoose.Types.ObjectId;
+  userId: Types.ObjectId;
   name: string;
   animalType: string;
   xp: number;
