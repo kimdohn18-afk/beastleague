@@ -14,24 +14,44 @@ function todayKST(): string {
 placementsRouter.post('/', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { gameId, team, groupType } = req.body as { gameId: string; team: string; groupType: string };
+    const { gameId, team, battingOrder, predictedWinner } = req.body as {
+      gameId: string;
+      team: string;
+      battingOrder: number;
+      predictedWinner: string;
+    };
+
+    if (!gameId || !team || !battingOrder || !predictedWinner) {
+      return res.status(400).json({ error: '모든 항목을 선택해주세요' });
+    }
+
+    if (battingOrder < 1 || battingOrder > 9) {
+      return res.status(400).json({ error: '타순은 1~9번입니다' });
+    }
 
     const character = await Character.findOne({ userId });
     if (!character) return res.status(400).json({ error: '캐릭터가 없습니다' });
 
     const today = todayKST();
     const existing = await Placement.findOne({ userId, date: today });
-    if (existing) return res.status(409).json({ error: '오늘 이미 배치했습니다' });
+    if (existing) return res.status(409).json({ error: '오늘 이미 선택했습니다' });
 
     const game = await Game.findOne({ gameId });
     if (!game) return res.status(400).json({ error: '존재하지 않는 경기입니다' });
     if (game.status !== 'scheduled') {
-      return res.status(400).json({ error: '배치 가능한 경기 상태가 아닙니다 (scheduled만 가능)' });
+      return res.status(400).json({ error: '이미 시작된 경기입니다' });
     }
 
     const placement = await Placement.create({
-      userId, characterId: character._id, gameId, team, groupType, date: today,
+      userId,
+      characterId: character._id,
+      gameId,
+      team,
+      battingOrder,
+      predictedWinner,
+      date: today,
     });
+
     return res.status(201).json(placement);
   } catch (err) {
     return res.status(500).json({ error: String(err) });
