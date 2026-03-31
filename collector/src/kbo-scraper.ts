@@ -1,53 +1,42 @@
 /**
- * KBO 경기 데이터 수집기
- * 
- * 1) fetchSchedule(date) - 경기 일정 + 스코어 수집
- * 2) fetchBoxScore(gameId) - 개별 경기 박스스코어(타순별 타자 성적) 수집
- * 
- * 데이터 소스: koreabaseball.com
+ * KBO 경기 데이터 수집기 v2
+ * cheerio + axios 기반 HTML 파싱
  */
 
-import https from 'https';
-import http from 'http';
-
-// ============ HTML 가져오기 (cheerio 없이 정규식 파싱) ============
-
-function fetchHtml(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const client = url.startsWith('https') ? https : http;
-    client.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => (data += chunk));
-      res.on('end', () => resolve(data));
-      res.on('error', reject);
-    }).on('error', reject);
-  });
-}
+import axios from 'axios';
+import * as cheerio from 'cheerio';
 
 // ============ 타입 정의 ============
 
 export interface GameSchedule {
   gameId: string;
-  date: string;        // YYYY-MM-DD
+  date: string;
   homeTeam: string;
   awayTeam: string;
   homeScore?: number;
   awayScore?: number;
   status: 'scheduled' | 'live' | 'finished' | 'cancelled' | 'postponed';
-  time: string;        // HH:MM
+  time: string;
   stadium: string;
 }
 
 export interface BatterRecord {
-  order: number;       // 타순 1~9
-  position: string;    // 포지션 (중, 좌, 우, 一, 二, 三, 유, 포, 지)
-  name: string;        // 선수 이름
-  atBats: number;      // 타수
-  hits: number;        // 안타
-  rbi: number;         // 타점
-  runs: number;        // 득점
-  battingAvg: number;  // 타율
-  details: string[];   // 이닝별 상세 (우안, 좌2, 좌홈 등)
+  order: number;
+  position: string;
+  name: string;
+  atBats: number;
+  hits: number;
+  rbi: number;
+  runs: number;
+  battingAvg: number;
+  details: string[];   // 이닝별: ['우안','투땅','','','좌비','','4구','','우안']
+}
+
+export interface GameEventSummary {
+  homeRuns: string[];   // ['허경민1호(6회2점 김진성)']
+  doubles: string[];    // ['안현민(1회)', '장성우(1회)']
+  triples: string[];
+  steals: string[];     // ['박해민(4회)', '문성주(7회)']
 }
 
 export interface BoxScoreResult {
@@ -59,111 +48,76 @@ export interface BoxScoreResult {
   awayScore: number;
   homeBatters: BatterRecord[];
   awayBatters: BatterRecord[];
+  events: GameEventSummary;
 }
 
-// ============ 팀 코드 매핑 ============
+// ============ HTTP 요청 ============
 
-const TEAM_CODE_MAP: Record<string, string> = {
-  'KT': 'KT', 'LG': 'LG', 'SSG': 'SSG', 'NC': 'NC',
-  'KIA': 'KIA', '두산': '두산', '롯데': '롯데', '삼성': '삼성',
-  '한화': '한화', '키움': '키움',
-};
+async function fetchHtml(url: string): Promise<string> {
+  const res = await axios.get(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+    timeout: 15000,
+  });
+  return res.data;
+}
 
 // ============ 1. 경기 일정 수집 ============
 
 export async function fetchSchedule(date: string): Promise<GameSchedule[]> {
-  // date: YYYY-MM-DD → YYYYMMDD
   const dateParam = date.replace(/-/g, '');
   const url = `https://www.koreabaseball.com/Schedule/Schedule.aspx?seriesId=0&gameDate=${dateParam}`;
-
   const html = await fetchHtml(url);
+  const $ = cheerio.load(html);
   const games: GameSchedule[] = [];
 
-  // 경기 행 파싱: "팀A_스코어vs스코어_팀B" 또는 "팀A_vs_팀B" 패턴
-  // gameId는 리뷰/프리뷰 링크에서 추출
-  const gameIdRegex = /gameId=(\d{8}[A-Z]+\d)/g;
-  const gameIds: string[] = [];
-  let match;
+  // 경기 일정 테이블의 각 행을 순회
+  $('tr').each((_, row) => {
+    const cells = $(row).find('td');
+    if (cells.length < 3) return;
 
-  while ((match = gameIdRegex.exec(html)) !== null) {
-    if (!gameIds.includes(match[1])) {
-      gameIds.push(match[1]);
+    // 경기 셀에서 팀과 스코어 추출
+    const gameCell = cells.eq(2).text().trim();    // "KT_6vs5_LG" 또는 "KT_vs_LG"
+    const timeCell = cells.eq(1).text().trim();    // "14:00"
+    const stadiumCell = cells.eq(7)?.text().trim(); // "잠실"
+
+    // gameId 추출 (링크에서)
+    const link = cells.eq(3).find('a').attr('href') || '';
+    const gameIdMatch = link.match(/gameId=(\d{8}[A-Z]+\d)/);
+    const gameId = gameIdMatch ? gameIdMatch[1] : '';
+
+    if (!gameId) return;
+
+    // 결과 경기: "팀A_숫자vs숫자_팀B"
+    const resultMatch = gameCell.match(/(\S+?)_(\d+)vs(\d+)_(\S+)/);
+    if (resultMatch) {
+      games.push({
+        gameId,
+        date,
+        awayTeam: resultMatch[1],
+        homeTeam: resultMatch[4],
+        awayScore: parseInt(resultMatch[2]),
+        homeScore: parseInt(resultMatch[3]),
+        status: 'finished',
+        time: timeCell || '18:30',
+        stadium: stadiumCell || '',
+      });
+      return;
     }
-  }
 
-  // 경기 결과 패턴: "팀A_숫자vs숫자_팀B" 
-  const resultRegex = /(\S+?)_(\d+)vs(\d+)_(\S+)/g;
-  const results: Array<{ away: string; awayScore: number; homeScore: number; home: string }> = [];
-
-  while ((match = resultRegex.exec(html)) !== null) {
-    results.push({
-      away: match[1],
-      awayScore: parseInt(match[2]),
-      homeScore: parseInt(match[3]),
-      home: match[4],
-    });
-  }
-
-  // 예정 경기 패턴: "팀A_vs_팀B"
-  const scheduledRegex = /(\S+?)_vs_(\S+)/g;
-  const scheduled: Array<{ away: string; home: string }> = [];
-
-  while ((match = scheduledRegex.exec(html)) !== null) {
-    // 이미 결과에 포함된 팀 조합은 제외
-    const alreadyHasResult = results.some(
-      (r) => r.away === match![1] && r.home === match![2]
-    );
-    if (!alreadyHasResult) {
-      scheduled.push({ away: match[1], home: match[2] });
+    // 예정 경기: "팀A_vs_팀B"
+    const scheduledMatch = gameCell.match(/(\S+?)_vs_(\S+)/);
+    if (scheduledMatch) {
+      games.push({
+        gameId,
+        date,
+        awayTeam: scheduledMatch[1],
+        homeTeam: scheduledMatch[2],
+        status: 'scheduled',
+        time: timeCell || '18:30',
+        stadium: stadiumCell || '',
+      });
     }
-  }
-
-  // 시간 패턴
-  const timeRegex = /(\d{2}:\d{2})/g;
-  const times: string[] = [];
-  while ((match = timeRegex.exec(html)) !== null) {
-    times.push(match[1]);
-  }
-
-  // 구장 패턴
-  const stadiumRegex = /(잠실|문학|대구|창원|대전|수원|사직|고척|광주)/g;
-  const stadiums: string[] = [];
-  while ((match = stadiumRegex.exec(html)) !== null) {
-    if (!stadiums.includes(match[1]) || stadiums.length < gameIds.length) {
-      stadiums.push(match[1]);
-    }
-  }
-
-  // 결과 경기 조합
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i];
-    games.push({
-      gameId: gameIds[i] || `${dateParam}GAME${i}`,
-      date,
-      awayTeam: r.away,
-      homeTeam: r.home,
-      awayScore: r.awayScore,
-      homeScore: r.homeScore,
-      status: 'finished',
-      time: times[i] || '18:30',
-      stadium: stadiums[i] || '',
-    });
-  }
-
-  // 예정 경기 조합
-  for (let i = 0; i < scheduled.length; i++) {
-    const s = scheduled[i];
-    const idx = results.length + i;
-    games.push({
-      gameId: gameIds[idx] || `${dateParam}GAME${idx}`,
-      date,
-      awayTeam: s.away,
-      homeTeam: s.home,
-      status: 'scheduled',
-      time: times[idx] || '18:30',
-      stadium: stadiums[idx] || '',
-    });
-  }
+  });
 
   return games;
 }
@@ -175,209 +129,276 @@ export async function fetchBoxScore(gameId: string): Promise<BoxScoreResult | nu
   const url = `https://www.koreabaseball.com/futures/schedule/BoxScore.aspx?leagueId=1&seriesId=0&seasonId=${year}&gameId=${gameId}`;
 
   const html = await fetchHtml(url);
+  const $ = cheerio.load(html);
 
-  if (html.includes('이용에 불편을 드려') || html.length < 1000) {
+  if (html.includes('이용에 불편을 드려') || html.length < 2000) {
     console.error(`박스스코어를 가져올 수 없습니다: ${gameId}`);
     return null;
   }
 
   // 날짜 추출
-  const dateMatch = html.match(/(\d{4})\.(\d{2})\.(\d{2})/);
-  const date = dateMatch ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : '';
-
-  // 스코어 추출: R | H | E | B 테이블에서
-  const scoreRegex = /\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|/g;
-  const scores: Array<{ r: number; h: number; e: number; b: number }> = [];
-  while ((match = scoreRegex.exec(html)) !== null) {
-    scores.push({
-      r: parseInt(match[1]),
-      h: parseInt(match[2]),
-      e: parseInt(match[3]),
-      b: parseInt(match[4]),
-    });
-  }
-
-  // 팀 이름 추출 (AWAY/HOME 근처)
-  const teamRegex = /(?:AWAY|HOME).*?(\d)승\s*(\d)패/g;
-
-  // 타자 기록 파싱
-  function parseBatterTable(tableHtml: string): BatterRecord[] {
-    const batters: BatterRecord[] = [];
-    // 행 패턴: | 순번 | 포지션 | 이름 | ... | 타수 | 안타 | 타점 | 득점 | 타율 |
-    const rowRegex = /\|\s*(\d+)\s*\|\s*([가-힣一二三中左右遊捕指유포중좌우]+)\s*\|\s*([가-힣a-zA-Z]+)\s*/g;
-
-    let rowMatch;
-    let currentOrder = 0;
-
-    // 더 단순한 접근: 이름과 숫자 기록을 따로 파싱
-    const lines = tableHtml.split('\n');
-    for (const line of lines) {
-      // "| 1 | 중 | 최원준 |" 패턴
-      const orderMatch = line.match(/\|\s*(\d)\s*\|\s*(\S+)\s*\|\s*(\S+)\s*\|/);
-      if (orderMatch) {
-        const order = parseInt(orderMatch[1]);
-        if (order >= 1 && order <= 9) {
-          currentOrder = order;
-        }
-      }
-    }
-
-    return batters;
-  }
-
-  // 간단한 파싱: 타자 기록 섹션 찾기
-  const awayBatters: BatterRecord[] = [];
-  const homeBatters: BatterRecord[] = [];
-
-  // "타자 기록" 섹션을 찾아서 파싱
-  // HTML 구조: 선수명 | 타수 | 안타 | 타점 | 득점 | 타율
-  const sections = html.split('타자 기록');
-
-  if (sections.length >= 3) {
-    // sections[1] = 원정팀 타자, sections[2] = 홈팀 타자
-    const parseSection = (section: string): BatterRecord[] => {
-      const records: BatterRecord[] = [];
-      const lines = section.split('\n');
-
-      let orderCounter = 0;
-      let lastOrder = 0;
-
-      for (const line of lines) {
-        // 타순 + 포지션 + 이름 패턴
-        const nameMatch = line.match(/\|\s*(\d)?\s*\|\s*([가-힣一二三]+)\s*\|\s*([가-힣a-zA-Z\s]+?)\s*\|/);
-        if (nameMatch) {
-          const order = nameMatch[1] ? parseInt(nameMatch[1]) : lastOrder;
-          if (order >= 1 && order <= 9 && order !== lastOrder) {
-            orderCounter++;
-            lastOrder = order;
-          }
-        }
-
-        // 타수/안타/타점/득점/타율 패턴
-        const statMatch = line.match(/\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*([\d.]+|-)\s*\|/);
-        if (statMatch && nameMatch) {
-          records.push({
-            order: lastOrder,
-            position: nameMatch[2],
-            name: nameMatch[3].trim(),
-            atBats: parseInt(statMatch[1]),
-            hits: parseInt(statMatch[2]),
-            rbi: parseInt(statMatch[3]),
-            runs: parseInt(statMatch[4]),
-            battingAvg: statMatch[5] === '-' ? 0 : parseFloat(statMatch[5]),
-            details: [],
-          });
-        }
-      }
-
-      return records;
-    };
-
-    // 원정팀(먼저 나옴)과 홈팀 파싱
-    awayBatters.push(...parseSection(sections[1]));
-    homeBatters.push(...parseSection(sections[2]));
-  }
+  const dateText = $('body').text().match(/(\d{4})\.(\d{2})\.(\d{2})/);
+  const date = dateText ? `${dateText[1]}-${dateText[2]}-${dateText[3]}` : '';
 
   // 팀 이름 추출
-  const teamNames = html.match(/(KT|LG|SSG|NC|KIA|두산|롯데|삼성|한화|키움)/g) || [];
-  const uniqueTeams = [...new Set(teamNames)];
+  const teams: string[] = [];
+  $('img[alt]').each((_, el) => {
+    const alt = $(el).attr('alt') || '';
+    if (['KT','LG','SSG','NC','KIA','두산','롯데','삼성','한화','키움'].includes(alt)) {
+      if (!teams.includes(alt)) teams.push(alt);
+    }
+  });
+  const awayTeam = teams[0] || '';
+  const homeTeam = teams[1] || '';
+
+  // R H E B 스코어 추출
+  const rheb: number[][] = [];
+  $('table').each((_, table) => {
+    const headers = $(table).find('th').map((__, th) => $(th).text().trim()).get();
+    if (headers.includes('R') && headers.includes('H') && headers.includes('E')) {
+      $(table).find('tbody tr').each((__, row) => {
+        const vals = $(row).find('td').map((___, td) => parseInt($(td).text().trim()) || 0).get();
+        if (vals.length >= 4) rheb.push(vals);
+      });
+    }
+  });
+
+  const awayScore = rheb[0]?.[rheb[0].length - 4] || 0;
+  const homeScore = rheb[1]?.[rheb[1].length - 4] || 0;
+
+  // 타자 기록 테이블 파싱
+  function parseBatterTable(tableIndex: number): BatterRecord[] {
+    const records: BatterRecord[] = [];
+    const tables = $('table');
+    let batterTableCount = 0;
+
+    tables.each((_, table) => {
+      const caption = $(table).find('caption').text();
+      const headerText = $(table).prev().text() || '';
+
+      // "타자 기록" 관련 테이블 찾기
+      if (!$(table).text().includes('선수명')) return;
+      if (!$(table).text().includes('타수')) return;
+
+      batterTableCount++;
+      if (batterTableCount !== tableIndex) return;
+
+      const rows = $(table).find('tbody tr');
+      rows.each((__, row) => {
+        const cells = $(row).find('td');
+        if (cells.length < 5) return;
+
+        const orderText = cells.eq(0).text().trim();
+        const order = parseInt(orderText);
+        if (isNaN(order) || order < 1 || order > 9) return;
+
+        const position = cells.eq(1).text().trim();
+        const name = cells.eq(2).text().trim();
+
+        // 마지막 5개 셀: 타수, 안타, 타점, 득점, 타율
+        const len = cells.length;
+        const atBats = parseInt(cells.eq(len - 5).text().trim()) || 0;
+        const hits = parseInt(cells.eq(len - 4).text().trim()) || 0;
+        const rbi = parseInt(cells.eq(len - 3).text().trim()) || 0;
+        const runs = parseInt(cells.eq(len - 2).text().trim()) || 0;
+        const avgText = cells.eq(len - 1).text().trim();
+        const battingAvg = avgText === '-' ? 0 : parseFloat(avgText) || 0;
+
+        // 이닝별 상세 기록 (중간 셀들)
+        const details: string[] = [];
+        for (let i = 3; i < len - 5; i++) {
+          details.push(cells.eq(i).text().trim());
+        }
+
+        records.push({
+          order, position, name,
+          atBats, hits, rbi, runs, battingAvg,
+          details,
+        });
+      });
+    });
+
+    return records;
+  }
+
+  const awayBatters = parseBatterTable(1);
+  const homeBatters = parseBatterTable(2);
+
+  // 경기 이벤트 (홈런, 2루타, 도루 등)
+  const events: GameEventSummary = {
+    homeRuns: [], doubles: [], triples: [], steals: [],
+  };
+
+  $('th').each((_, th) => {
+    const label = $(th).text().trim();
+    const value = $(th).next('td').text().trim();
+
+    if (label === '홈런' && value) {
+      events.homeRuns = value.split(/\s+/);
+    } else if (label === '2루타' && value) {
+      events.doubles = value.split(/\s+/);
+    } else if (label === '3루타' && value) {
+      events.triples = value.split(/\s+/);
+    } else if (label === '도루' && value) {
+      events.steals = value.split(/\s+/);
+    }
+  });
 
   return {
-    gameId,
-    date,
-    awayTeam: uniqueTeams[0] || 'AWAY',
-    homeTeam: uniqueTeams[1] || 'HOME',
-    awayScore: scores[0]?.r || 0,
-    homeScore: scores[1]?.r || 0,
-    awayBatters,
-    homeBatters,
+    gameId, date, homeTeam, awayTeam,
+    homeScore, awayScore,
+    homeBatters, awayBatters,
+    events,
   };
 }
 
-// ============ 3. XP 계산 ============
+// ============ 3. XP 계산 (타순별) ============
 
-export function calculateXpFromBatter(batter: BatterRecord, details: string[]): number {
+export function calculateBatterXp(
+  batter: BatterRecord,
+  events: GameEventSummary
+): number {
   let xp = 0;
 
-  // 상세 기록에서 이벤트 추출
-  for (const detail of details) {
-    if (detail.includes('홈')) xp += 50;       // 홈런
-    else if (detail.includes('3')) xp += 30;   // 3루타 (3루타 또는 삼진 구분 필요)
-    else if (detail.includes('2') && detail.includes('안')) xp += 20; // 2루타
-    else if (detail.includes('안')) xp += 10;  // 단타
-    else if (detail.includes('4구') || detail.includes('사구')) xp += 10; // 볼넷
-    else if (detail.includes('삼진')) xp -= 10; // 삼진
+  // 기본 안타 XP: 안타 수 × 10
+  xp += batter.hits * 10;
+
+  // 이벤트에서 이 선수의 추가 기록 확인
+  // 홈런: 이름이 포함되면 추가 XP (안타 10 + 추가 40 = 총 50)
+  for (const hr of events.homeRuns) {
+    if (hr.includes(batter.name)) xp += 40;
   }
 
-  // 득점 보너스
+  // 2루타: 이름이 포함되면 추가 XP (안타 10 + 추가 10 = 총 20)
+  for (const d of events.doubles) {
+    if (d.includes(batter.name)) xp += 10;
+  }
+
+  // 3루타: 안타 10 + 추가 20 = 총 30
+  for (const t of events.triples) {
+    if (t.includes(batter.name)) xp += 20;
+  }
+
+  // 도루: +15
+  for (const s of events.steals) {
+    if (s.includes(batter.name)) xp += 15;
+  }
+
+  // 득점: +10
   xp += batter.runs * 10;
 
-  // 도루는 경기 내용에서 별도 파싱 필요 (향후 추가)
+  // 삼진: 상세 기록에서 카운트
+  const strikeouts = batter.details.filter((d) => d === '삼진').length;
+  xp -= strikeouts * 10;
+
+  // 볼넷: 상세 기록에서 카운트
+  const walks = batter.details.filter((d) => d === '4구' || d === '사구').length;
+  xp += walks * 10;
 
   return xp;
 }
 
-// ============ 4. 메인 실행 ============
+// ============ 4. 서버 API로 전송 ============
+
+async function sendToServer(
+  game: GameSchedule,
+  boxScore: BoxScoreResult | null,
+  apiUrl: string,
+  apiKey: string
+): Promise<void> {
+  try {
+    // 경기 데이터 upsert
+    const gameData = {
+      gameId: game.gameId,
+      date: game.date,
+      homeTeam: game.homeTeam,
+      awayTeam: game.awayTeam,
+      homeScore: game.homeScore,
+      awayScore: game.awayScore,
+      status: game.status,
+      batterRecords: boxScore ? {
+        away: boxScore.awayBatters,
+        home: boxScore.homeBatters,
+      } : undefined,
+      events: boxScore?.events,
+    };
+
+    await axios.post(`${apiUrl}/api/internal/games`, gameData, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+      },
+    });
+
+    console.log(`  ✅ ${game.awayTeam} vs ${game.homeTeam} 전송 완료`);
+  } catch (err: any) {
+    console.error(`  ❌ 전송 실패: ${err.message}`);
+  }
+}
+
+// ============ 5. 메인 실행 ============
 
 async function main() {
   const command = process.argv[2];
   const param = process.argv[3];
+  const apiUrl = process.env.API_URL || 'https://beastleague.onrender.com';
+  const apiKey = process.env.INTERNAL_API_KEY || '';
 
   if (command === 'schedule') {
-    // 사용법: npx ts-node kbo-scraper.ts schedule 2026-03-29
-    const date = param || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-    console.log(`경기 일정 수집: ${date}`);
-
+    const date = param || todayKST();
+    console.log(`📅 경기 일정 수집: ${date}`);
     const games = await fetchSchedule(date);
     console.log(JSON.stringify(games, null, 2));
-    console.log(`총 ${games.length}경기 수집`);
+    console.log(`총 ${games.length}경기`);
 
   } else if (command === 'boxscore') {
-    // 사용법: npx ts-node kbo-scraper.ts boxscore 20260329KTLG0
-    if (!param) {
-      console.error('gameId를 입력하세요');
-      process.exit(1);
-    }
-    console.log(`박스스코어 수집: ${param}`);
-
+    if (!param) { console.error('gameId를 입력하세요'); process.exit(1); }
+    console.log(`📊 박스스코어 수집: ${param}`);
     const result = await fetchBoxScore(param);
-    console.log(JSON.stringify(result, null, 2));
+    if (result) {
+      console.log(`${result.awayTeam} ${result.awayScore} vs ${result.homeScore} ${result.homeTeam}`);
+      console.log(`원정 타자: ${result.awayBatters.length}명`);
+      result.awayBatters.forEach((b) => {
+        const xp = calculateBatterXp(b, result.events);
+        console.log(`  ${b.order}번 ${b.name}: ${b.atBats}타수 ${b.hits}안타 ${b.runs}득점 → XP ${xp}`);
+      });
+      console.log(`홈 타자: ${result.homeBatters.length}명`);
+      result.homeBatters.forEach((b) => {
+        const xp = calculateBatterXp(b, result.events);
+        console.log(`  ${b.order}번 ${b.name}: ${b.atBats}타수 ${b.hits}안타 ${b.runs}득점 → XP ${xp}`);
+      });
+    }
 
   } else if (command === 'daily') {
-    // 사용법: npx ts-node kbo-scraper.ts daily 2026-03-29
-    // 하루 전체: 일정 수집 → 종료된 경기 박스스코어 수집
-    const date = param || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-    console.log(`=== ${date} 전체 수집 시작 ===`);
-
+    const date = param || todayKST();
+    console.log(`\n=== ${date} 전체 수집 시작 ===\n`);
     const games = await fetchSchedule(date);
-    console.log(`${games.length}경기 발견`);
+    console.log(`${games.length}경기 발견\n`);
 
     for (const game of games) {
-      console.log(`${game.awayTeam} vs ${game.homeTeam}: ${game.status}`);
+      console.log(`⚾ ${game.awayTeam} vs ${game.homeTeam} (${game.stadium}) - ${game.status}`);
 
       if (game.status === 'finished') {
         console.log(`  스코어: ${game.awayScore} - ${game.homeScore}`);
-        console.log(`  박스스코어 수집 중...`);
-
         const box = await fetchBoxScore(game.gameId);
-        if (box) {
-          console.log(`  원정 타자: ${box.awayBatters.length}명`);
-          console.log(`  홈 타자: ${box.homeBatters.length}명`);
-        }
 
-        // API에 전송 (TODO: 서버 내부 API 호출)
-        // await sendToServer(game, box);
+        if (apiKey) {
+          await sendToServer(game, box, apiUrl, apiKey);
+        }
       }
     }
-
-    console.log(`=== 수집 완료 ===`);
+    console.log(`\n=== 수집 완료 ===`);
 
   } else {
     console.log('사용법:');
-    console.log('  npx ts-node kbo-scraper.ts schedule [YYYY-MM-DD]');
-    console.log('  npx ts-node kbo-scraper.ts boxscore [gameId]');
-    console.log('  npx ts-node kbo-scraper.ts daily [YYYY-MM-DD]');
+    console.log('  npx ts-node src/kbo-scraper.ts schedule [YYYY-MM-DD]');
+    console.log('  npx ts-node src/kbo-scraper.ts boxscore [gameId]');
+    console.log('  npx ts-node src/kbo-scraper.ts daily [YYYY-MM-DD]');
   }
+}
+
+function todayKST(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
 main().catch(console.error);
