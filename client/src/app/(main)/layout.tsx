@@ -5,11 +5,8 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 
 const NAV_ITEMS = [
-  { href: '/',           label: '홈',     emoji: '🏠' },
-  { href: '/placement',  label: '배치',   emoji: '⚾' },
-  { href: '/character',  label: '캐릭터', emoji: '🐾' },
-  { href: '/battle',     label: '대결',   emoji: '⚔️' },
-  { href: '/ranking',    label: '랭킹',   emoji: '🏆' },
+  { href: '/',       label: '캐릭터' },
+  { href: '/match',  label: '경기' },
 ];
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
@@ -23,8 +20,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -32,11 +29,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   if (!session) return null;
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col">
-      <main className="flex-1 overflow-y-auto pb-20">{children}</main>
+    <div className="min-h-screen bg-black flex flex-col">
+      <main className="flex-1 overflow-y-auto">{children}</main>
 
-      {/* 하단 탭 네비게이션 */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-surfaceLight border-t border-white/10 z-50">
+      <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 z-50">
         <div className="flex">
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href;
@@ -44,11 +40,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex-1 flex flex-col items-center py-3 gap-0.5 transition-colors
-                  ${isActive ? 'text-primary' : 'text-textSecondary'}`}
+                className={`flex-1 py-4 text-center text-sm font-medium transition-colors
+                  ${isActive ? 'text-yellow-400 border-t-2 border-yellow-400' : 'text-gray-500'}`}
               >
-                <span className="text-xl">{item.emoji}</span>
-                <span className="text-[10px] font-medium">{item.label}</span>
+                {item.label}
               </Link>
             );
           })}
