@@ -4,25 +4,26 @@ export type TeamCode =
   | 'KT' | 'LG' | 'SSG' | 'NC' | 'KIA'
   | '두산' | '롯데' | '삼성' | '한화' | '키움';
 
+// === 새 구조: 개별 타자 기록 ===
 export interface BatterRecord {
-  order: string;       // 타순 ("1"~"9", 교체선수는 "")
-  position: string;    // 포지션 ("중", "一", "좌" 등)
-  name: string;        // 선수명
-  atBats: string;      // 타수
-  hits: string;        // 안타
-  rbi: string;         // 타점
-  runs: string;        // 득점
-  avg: string;         // 타율
+  order: string;
+  position: string;
+  name: string;
+  atBats: string;
+  hits: string;
+  rbi: string;
+  runs: string;
+  avg: string;
 }
 
 export interface GameEvent {
-  type: string;        // "홈런", "2루타", "도루", "결승타" 등
-  detail: string;      // 상세 내용
+  type: string;
+  detail: string;
 }
 
 export interface GameData {
   gameId: string;
-  date: string;                        // YYYY-MM-DD
+  date: string;
   homeTeam: TeamCode;
   awayTeam: TeamCode;
   status: GameStatus;
@@ -33,4 +34,29 @@ export interface GameData {
     home: BatterRecord[];
   };
   events?: GameEvent[];
+}
+
+// === 레거시 호환: StatEngine에서 사용 ===
+export type BatterGroupType = 'leadoff' | 'cleanup' | 'lower' | 'starter_pitcher';
+
+export interface BatterGroupStats {
+  AB: number;
+  H: number;
+  '2B': number;
+  '3B': number;
+  HR: number;
+  RBI: number;
+  RUN: number;
+  SB: number;
+  BB: number;
+  K: number;
+}
+
+export interface PitcherStats {
+  IP: number;
+  PITCH: number;
+  H: number;
+  K: number;
+  BB: number;
+  ER: number;
 }
