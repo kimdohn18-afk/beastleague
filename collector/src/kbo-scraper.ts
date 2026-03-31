@@ -143,11 +143,11 @@ export async function fetchBoxScore(gameId: string): Promise<BoxScoreResult | nu
   // 팀 이름
   const teamList = ['KT', 'LG', 'SSG', 'NC', 'KIA', '두산', '롯데', '삼성', '한화', '키움'];
   const found: string[] = [];
-  $('img').each((_: number, el: cheerio.Element) => {
+  $('img').each((_: number, el: any) => {
     const alt = $(el).attr('alt') || '';
     if (teamList.includes(alt) && !found.includes(alt)) found.push(alt);
   });
-  $('strong, b, span').each((_: number, el: cheerio.Element) => {
+  $('strong, b, span').each((_: number, el: any) => {
     const txt = $(el).text().trim();
     if (teamList.includes(txt) && !found.includes(txt)) found.push(txt);
   });
@@ -158,11 +158,11 @@ export async function fetchBoxScore(gameId: string): Promise<BoxScoreResult | nu
   // 점수
   let awayScore = 0;
   let homeScore = 0;
-  $('table').each((_: number, tbl: cheerio.Element) => {
-    const ths = $(tbl).find('th').map((_: number, th: cheerio.Element) => $(th).text().trim()).get();
+  $('table').each((_: number, tbl: any) => {
+    const ths = $(tbl).find('th').map((_: number, th: any) => $(th).text().trim()).get();
     if (!ths.includes('R')) return;
     const rIdx = ths.indexOf('R');
-    const rows = $(tbl).find('tr').filter((_: number, r: cheerio.Element) => $(r).find('td').length > 0);
+    const rows = $(tbl).find('tr').filter((_: number, r: any) => $(r).find('td').length > 0);
     if (rows.length >= 2) {
       awayScore = parseInt($(rows[0]).find('td').eq(rIdx).text()) || 0;
       homeScore = parseInt($(rows[1]).find('td').eq(rIdx).text()) || 0;
@@ -181,9 +181,9 @@ export async function fetchBoxScore(gameId: string): Promise<BoxScoreResult | nu
     console.log(`    섹션 내 테이블: ${allTables.length}개`);
 
     // 타자 테이블 찾기: 8개 이상의 td를 가진 행이 5개 이상인 테이블
-    const batterTables: cheerio.Element[] = [];
+    const batterTables: any[] = [];
     for (const tbl of allTables) {
-      const rows = s$(tbl).find('tr').filter((_: number, r: cheerio.Element) => {
+      const rows = s$(tbl).find('tr').filter((_: number, r: any) => {
         const tds = s$(r).find('td');
         return tds.length >= 5;
       });
@@ -206,7 +206,7 @@ export async function fetchBoxScore(gameId: string): Promise<BoxScoreResult | nu
       });
     }
 
-    s$(tbl).find('tbody tr, tr').each((_: number, row: cheerio.Element) => {
+    s$(tbl).find('tbody tr, tr').each((_: number, row: any) => {
       const cells = s$(row).find('td');
       if (cells.length < 5) return;
 
