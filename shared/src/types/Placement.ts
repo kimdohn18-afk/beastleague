@@ -1,4 +1,4 @@
-import { TeamCode, BatterGroupType } from './GameData';
+import { TeamCode } from './GameData';
 
 export type PlacementStatus = 'pending' | 'active' | 'settled';
 
@@ -8,8 +8,12 @@ export interface Placement {
   characterId: string;
   gameId: string;
   team: TeamCode;
-  groupType: BatterGroupType;
-  date: string; // YYYY-MM-DD
+  battingOrder: number;       // 1~9 타순
+  predictedWinner: TeamCode;  // 승리 예측팀
+  date: string;               // YYYY-MM-DD
   status: PlacementStatus;
-  createdAt: string; // ISO 8601
+  isCorrect?: boolean;
+  xpFromPlayer: number;
+  xpFromPrediction: number;
+  createdAt: string;          // ISO 8601
 }
