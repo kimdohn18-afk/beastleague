@@ -1,36 +1,323 @@
-name: KBO Data Collector
+"""
+KBO 경기 데이터 수집기 (Python)
+"""
+import requests
+import json
+import sys
+import os
+import csv
+from datetime import datetime, timezone, timedelta
 
-on:
-  schedule:
-    - cron: '0 14 * * *'  # 매일 KST 23:00
-  workflow_dispatch:
-    inputs:
-      date:
-        description: '날짜 (YYYYMMDD)'
-        required: false
-        default: ''
+KST = timezone(timedelta(hours=9))
+BASE_URL = "https://www.koreabaseball.com"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "X-Requested-With": "XMLHttpRequest",
+    "Referer": "https://www.koreabaseball.com/Schedule/ScoreBoard.aspx"
+}
 
-jobs:
-  collect:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+def get_schedule(date_str):
+    """일정 조회 - GetKboGameList API"""
+    url = f"{BASE_URL}/ws/Main.asmx/GetKboGameList"
+    payload = {"leId": "1", "srId": "0,9,6", "date": date_str}
+    try:
+        res = requests.post(url, data=payload, headers=HEADERS, timeout=15)
+        data = res.json()
+        if str(data.get("code")) != "100":
+            print(f"  ⚠️ 일정 API 응답 코드: {data.get('code')}")
+            return []
+        game_list = data.get("game", [])
+        if isinstance(game_list, str):
+            game_list = json.loads(game_list)
+        print(f"  경기 수: {len(game_list)}")
+        return game_list
+    except Exception as e:
+        print(f"  ❌ 일정 조회 실패: {e}")
+        return []
 
-      - name: Install dependencies
-        run: pip install -r collector/requirements.txt
 
-      - name: Run KBO Collector
-        working-directory: collector
-        env:
-          API_URL: ${{ secrets.API_URL }}
-          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
-        run: |
-          if [ -n "${{ github.event.inputs.date }}" ]; then
-            python kbo_collector.py ${{ github.event.inputs.date }}
-          else
-            python kbo_collector.py
-          fi
+def get_scoreboard(game_id, season_id, sr_id="0"):
+    """스코어보드 조회"""
+    url = f"{BASE_URL}/ws/Schedule.asmx/GetScoreBoardScroll"
+    payload = {"leId": "1", "srId": sr_id, "seasonId": season_id, "gameId": game_id}
+    try:
+        res = requests.post(url, data=payload, headers=HEADERS, timeout=15)
+        return res.json()
+    except Exception as e:
+        print(f"  ❌ 스코어보드 조회 실패: {e}")
+        return None
+
+
+def get_boxscore(game_id, season_id, sr_id="0"):
+    """박스스코어 조회 - arrHitter 포함"""
+    url = f"{BASE_URL}/ws/Schedule.asmx/GetBoxScoreScroll"
+    payload = {"leId": "1", "srId": sr_id, "seasonId": season_id, "gameId": game_id}
+    try:
+        res = requests.post(url, data=payload, headers=HEADERS, timeout=15)
+        return res.json()
+    except Exception as e:
+        print(f"  ❌ 박스스코어 조회 실패: {e}")
+        return None
+
+
+def parse_table(table_data):
+    """table 문자열 또는 딕셔너리를 파싱"""
+    if isinstance(table_data, str):
+        try:
+            table_data = json.loads(table_data)
+        except:
+            return []
+    if not isinstance(table_data, dict):
+        return []
+    rows = table_data.get("rows", [])
+    result = []
+    for row_obj in rows:
+        row = row_obj.get("row", [])
+        cells = [cell.get("Text", "").strip() for cell in row]
+        result.append(cells)
+    return result
+
+
+def parse_hitters(box_data):
+    """arrHitter에서 타자 기록 파싱"""
+    arr_hitter = box_data.get("arrHitter", [])
+    all_teams = []
+
+    for team_idx, team_data in enumerate(arr_hitter):
+        team_label = "원정" if team_idx == 0 else "홈"
+
+        # table1: 타순, 포지션, 선수명
+        table1 = parse_table(team_data.get("table1", ""))
+        # table2: 이닝별 기록
+        table2 = parse_table(team_data.get("table2", ""))
+        # table3: 타수, 안타, 타점, 득점, 타율
+        table3 = parse_table(team_data.get("table3", ""))
+
+        players = []
+        for i in range(len(table1)):
+            if i >= len(table3):
+                break
+
+            row1 = table1[i]
+            row3 = table3[i]
+
+            # table1: [타순, 포지션, 선수명] 또는 [포지션, 선수명] (교체선수)
+            order = ""
+            position = ""
+            name = ""
+            if len(row1) >= 3:
+                order = row1[0]
+                position = row1[1]
+                name = row1[2]
+            elif len(row1) >= 2:
+                position = row1[0]
+                name = row1[1]
+
+            # table3: [타수, 안타, 타점, 득점, 타율]
+            at_bats = row3[0] if len(row3) > 0 else "0"
+            hits = row3[1] if len(row3) > 1 else "0"
+            rbi = row3[2] if len(row3) > 2 else "0"
+            runs = row3[3] if len(row3) > 3 else "0"
+            avg = row3[4] if len(row3) > 4 else ".000"
+
+            # 이닝별 기록 (table2)
+            innings = []
+            if i < len(table2):
+                innings = table2[i]
+
+            players.append({
+                "order": order,
+                "position": position,
+                "name": name,
+                "atBats": at_bats,
+                "hits": hits,
+                "rbi": rbi,
+                "runs": runs,
+                "avg": avg,
+                "innings": innings
+            })
+
+        all_teams.append({"label": team_label, "players": players})
+
+    return all_teams
+
+
+def parse_events(box_data):
+    """tableEtc에서 경기 이벤트 파싱"""
+    table_etc = box_data.get("tableEtc", "")
+    if isinstance(table_etc, str):
+        try:
+            table_etc = json.loads(table_etc)
+        except:
+            return []
+    rows = table_etc.get("rows", []) if isinstance(table_etc, dict) else []
+    events = []
+    for row_obj in rows:
+        row = row_obj.get("row", [])
+        if len(row) >= 2:
+            event_type = row[0].get("Text", "").strip()
+            event_detail = row[1].get("Text", "").strip()
+            if event_type and event_detail:
+                events.append({"type": event_type, "detail": event_detail})
+    return events
+
+
+def save_csv(date_str, all_records):
+    """CSV 파일로 저장"""
+    os.makedirs("output", exist_ok=True)
+    filepath = f"output/{date_str}.csv"
+    with open(filepath, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["date", "gameId", "team", "order", "position", "name",
+                         "atBats", "hits", "rbi", "runs", "avg"])
+        for record in all_records:
+            writer.writerow([
+                record["date"], record["gameId"], record["team"],
+                record["order"], record["position"], record["name"],
+                record["atBats"], record["hits"], record["rbi"],
+                record["runs"], record["avg"]
+            ])
+    print(f"  ✅ CSV 저장: {filepath}")
+
+
+def send_to_server(game_data, api_url, api_key):
+    """서버로 전송"""
+    try:
+        res = requests.post(
+            f"{api_url}/api/internal/games",
+            json=game_data,
+            headers={"Content-Type": "application/json", "x-api-key": api_key},
+            timeout=30
+        )
+        if res.status_code == 200 or res.status_code == 201:
+            print(f"  ✅ 서버 전송 완료")
+        else:
+            print(f"  ⚠️ 서버 응답: {res.status_code} {res.text[:200]}")
+    except Exception as e:
+        print(f"  ❌ 서버 전송 실패: {e}")
+
+
+def collect_date(date_str):
+    """특정 날짜의 경기 데이터 수집"""
+    season_id = date_str[:4]
+    print(f"\n📅 {date_str[:4]}-{date_str[4:6]}-{date_str[6:8]} 경기 수집 시작\n")
+
+    # 1. 일정 조회
+    games = get_schedule(date_str)
+    if not games:
+        print("  경기가 없습니다.")
+        return
+
+    all_records = []
+    api_url = os.environ.get("API_URL", "https://beastleague.onrender.com")
+    api_key = os.environ.get("INTERNAL_API_KEY", "")
+
+    for game in games:
+        game_id = game.get("G_ID", "")
+        away_team = game.get("T_NM_A", "")
+        home_team = game.get("T_NM_H", "")
+        score_a = game.get("RUN_A", "")
+        score_h = game.get("RUN_H", "")
+        status = game.get("STATUS_ID", "")
+        sr_id = str(game.get("SR_ID", "0"))
+
+        print(f"⚾ {away_team} {score_a} vs {score_h} {home_team} (ID: {game_id}, 상태: {status})")
+
+        # 종료된 경기만 박스스코어 수집
+        if status not in ["3", "4", 3, 4]:
+            print(f"  ⏭️ 경기 미종료 (상태: {status}), 건너뜀")
+            continue
+
+        # 2. 박스스코어 조회
+        box = get_boxscore(game_id, season_id, sr_id)
+        if not box:
+            continue
+
+        # 3. 타자 기록 파싱
+        teams = parse_hitters(box)
+        events = parse_events(box)
+
+        for team in teams:
+            team_name = away_team if team["label"] == "원정" else home_team
+            print(f"\n  [{team_name} 타자]")
+            for p in team["players"]:
+                if p["order"]:  # 주전 선수만 출력
+                    print(f"    {p['order']} {p['name']}: {p['atBats']}타수 {p['hits']}안타 {p['rbi']}타점 {p['runs']}득점 ({p['avg']})")
+
+                all_records.append({
+                    "date": f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}",
+                    "gameId": game_id,
+                    "team": team_name,
+                    "order": p["order"],
+                    "position": p["position"],
+                    "name": p["name"],
+                    "atBats": p["atBats"],
+                    "hits": p["hits"],
+                    "rbi": p["rbi"],
+                    "runs": p["runs"],
+                    "avg": p["avg"]
+                })
+
+        # 이벤트 출력
+        if events:
+            print(f"\n  [주요 기록]")
+            for ev in events:
+                print(f"    {ev['type']}: {ev['detail']}")
+
+        # 4. 서버 전송
+        if api_key:
+            away_batters = []
+            home_batters = []
+            for team in teams:
+                for p in team["players"]:
+                    batter = {
+                        "order": p["order"],
+                        "position": p["position"],
+                        "name": p["name"],
+                        "atBats": p["atBats"],
+                        "hits": p["hits"],
+                        "rbi": p["rbi"],
+                        "runs": p["runs"],
+                        "avg": p["avg"]
+                    }
+                    if team["label"] == "원정":
+                        away_batters.append(batter)
+                    else:
+                        home_batters.append(batter)
+
+            send_to_server({
+                "gameId": game_id,
+                "date": f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}",
+                "homeTeam": home_team,
+                "awayTeam": away_team,
+                "homeScore": int(score_h) if score_h else 0,
+                "awayScore": int(score_a) if score_a else 0,
+                "status": "finished",
+                "batterRecords": {"away": away_batters, "home": home_batters},
+                "events": events
+            }, api_url, api_key)
+        else:
+            print(f"\n  ⚠️ INTERNAL_API_KEY 없음, 서버 전송 건너뜀")
+
+        print("")
+
+    # 5. CSV 저장
+    if all_records:
+        save_csv(date_str, all_records)
+
+    print(f"\n=== 수집 완료 ===")
+
+
+def main():
+    if len(sys.argv) > 1:
+        date_str = sys.argv[1].replace("-", "")
+    else:
+        date_str = datetime.now(KST).strftime("%Y%m%d")
+
+    collect_date(date_str)
+
+
+if __name__ == "__main__":
+    main()
