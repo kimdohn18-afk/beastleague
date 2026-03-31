@@ -1,23 +1,24 @@
 import { Schema, model, Document } from 'mongoose';
 
-const batterStatsSchema = new Schema(
-  { AB: Number, H: Number, '2B': Number, '3B': Number, HR: Number,
-    RBI: Number, RUN: Number, SB: Number, BB: Number, K: Number },
+const batterRecordSchema = new Schema(
+  {
+    order: String,
+    position: String,
+    name: String,
+    atBats: String,
+    hits: String,
+    rbi: String,
+    runs: String,
+    avg: String,
+  },
   { _id: false }
 );
 
-const batterGroupSchema = new Schema(
-  { team: String, groupType: String, stats: batterStatsSchema },
-  { _id: false }
-);
-
-const pitcherStatsSchema = new Schema(
-  { IP: Number, PITCH: Number, H: Number, K: Number, BB: Number, ER: Number },
-  { _id: false }
-);
-
-const pitcherSchema = new Schema(
-  { team: String, role: String, stats: pitcherStatsSchema },
+const gameEventSchema = new Schema(
+  {
+    type: String,
+    detail: String,
+  },
   { _id: false }
 );
 
@@ -29,9 +30,11 @@ export interface IGame extends Document {
   status: string;
   homeScore?: number;
   awayScore?: number;
-  batterGroups: Array<{ team: string; groupType: string; stats: Record<string, number> }>;
-  pitchers?: Array<{ team: string; role: string; stats: Record<string, number> }>;
-  updatedAt: Date;
+  batterRecords?: {
+    away: Array<{ order: string; position: string; name: string; atBats: string; hits: string; rbi: string; runs: string; avg: string }>;
+    home: Array<{ order: string; position: string; name: string; atBats: string; hits: string; rbi: string; runs: string; avg: string }>;
+  };
+  events?: Array<{ type: string; detail: string }>;
 }
 
 const gameSchema = new Schema<IGame>(
@@ -43,10 +46,13 @@ const gameSchema = new Schema<IGame>(
     status:    { type: String, required: true },
     homeScore: Number,
     awayScore: Number,
-    batterGroups: [batterGroupSchema],
-    pitchers:     [pitcherSchema],
+    batterRecords: {
+      away: [batterRecordSchema],
+      home: [batterRecordSchema],
+    },
+    events: [gameEventSchema],
   },
-  { timestamps: false }
+  { timestamps: true }
 );
 
 gameSchema.index({ gameId: 1 }, { unique: true });
