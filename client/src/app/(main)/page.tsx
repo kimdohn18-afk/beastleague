@@ -52,25 +52,32 @@ export default function HomePage() {
     } catch (e) { console.error(e); }
   }
 
-  // XP → 픽셀 크기
   const xp = character?.xp ?? 0;
   const charSize = 200 + xp * 0.05;
 
+  const animalEmoji: Record<string, string> = {
+    bear: '🐻', tiger: '🐯', eagle: '🦅', wolf: '🐺', dragon: '🐲',
+  };
+  const animalName: Record<string, string> = {
+    bear: '곰', tiger: '호랑이', eagle: '독수리', wolf: '늑대', dragon: '용',
+  };
+  const emoji = animalEmoji[character?.animalType] || '🐾';
+
   if (status === 'loading' || loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (!character) {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
-        <p className="text-white text-lg">캐릭터를 만들어주세요!</p>
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4">
+        <p className="text-gray-700 text-lg">캐릭터를 만들어주세요!</p>
         <button
           onClick={() => router.push('/character')}
-          className="bg-yellow-400 text-black px-6 py-3 rounded-lg font-bold"
+          className="bg-orange-400 text-white px-6 py-3 rounded-2xl font-bold shadow-md"
         >
           캐릭터 만들기
         </button>
@@ -78,13 +85,7 @@ export default function HomePage() {
     );
   }
 
-  // 동물 이모지
-  const animalEmoji: Record<string, string> = {
-    bear: '🐻', tiger: '🐯', eagle: '🦅', wolf: '🐺', dragon: '🐲',
-  };
-  const emoji = animalEmoji[character.animalType] || '🐾';
-
-  // 비교 모드
+  // 비교 화면
   if (showCompare) {
     const screenH = typeof window !== 'undefined' ? window.innerHeight * 0.7 : 500;
     const scale = charSize > screenH ? screenH / charSize : 1;
@@ -92,29 +93,29 @@ export default function HomePage() {
     const initialDisplay = 200 * scale;
 
     return (
-      <div className="min-h-screen bg-black flex flex-col">
+      <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1 flex items-center justify-center gap-8 px-4">
           <div className="flex flex-col items-center gap-2">
             <div
-              className="bg-yellow-400 rounded-sm flex items-center justify-center"
+              className="bg-gradient-to-br from-orange-200 to-orange-400 rounded-full flex items-center justify-center shadow-md"
               style={{ width: `${initialDisplay}px`, height: `${initialDisplay}px` }}
             >
               <span style={{ fontSize: `${initialDisplay * 0.5}px` }}>{emoji}</span>
             </div>
-            <span className="text-gray-500 text-xs">처음</span>
+            <span className="text-gray-400 text-xs">처음</span>
           </div>
           <div className="flex flex-col items-center gap-2">
             <div
-              className="bg-yellow-400 rounded-sm flex items-center justify-center"
+              className="bg-gradient-to-br from-orange-300 to-orange-500 rounded-full flex items-center justify-center shadow-lg"
               style={{ width: `${currentDisplay}px`, height: `${currentDisplay}px` }}
             >
               <span style={{ fontSize: `${currentDisplay * 0.5}px` }}>{emoji}</span>
             </div>
-            <span className="text-white text-xs">지금 (XP: {xp})</span>
+            <span className="text-gray-700 text-xs font-medium">지금 (XP: {xp})</span>
           </div>
         </div>
         <div className="p-4">
-          <button onClick={() => setShowCompare(false)} className="w-full bg-gray-800 text-white py-3 rounded-lg">
+          <button onClick={() => setShowCompare(false)} className="w-full bg-white border border-gray-200 text-gray-700 py-3 rounded-2xl font-medium shadow-sm">
             돌아가기
           </button>
         </div>
@@ -122,33 +123,33 @@ export default function HomePage() {
     );
   }
 
-  // 기록 (배치 히스토리)
+  // 기록 화면
   if (showHistory) {
     return (
-      <div className="min-h-screen bg-black flex flex-col">
+      <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex-1 overflow-y-auto p-4">
-          <h2 className="text-white text-lg font-bold mb-4">배치 기록</h2>
+          <h2 className="text-gray-900 text-lg font-bold mb-4">배치 기록</h2>
           {history.length === 0 ? (
-            <p className="text-gray-500">아직 기록이 없습니다</p>
+            <p className="text-gray-400">아직 기록이 없습니다</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {history.map((log: any, i: number) => (
-                <div key={i} className="bg-gray-900 rounded-lg p-3">
-                  <div className="flex justify-between items-center mb-1">
+                <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                  <div className="flex justify-between items-center mb-2">
                     <span className="text-gray-400 text-xs">{log.date}</span>
-                    <span className={`text-xs font-bold ${
-                      log.status === 'settled' ? 'text-green-400' : 'text-yellow-400'
+                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                      log.status === 'settled' ? 'bg-emerald-50 text-emerald-500' : 'bg-orange-50 text-orange-500'
                     }`}>
                       {log.status === 'settled' ? '정산완료' : '대기중'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-white text-sm">
+                    <span className="text-gray-800 text-sm font-medium">
                       {log.team} {log.battingOrder}번 타자
                     </span>
                     {log.status === 'settled' && (
                       <span className={`text-sm font-bold ${
-                        (log.xpFromPlayer + log.xpFromPrediction) >= 0 ? 'text-green-400' : 'text-red-400'
+                        (log.xpFromPlayer + log.xpFromPrediction) >= 0 ? 'text-emerald-500' : 'text-red-400'
                       }`}>
                         {(log.xpFromPlayer + log.xpFromPrediction) >= 0 ? '+' : ''}
                         {log.xpFromPlayer + log.xpFromPrediction} XP
@@ -156,7 +157,7 @@ export default function HomePage() {
                     )}
                   </div>
                   {log.predictedWinner && (
-                    <span className="text-gray-500 text-xs">승리예측: {log.predictedWinner}</span>
+                    <span className="text-gray-400 text-xs">승리예측: {log.predictedWinner}</span>
                   )}
                 </div>
               ))}
@@ -164,7 +165,7 @@ export default function HomePage() {
           )}
         </div>
         <div className="p-4">
-          <button onClick={() => setShowHistory(false)} className="w-full bg-gray-800 text-white py-3 rounded-lg">
+          <button onClick={() => setShowHistory(false)} className="w-full bg-white border border-gray-200 text-gray-700 py-3 rounded-2xl font-medium shadow-sm">
             돌아가기
           </button>
         </div>
@@ -172,51 +173,66 @@ export default function HomePage() {
     );
   }
 
-  // 메인: 캐릭터 표시
+  // 메인 화면
   return (
-    <div className="min-h-screen bg-black flex flex-col relative">
-      {/* 캐릭터 영역 */}
+    <div className="min-h-screen bg-gray-50 flex flex-col relative">
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto flex flex-col items-center justify-center"
+        className="flex-1 overflow-auto flex items-center justify-center p-6"
       >
-        <div
-          className="bg-yellow-400 rounded-sm flex items-center justify-center"
-          style={{
-            width: `${charSize}px`,
-            height: `${charSize}px`,
-            minWidth: `${charSize}px`,
-            minHeight: `${charSize}px`,
-            imageRendering: 'pixelated',
-          }}
-        >
-          <span style={{ fontSize: `${charSize * 0.5}px` }}>{emoji}</span>
+        <div className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100 flex flex-col items-center gap-5 w-full max-w-xs">
+          <div
+            className="bg-gradient-to-br from-orange-200 to-orange-400 rounded-full flex items-center justify-center shadow-md shadow-orange-200/50"
+            style={{
+              width: `${Math.min(charSize, 200)}px`,
+              height: `${Math.min(charSize, 200)}px`,
+            }}
+          >
+            <span style={{ fontSize: `${Math.min(charSize, 200) * 0.5}px` }}>{emoji}</span>
+          </div>
+
+          <p className="text-gray-900 font-bold text-xl">{character.name}</p>
+
+          <div className="w-full">
+            <div className="flex justify-between text-xs mb-1.5">
+              <span className="text-gray-400">경험치</span>
+              <button
+                onClick={() => { fetchHistory(); setShowHistory(true); }}
+                className="text-orange-500 font-bold hover:underline"
+              >
+                {xp} XP
+              </button>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-orange-400 to-orange-300 h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.min((xp % 1000) / 10, 100)}%` }}
+              />
+            </div>
+          </div>
+
+          <span className="text-gray-400 text-xs">{animalName[character.animalType]}</span>
+
+          {placement && (
+            <div className="w-full bg-orange-50 border border-orange-100 rounded-2xl p-3 text-center">
+              <p className="text-orange-500 text-xs font-medium">오늘의 배치</p>
+              <p className="text-gray-800 text-sm font-bold mt-1">{placement.team} {placement.battingOrder}번 타자</p>
+              <p className="text-gray-400 text-xs mt-0.5">승리예측: {placement.predictedWinner}</p>
+            </div>
+          )}
+
+          <button
+            onClick={() => setShowCompare(true)}
+            className="w-full bg-gray-50 hover:bg-gray-100 text-gray-700 py-2.5 rounded-2xl text-sm font-medium transition border border-gray-200"
+          >
+            성장 비교
+          </button>
         </div>
-
-        {/* 캐릭터 이름 + XP */}
-        <p className="text-white font-bold text-lg mt-3">{character.name}</p>
-        <button
-          onClick={() => { fetchHistory(); setShowHistory(true); }}
-          className="text-yellow-400 text-sm font-bold mt-1 hover:underline"
-        >
-          XP: {xp}
-        </button>
       </div>
 
-      {/* 하단 버튼 */}
-      <div className="flex gap-3 p-4 pb-20">
-        <button
-          onClick={() => setShowCompare(true)}
-          className="flex-1 bg-gray-800 text-white py-3 rounded-lg text-sm font-medium"
-        >
-          비교
-        </button>
-      </div>
-
-      {/* 오늘 배치 확인 버튼 - 오른쪽 하단 */}
       <button
         onClick={() => router.push('/match')}
-        className="fixed bottom-20 right-4 bg-yellow-400 text-black w-12 h-12 rounded-full flex items-center justify-center shadow-lg text-lg z-40"
+        className="fixed bottom-20 right-4 bg-orange-400 hover:bg-orange-300 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg shadow-orange-300/40 text-xl z-40 transition"
         title={placement ? `${placement.team} ${placement.battingOrder}번` : '배치하기'}
       >
         {placement ? '✓' : '⚾'}
