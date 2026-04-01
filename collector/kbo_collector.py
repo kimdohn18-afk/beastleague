@@ -224,7 +224,7 @@ def collect_date(date_str):
                 "homeScore": 0,
                 "awayScore": 0,
             }
-            send_to_server(game_data)
+            send_to_server(game_data, api_url, api_key)
             print(f"  📋 경기 예정 → scheduled로 저장")
             continue
 
