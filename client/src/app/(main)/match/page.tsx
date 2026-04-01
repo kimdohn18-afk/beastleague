@@ -70,7 +70,7 @@ export default function MatchPage() {
     } catch (e) { console.error(e); }
   }
 
-   function handleExpand(gameId: string) {
+  function handleExpand(gameId: string) {
     setExpandedGame(expandedGame === gameId ? null : gameId);
   }
 
@@ -126,25 +126,25 @@ export default function MatchPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black p-4 pb-24">
+    <div className="min-h-screen bg-gray-50 p-4 pb-24">
       {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white px-4 py-2 rounded-lg text-sm">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white px-4 py-2 rounded-2xl text-sm shadow-lg">
           {toast}
         </div>
       )}
 
-      <h1 className="text-white text-lg font-bold mb-1">{todayKST()}</h1>
-      <p className="text-gray-500 text-sm mb-4">{games.length}경기</p>
+      <h1 className="text-gray-900 text-lg font-bold mb-1">{todayKST()}</h1>
+      <p className="text-gray-400 text-sm mb-4">{games.length}경기</p>
 
       {games.length === 0 ? (
-        <p className="text-gray-500 text-center mt-20">오늘 경기가 없습니다</p>
+        <p className="text-gray-400 text-center mt-20">오늘 경기가 없습니다</p>
       ) : (
         <div className="space-y-3">
           {games.map((game) => {
@@ -157,37 +157,36 @@ export default function MatchPage() {
             return (
               <div
                 key={game.gameId}
-                className={`rounded-xl overflow-hidden transition-all ${
-                  isSelected ? 'ring-1 ring-yellow-400' : ''
+                className={`rounded-2xl overflow-hidden transition-all shadow-sm ${
+                  isSelected ? 'ring-2 ring-orange-400' : ''
                 }`}
               >
                 {/* 접힌 카드 */}
                 <div
                   onClick={() => !isLocked && handleExpand(game.gameId)}
-                  className={`bg-gray-900 p-4 ${isLocked ? 'opacity-60' : 'cursor-pointer active:bg-gray-800'}`}
+                  className={`bg-white p-4 border border-gray-100 ${isLocked ? 'opacity-60' : 'cursor-pointer active:bg-gray-50'}`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-white font-medium flex-1 text-center">{game.awayTeam}</span>
-                    <span className="text-gray-600 text-sm mx-3">
+                    <span className="text-gray-800 font-medium flex-1 text-center">{game.awayTeam}</span>
+                    <span className="text-gray-300 text-sm mx-3">
                       {isFinished ? `${game.awayScore} : ${game.homeScore}` : 'vs'}
                     </span>
-                    <span className="text-white font-medium flex-1 text-center">{game.homeTeam}</span>
+                    <span className="text-gray-800 font-medium flex-1 text-center">{game.homeTeam}</span>
                   </div>
 
-                  {/* 선택 요약 */}
                   {isSelected && !isExpanded && selection && (
-                    <div className="mt-2 pt-2 border-t border-gray-800 flex justify-between">
-                      <span className="text-yellow-400 text-xs">
+                    <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between">
+                      <span className="text-orange-500 text-xs">
                         {selection.predictedWinner} 승리
                       </span>
-                      <span className="text-yellow-400 text-xs">
+                      <span className="text-orange-500 text-xs">
                         {selection.selectedTeam} {selection.selectedOrder}번 타자
                       </span>
                     </div>
                   )}
 
                   {isLocked && (
-                    <p className="text-gray-600 text-xs text-center mt-1">
+                    <p className="text-gray-400 text-xs text-center mt-1">
                       {isLive ? '경기 중' : '경기 종료'}
                     </p>
                   )}
@@ -195,27 +194,27 @@ export default function MatchPage() {
 
                 {/* 펼쳐진 카드 */}
                 {isExpanded && (
-                  <div className="bg-gray-950 p-4 space-y-4">
+                  <div className="bg-white border-t border-gray-100 p-4 space-y-4">
                     {/* 승패 예측 */}
                     <div>
-                      <p className="text-gray-500 text-xs mb-2">승리 예측</p>
+                      <p className="text-gray-400 text-xs mb-2">승리 예측</p>
                       <div className="flex gap-3">
                         <button
                           onClick={() => handlePrediction(game.gameId, game.awayTeam)}
-                          className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
+                          className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
                             selection?.predictedWinner === game.awayTeam
-                              ? 'bg-yellow-400 text-black'
-                              : 'bg-gray-800 text-gray-400'
+                              ? 'bg-orange-400 text-white shadow-md'
+                              : 'bg-gray-100 text-gray-500'
                           }`}
                         >
                           {game.awayTeam}
                         </button>
                         <button
                           onClick={() => handlePrediction(game.gameId, game.homeTeam)}
-                          className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
+                          className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
                             selection?.predictedWinner === game.homeTeam
-                              ? 'bg-yellow-400 text-black'
-                              : 'bg-gray-800 text-gray-400'
+                              ? 'bg-orange-400 text-white shadow-md'
+                              : 'bg-gray-100 text-gray-500'
                           }`}
                         >
                           {game.homeTeam}
@@ -225,16 +224,16 @@ export default function MatchPage() {
 
                     {/* 타순 선택 */}
                     <div>
-                      <p className="text-gray-500 text-xs mb-2">{game.awayTeam} 타순</p>
+                      <p className="text-gray-400 text-xs mb-2">{game.awayTeam} 타순</p>
                       <div className="grid grid-cols-9 gap-1">
                         {[1,2,3,4,5,6,7,8,9].map((n) => (
                           <button
                             key={`away-${n}`}
                             onClick={() => handleBattingOrder(game.gameId, game.awayTeam, n)}
-                            className={`py-2 rounded text-xs font-medium transition ${
+                            className={`py-2 rounded-xl text-xs font-medium transition ${
                               selection?.selectedTeam === game.awayTeam && selection?.selectedOrder === n
-                                ? 'bg-yellow-400 text-black'
-                                : 'bg-gray-800 text-gray-400'
+                                ? 'bg-orange-400 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-500'
                             }`}
                           >
                             {n}
@@ -244,16 +243,16 @@ export default function MatchPage() {
                     </div>
 
                     <div>
-                      <p className="text-gray-500 text-xs mb-2">{game.homeTeam} 타순</p>
+                      <p className="text-gray-400 text-xs mb-2">{game.homeTeam} 타순</p>
                       <div className="grid grid-cols-9 gap-1">
                         {[1,2,3,4,5,6,7,8,9].map((n) => (
                           <button
                             key={`home-${n}`}
                             onClick={() => handleBattingOrder(game.gameId, game.homeTeam, n)}
-                            className={`py-2 rounded text-xs font-medium transition ${
+                            className={`py-2 rounded-xl text-xs font-medium transition ${
                               selection?.selectedTeam === game.homeTeam && selection?.selectedOrder === n
-                                ? 'bg-yellow-400 text-black'
-                                : 'bg-gray-800 text-gray-400'
+                                ? 'bg-orange-400 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-500'
                             }`}
                           >
                             {n}
@@ -266,7 +265,7 @@ export default function MatchPage() {
                     <button
                       onClick={handleSubmit}
                       disabled={submitting || !selection?.predictedWinner || !selection?.selectedOrder}
-                      className="w-full bg-yellow-400 text-black py-3 rounded-lg font-bold text-sm disabled:opacity-40 transition"
+                      className="w-full bg-orange-400 text-white py-3 rounded-2xl font-bold text-sm disabled:opacity-40 transition shadow-md"
                     >
                       {submitting ? '저장 중...' : '선택 확정'}
                     </button>
