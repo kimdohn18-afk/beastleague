@@ -271,14 +271,15 @@ def collect_date(date_str):
 
     print(f"\n=== 수집 완료 ===")
 
-
 def main():
     if len(sys.argv) > 1:
         date_str = sys.argv[1].replace("-", "")
     else:
-        date_str = datetime.now(KST).strftime("%Y%m%d")
-    collect_date(date_str)
+        # 자동 실행: 어제(KST) 경기 수집
+        yesterday = datetime.now(KST) - timedelta(days=1)
+        date_str = yesterday.strftime("%Y%m%d")
 
+    collect_date(date_str)
 
 if __name__ == "__main__":
     main()
