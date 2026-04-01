@@ -214,9 +214,24 @@ def collect_date(date_str):
 
         print(f"⚾ {away_team} {score_a} vs {score_h} {home_team} (ID: {game_id}, 상태: {status})")
 
-        if status != "3":
-            print(f"  ⏭️ 경기 미종료 (상태: {status}), 건너뜀")
-            continue
+        if status == "1":
+    # 경기 시작 전 → scheduled로 저장 (배치용)
+    game_data = {
+        "gameId": game_id,
+        "date": f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}",
+        "homeTeam": home,
+        "awayTeam": away,
+        "status": "scheduled",
+        "homeScore": 0,
+        "awayScore": 0,
+    }
+    send_to_server(game_data)
+    print(f"  📋 경기 예정 → scheduled로 저장")
+    continue
+
+if status not in ("2", "3"):
+    print(f"  ⏭️ 알 수 없는 상태 (상태: {status}), 건너뜀")
+    continue
 
         box = get_boxscore(game_id, season_id, sr_id)
         if not box:
