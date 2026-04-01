@@ -70,14 +70,7 @@ export default function MatchPage() {
     } catch (e) { console.error(e); }
   }
 
-  function handleExpand(gameId: string) {
-    if (selection) {
-      if (selection.gameId !== gameId) {
-        setToast('이미 선택한 경기가 있습니다');
-        setTimeout(() => setToast(null), 2000);
-        return;
-      }
-    }
+   function handleExpand(gameId: string) {
     setExpandedGame(expandedGame === gameId ? null : gameId);
   }
 
