@@ -1,40 +1,57 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import CharacterDisplay from '@/components/CharacterDisplay';
+import type { AnimalType } from '@/config/characters';
 
-/* ── 동물별 구체 색상 ── */
-const SPHERE_THEME: Record<string, { gradient: string; shadow: string }> = {
-  bear: {
-    gradient: 'radial-gradient(circle at 35% 35%, #fde68a, #b45309, #78350f)',
-    shadow: 'rgba(180,83,9,0.35)',
-  },
-  tiger: {
-    gradient: 'radial-gradient(circle at 35% 35%, #fdba74, #f97316, #c2410c)',
-    shadow: 'rgba(249,115,22,0.35)',
-  },
-  eagle: {
-    gradient: 'radial-gradient(circle at 35% 35%, #bfdbfe, #3b82f6, #1e3a8a)',
-    shadow: 'rgba(59,130,246,0.35)',
-  },
-  wolf: {
-    gradient: 'radial-gradient(circle at 35% 35%, #e5e7eb, #6b7280, #1f2937)',
-    shadow: 'rgba(107,114,128,0.35)',
-  },
-  dragon: {
-    gradient: 'radial-gradient(circle at 35% 35%, #fca5a5, #dc2626, #7f1d1d)',
-    shadow: 'rgba(220,38,38,0.35)',
-  },
-};
-const DEFAULT_THEME = SPHERE_THEME.tiger;
+export default function MainPage() {
+  const [character, setCharacter] = useState<{
+    animal: AnimalType;
+    level: number;
+    xp: number;
+    name: string;
+  } | null>(null);
 
-const ANIMAL_EMOJI: Record<string, string> = {
-  bear: '\u{1F43B}', tiger: '\u{1F42F}', eagle: '\u{1F985}', wolf: '\u{1F43A}', dragon: '\u{1F432}',
-};
-const ANIMAL_NAME: Record<string, string> = {
-  bear: '곰', tiger: '호랑이', eagle: '독수리', wolf: '늑대', dragon: '용',
-};
+  useEffect(() => {
+    // API에서 캐릭터 데이터 가져오기
+    fetch('/api/characters/me')
+      .then(res => res.json())
+      .then(data => setCharacter(data));
+  }, []);
+
+  if (!character) return <div>Loading...</div>;
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+      <h1 className="text-3xl font-bold text-gray-900 mb-2">{character.name}</h1>
+      
+      {/* 3D 구체 캐릭터 */}
+      <div className="w-80 h-80 mb-8">
+        <CharacterDisplay
+          animal={character.animal}
+          level={character.level}
+          animated={true}
+        />
+      </div>
+
+      {/* XP 바 */}
+      <div className="w-full max-w-md mb-8">
+        <div className="flex justify-between text-sm text-gray-600 mb-1">
+          <span>XP</span>
+          <span>{character.xp} / 1000</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-3">
+          <div
+            className="bg-orange-500 h-3 rounded-full transition-all"
+            style={{ width: `${(character.xp / 1000) * 100}%` }}
+          />
+        </div>
+      </div>
+
+      {/* FAB 메뉴 (기존 코드 유지) */}
+    </div>
+  );
+}
 
 /* ── XP 항목 라벨 ── */
 const XP_LABELS: Record<string, string> = {
