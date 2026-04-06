@@ -33,13 +33,11 @@ placementsRouter.post('/', authenticateUser, async (req: Request, res: Response)
     if (!character) return res.status(400).json({ error: '캐릭터가 없습니다' });
 
     const today = todayKST();
-  const existing = await Placement.findOne({ userId, date: today });
+    const existing = await Placement.findOne({ userId, date: today });
     if (existing) {
-      // 이미 정산된 배치는 수정 불가
       if (existing.status === 'settled') {
         return res.status(400).json({ error: '이미 정산된 배치는 수정할 수 없습니다' });
       }
-      // 경기 시작 전이면 수정 가능
       existing.gameId = gameId;
       existing.team = team;
       existing.battingOrder = battingOrder;
@@ -47,7 +45,7 @@ placementsRouter.post('/', authenticateUser, async (req: Request, res: Response)
       await existing.save();
       return res.status(200).json(existing);
     }
-    
+
     const game = await Game.findOne({ gameId });
     if (!game) return res.status(400).json({ error: '존재하지 않는 경기입니다' });
     if (game.status !== 'scheduled') {
@@ -84,8 +82,29 @@ placementsRouter.get('/today', authenticateUser, async (req: Request, res: Respo
 // GET /api/placements/history
 placementsRouter.get('/history', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const list = await Placement.find({ userId: req.user!.userId })
-      .sort({ createdAt: -1 }).limit(30).lean();
+    const list = await Placement.aggregate([
+      { $match: { userId: req.user!.userId } },
+      { $sort: { createdAt: -1 } },
+      { $limit: 30 },
+      {
+        $lookup: {
+          from: 'games',
+          localField: 'gameId',
+          foreignField: 'gameId',
+          as: '_game',
+        },
+      },
+      {
+        $addFields: {
+          game: {
+            homeTeam: { $arrayElemAt: ['$_game.homeTeam', 0] },
+            awayTeam: { $arrayElemAt: ['$_game.awayTeam', 0] },
+            status: { $arrayElemAt: ['$_game.status', 0] },
+          },
+        },
+      },
+      { $project: { _game: 0 } },
+    ]);
     return res.json(list);
   } catch (err) {
     return res.status(500).json({ error: String(err) });
