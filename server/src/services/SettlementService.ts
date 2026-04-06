@@ -2,7 +2,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { Character } from '../models/Character';
 import { Placement } from '../models/Placement';
 import { Game } from '../models/Game';
-import { calculatePlacementXp } from './XpCalculator';
+import { calculatePlacementXp, XpBreakdown } from './XpCalculator';
 
 export interface SettlementResult {
   gameId: string;
@@ -15,6 +15,7 @@ export interface SettlementResult {
     xpFromPlayer: number;
     xpFromPrediction: number;
     totalXp: number;
+    breakdown: XpBreakdown;
   }>;
   errors: string[];
 }
@@ -26,7 +27,6 @@ export async function settleGame(
   const errors: string[] = [];
   const details: SettlementResult['details'] = [];
 
-  // 이미 정산된 경기인지 확인
   const settledCount = await Placement.countDocuments({ gameId, status: 'settled' });
   const activePlacements = await Placement.find({ gameId, status: 'active' });
 
@@ -37,12 +37,10 @@ export async function settleGame(
     return { gameId, settledPlacements: 0, details, errors };
   }
 
-  // 경기 데이터 가져오기
   const game = await Game.findOne({ gameId });
   if (!game) throw new Error(`경기를 찾을 수 없습니다: ${gameId}`);
   if (game.status !== 'finished') throw new Error(`경기가 아직 종료되지 않았습니다: ${gameId}`);
 
-  // 승리팀 판별
   const homeScore = game.homeScore ?? 0;
   const awayScore = game.awayScore ?? 0;
   let winner = '';
@@ -59,15 +57,14 @@ export async function settleGame(
         continue;
       }
 
-      // XP 계산 (선수 성적 기반)
-      const xpBreakdown = calculatePlacementXp(
+      const breakdown = calculatePlacementXp(
         game,
         placement.team,
         placement.battingOrder
       );
-      const xpFromPlayer = xpBreakdown.total - xpBreakdown.teamResult;
 
-      // 승패 예측 XP
+      const xpFromPlayer = breakdown.total - breakdown.teamResult;
+
       let xpFromPrediction = 0;
       let isCorrect = false;
       if (winner && placement.predictedWinner === winner) {
@@ -75,18 +72,29 @@ export async function settleGame(
         isCorrect = true;
       }
 
-      // 전체 XP = 선수 성적 XP + 팀 결과 XP + 예측 XP
-      const totalXp = xpBreakdown.total + xpFromPrediction;
+      const totalXp = breakdown.total + xpFromPrediction;
 
-      // 캐릭터에 XP 적용
       character.xp = (character.xp || 0) + totalXp;
       await character.save();
 
-      // Placement 업데이트
       placement.status = 'settled';
       placement.isCorrect = isCorrect;
-      placement.xpFromPlayer = xpFromPlayer + xpBreakdown.teamResult;
+      placement.xpFromPlayer = xpFromPlayer + breakdown.teamResult;
       placement.xpFromPrediction = xpFromPrediction;
+      placement.xpBreakdown = {
+        hits: breakdown.hits,
+        rbi: breakdown.rbi,
+        runs: breakdown.runs,
+        noHitPenalty: breakdown.noHitPenalty,
+        homeRun: breakdown.homeRun,
+        double: breakdown.double,
+        triple: breakdown.triple,
+        stolenBase: breakdown.stolenBase,
+        caughtStealing: breakdown.caughtStealing,
+        walkOff: breakdown.walkOff,
+        teamResult: breakdown.teamResult,
+        total: breakdown.total,
+      };
       await placement.save();
 
       settledPlacements++;
@@ -95,9 +103,10 @@ export async function settleGame(
         characterName: character.name,
         team: placement.team,
         battingOrder: placement.battingOrder,
-        xpFromPlayer: xpFromPlayer + xpBreakdown.teamResult,
+        xpFromPlayer: xpFromPlayer + breakdown.teamResult,
         xpFromPrediction,
         totalXp,
+        breakdown,
       });
 
     } catch (err) {
@@ -105,7 +114,6 @@ export async function settleGame(
     }
   }
 
-  // 실시간 알림
   io.emit('settlement:complete', { gameId, settledPlacements, details });
 
   return { gameId, settledPlacements, details, errors };
