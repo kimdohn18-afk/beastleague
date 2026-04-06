@@ -5,8 +5,9 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 
 const NAV_ITEMS = [
-  { href: '/',      label: '캐릭터' },
-  { href: '/match', label: '경기' },
+  { href: '/',        label: '캐릭터' },
+  { href: '/match',   label: '경기' },
+  { href: '/ranking', label: '랭킹' },
 ];
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
