@@ -22,21 +22,23 @@ export default function MainPage() {
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const token = (session as any)?.backendToken || (session as any)?.accessToken;
+
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/');
       return;
     }
-    if (status === 'authenticated') {
+    if (status === 'authenticated' && token) {
       fetchCharacter();
     }
-  }, [status, router]);
+  }, [status, token]);
 
   const fetchCharacter = async () => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/characters/me`, {
         headers: {
-          Authorization: `Bearer ${(session as any)?.accessToken}`,
+          Authorization: `Bearer ${token}`,
         },
       });
       if (!res.ok) {
@@ -63,7 +65,14 @@ export default function MainPage() {
     );
   }
 
-  if (!character) return null;
+  if (!character) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <p className="text-gray-500 mb-4">캐릭터를 불러올 수 없습니다</p>
+        <LogoutButton />
+      </div>
+    );
+  }
 
   const xpForNextLevel = 1000;
   const xpProgress = (character.xp / xpForNextLevel) * 100;
@@ -95,14 +104,12 @@ export default function MainPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative">
-      {/* 캐릭터 이름 + 로그아웃 */}
       <div className="flex items-center gap-3 mb-2">
         <h1 className="text-3xl font-bold text-gray-900">{character.name}</h1>
         <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
       </div>
       <p className="text-gray-600 mb-8">Lv. {character.level}</p>
 
-      {/* 3D 구체 캐릭터 */}
       <div className="relative w-80 h-80 mb-8">
         <div
           className="w-full h-full rounded-full"
@@ -114,7 +121,6 @@ export default function MainPage() {
         />
       </div>
 
-      {/* XP 진행 바 */}
       <div className="w-full max-w-md mb-8">
         <div className="flex justify-between text-sm text-gray-600 mb-2">
           <span>XP</span>
@@ -130,7 +136,6 @@ export default function MainPage() {
         </div>
       </div>
 
-      {/* FAB 메뉴 */}
       <div className="fixed bottom-24 right-6 z-50">
         <div
           className={`flex flex-col gap-3 mb-3 transition-all duration-300 ${
