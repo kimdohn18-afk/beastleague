@@ -4,84 +4,99 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+const ANIMAL_EMOJI: Record<string, string> = {
+  bear: '\u{1F43B}', tiger: '\u{1F42F}', eagle: '\u{1F985}', wolf: '\u{1F43A}', dragon: '\u{1F432}',
+};
+
 export default function RankingPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [tab, setTab] = useState('level');
   const [rankings, setRankings] = useState<any[]>([]);
-  const [myRank, setMyRank] = useState<any>(null);
+  const [myRank, setMyRank] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken;
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  const tabs = [
-    { key: 'level', label: '레벨' },
-    { key: 'totalStats', label: '총스탯' },
-    { key: 'weeklyGrowth', label: '주간성장' },
-    { key: 'battlePoints', label: '배틀점수' },
-  ];
-
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login');
     if (!token) return;
+    fetchRankings();
+  }, [token, status]);
+
+  async function fetchRankings() {
     setLoading(true);
-    Promise.all([
-      fetch(`${apiUrl}/api/rankings?type=${tab}&limit=100`, { headers }).then(r => r.ok ? r.json() : []),
-      fetch(`${apiUrl}/api/rankings/me?type=${tab}`, { headers }).then(r => r.ok ? r.json() : null),
-    ]).then(([list, me]) => {
-      setRankings(Array.isArray(list) ? list : []);
-      setMyRank(me);
-    }).catch(console.error).finally(() => setLoading(false));
-  }, [tab, token, status]);
+    try {
+      const [listRes, meRes] = await Promise.all([
+        fetch(`${apiUrl}/api/rankings?type=level&limit=100`, { headers }),
+        fetch(`${apiUrl}/api/rankings/me?type=level`, { headers }),
+      ]);
+      if (listRes.ok) {
+        const data = await listRes.json();
+        setRankings(Array.isArray(data) ? data : []);
+      }
+      if (meRes.ok) {
+        const me = await meRes.json();
+        setMyRank(me?.rank ?? null);
+      }
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  }
 
-  if (status === 'loading') return <div className="min-h-screen bg-surface flex items-center justify-center"><p className="text-textSecondary">로딩 중...</p></div>;
+  if (status === 'loading' || loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-  const medals = ['🥇', '🥈', '🥉'];
-  const animals: Record<string,string> = { bear:'🐻', tiger:'🐯', eagle:'🦅', wolf:'🐺', dragon:'🐲' };
+  const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
 
   return (
-    <div className="min-h-screen bg-surface p-4 pb-24">
-      <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => router.push('/')} className="text-textSecondary text-xl">←</button>
-        <h1 className="text-lg font-bold text-textPrimary">랭킹</h1>
+    <div className="min-h-screen bg-gray-50 pb-24">
+      <div className="bg-white border-b border-gray-100 px-4 pt-6 pb-4">
+        <h1 className="text-gray-900 text-lg font-bold">XP 랭킹</h1>
       </div>
 
-      <div className="flex gap-1 mb-4">
-        {tabs.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg ${tab===t.key?'bg-primary text-white':'bg-surfaceLight text-textSecondary'}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <p className="text-center text-textSecondary py-8">로딩 중...</p>
-      ) : rankings.length === 0 ? (
-        <p className="text-center text-textSecondary py-8">랭킹 데이터가 없습니다</p>
+      {rankings.length === 0 ? (
+        <div className="text-center py-20">
+          <p className="text-gray-400">아직 랭킹 데이터가 없습니다</p>
+        </div>
       ) : (
-        <div className="space-y-2">
-          {rankings.map((r, i) => (
-            <div key={i} className={`flex items-center gap-3 p-3 rounded-xl ${i < 3 ? 'bg-surfaceLight ring-1 ring-primary/30' : 'bg-surfaceLight'}`}>
-              <span className="w-8 text-center text-lg">{i < 3 ? medals[i] : <span className="text-xs text-textSecondary">{i+1}</span>}</span>
-              <span className="text-2xl">{animals[r.animalType] || '🐾'}</span>
-              <div className="flex-1">
-                <p className="text-sm text-textPrimary font-bold">{r.name || r.characterName}</p>
-                <p className="text-xs text-textSecondary">Lv.{r.level}</p>
+        <div className="p-4 space-y-2">
+          {rankings.map((r: any, i: number) => {
+            const emoji = ANIMAL_EMOJI[r.animalType] || '\u{1F43E}';
+            const xpValue = r.xp ?? 0;
+            const isTop3 = i < 3;
+
+            return (
+              <div
+                key={i}
+                className={`flex items-center gap-3 p-3 rounded-2xl ${
+                  isTop3 ? 'bg-orange-50 border border-orange-100' : 'bg-white border border-gray-100'
+                }`}
+              >
+                <span className="w-8 text-center text-lg">
+                  {isTop3 ? medals[i] : <span className="text-gray-400 text-xs font-bold">{i + 1}</span>}
+                </span>
+                <span className="text-2xl">{emoji}</span>
+                <div className="flex-1">
+                  <p className="text-gray-900 text-sm font-bold">{r.name || '???'}</p>
+                </div>
+                <p className="text-orange-500 text-sm font-bold">{xpValue} XP</p>
               </div>
-              <p className="text-sm text-primary font-mono font-bold">{r.value?.toFixed?.(1) || r.value || 0}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {myRank && (
-        <div className="fixed bottom-16 left-0 right-0 px-4">
-          <div className="bg-primary/20 backdrop-blur rounded-xl p-3 flex items-center gap-3">
-            <span className="text-sm font-bold text-primary">내 순위: {myRank.rank}위</span>
-            <span className="flex-1 text-right text-sm text-textPrimary font-mono">{myRank.value?.toFixed?.(1) || myRank.value || 0}</span>
+        <div className="fixed bottom-16 left-0 right-0 px-4 z-40">
+          <div className="bg-orange-400 rounded-2xl p-3 flex items-center justify-between shadow-lg">
+            <span className="text-white text-sm font-bold">내 순위</span>
+            <span className="text-white text-lg font-bold">{myRank}위</span>
           </div>
         </div>
       )}
