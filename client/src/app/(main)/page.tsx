@@ -102,7 +102,10 @@ export default function MainPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative">
       {/* 캐릭터 이름 */}
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">{character.name}</h1>
+      <div className="flex items-center gap-3 mb-2">
+  <h1 className="text-3xl font-bold text-gray-900">{character.name}</h1>
+  <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
+</div>
       <p className="text-gray-600 mb-8">Lv. {character.level}</p>
 
       {/* 3D 구체 캐릭터 */}
