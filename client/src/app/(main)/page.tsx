@@ -332,8 +332,12 @@ export default function HomePage() {
                 const total = (r.xpFromPlayer || 0) + (r.xpFromPrediction || 0);
                 const isPos = total >= 0;
                 const bd = r.xpBreakdown;
+
+                // breakdown 있으면 항목별 표시
                 const items = bd
-                  ? Object.entries(bd).filter(([k, v]) => k !== 'total' && v !== 0).map(([k, v]) => ({ label: XP_LABELS[k] || k, value: v as number }))
+                  ? Object.entries(bd)
+                      .filter(([k, v]) => k !== 'total' && v !== 0)
+                      .map(([k, v]) => ({ label: XP_LABELS[k] || k, value: v as number }))
                   : [];
 
                 return (
@@ -344,15 +348,14 @@ export default function HomePage() {
                         {isPos ? '+' : ''}{total} XP
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-3">
                       <span className="bg-gray-100 text-gray-700 text-sm font-medium px-3 py-1 rounded-full">{r.team}</span>
                       <span className="text-gray-600 text-sm">{r.battingOrder}번 타자</span>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${r.isCorrect ? 'bg-emerald-50 text-emerald-500' : 'bg-red-50 text-red-400'}`}>
-                        예측 {r.isCorrect ? '적중' : '실패'}
-                      </span>
                     </div>
-                    {items.length > 0 && (
-                      <div className="bg-gray-50 rounded-xl p-3 space-y-1">
+
+                    {/* breakdown이 있는 경우: 항목별 상세 */}
+                    {items.length > 0 ? (
+                      <div className="bg-gray-50 rounded-xl p-3 space-y-1.5">
                         {items.map((item, j) => (
                           <div key={j} className="flex justify-between">
                             <span className="text-gray-500 text-xs">{item.label}</span>
@@ -361,6 +364,22 @@ export default function HomePage() {
                             </span>
                           </div>
                         ))}
+                        {r.xpFromPrediction > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500 text-xs">승리 예측 보너스</span>
+                            <span className="text-xs font-bold text-emerald-500">+{r.xpFromPrediction}</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* breakdown이 없는 경우: 기존 데이터로 표시 */
+                      <div className="bg-gray-50 rounded-xl p-3 space-y-1.5">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500 text-xs">선수 성적 XP</span>
+                          <span className={`text-xs font-bold ${(r.xpFromPlayer || 0) >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                            {(r.xpFromPlayer || 0) >= 0 ? '+' : ''}{r.xpFromPlayer || 0}
+                          </span>
+                        </div>
                         {r.xpFromPrediction > 0 && (
                           <div className="flex justify-between">
                             <span className="text-gray-500 text-xs">승리 예측 보너스</span>
