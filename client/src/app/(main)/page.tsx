@@ -144,9 +144,11 @@ export default function HomePage() {
           <div className="flex items-center justify-center gap-2">
             <span className="bg-gray-100 text-gray-700 text-sm font-medium px-3 py-1 rounded-full">{data.team}</span>
             <span className="text-gray-600 text-sm">{data.battingOrder}번 타자</span>
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${data.isCorrect ? 'bg-emerald-50 text-emerald-500' : 'bg-red-50 text-red-400'}`}>
-              예측 {data.isCorrect ? '적중' : '실패'}
-            </span>
+            {data.isCorrect && (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-500">
+                예측 적중 +30
+              </span>
+            )}
           </div>
 
           {breakdownItems.length > 0 && (
