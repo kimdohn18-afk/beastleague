@@ -190,9 +190,24 @@ def send_to_server(game_data, api_url, api_key):
         print(f"  ❌ 서버 전송 실패: {e}")
 
 
+def wake_up_server(api_url):
+    """Render 무료 서버가 자고 있을 수 있으므로 미리 깨움"""
+    print("🔔 서버 웨이크업 요청...")
+    try:
+        res = requests.get(f"{api_url}/api/games?date=2000-01-01", timeout=120)
+        print(f"  서버 응답: {res.status_code} (깨어남)")
+    except Exception as e:
+        print(f"  ⚠️ 서버 웨이크업 실패: {e}")
+
+
 def collect_date(date_str):
     season_id = date_str[:4]
     print(f"\n📅 {date_str[:4]}-{date_str[4:6]}-{date_str[6:8]} 경기 수집 시작\n")
+
+    api_url = os.environ.get("API_URL", "https://beastleague.onrender.com")
+    api_key = os.environ.get("INTERNAL_API_KEY", "")
+
+    wake_up_server(api_url)
 
     games = get_schedule(date_str)
     if not games:
@@ -200,8 +215,6 @@ def collect_date(date_str):
         return
 
     all_records = []
-    api_url = os.environ.get("API_URL", "https://beastleague.onrender.com")
-    api_key = os.environ.get("INTERNAL_API_KEY", "")
 
     for game in games:
         game_id = game.get("G_ID", "")
