@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { authenticateUser } from '../middleware/auth';
 import { Character } from '../models/Character';
 import { Game } from '../models/Game';
@@ -82,8 +83,9 @@ placementsRouter.get('/today', authenticateUser, async (req: Request, res: Respo
 // GET /api/placements/history
 placementsRouter.get('/history', authenticateUser, async (req: Request, res: Response) => {
   try {
+    const userObjectId = new Types.ObjectId(req.user!.userId);
     const list = await Placement.aggregate([
-      { $match: { userId: req.user!.userId } },
+      { $match: { userId: userObjectId } },
       { $sort: { createdAt: -1 } },
       { $limit: 100 },
       {
