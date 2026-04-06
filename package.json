@@ -18,3 +18,8 @@
     "tsconfig-paths": "^4.2.0"
   }
 }
+{
+  "scripts": {
+    "add-images": "bash scripts/add-character-images.sh"
+  }
+}
