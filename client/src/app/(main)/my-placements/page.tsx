@@ -4,6 +4,17 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+interface BatterRecord {
+  order: string;
+  position: string;
+  name: string;
+  atBats: string;
+  hits: string;
+  rbi: string;
+  runs: string;
+  avg: string;
+}
+
 interface Placement {
   _id: string;
   gameId: string;
@@ -33,6 +44,12 @@ interface Placement {
     homeTeam: string;
     awayTeam: string;
     status: string;
+    homeScore?: number;
+    awayScore?: number;
+    batterRecords?: {
+      away: BatterRecord[];
+      home: BatterRecord[];
+    };
   };
 }
 
@@ -47,8 +64,32 @@ const XP_LABELS: Record<string, string> = {
   caughtStealing: '도루실패',
   noHitPenalty: '무안타',
   walkOff: '끝내기',
-  teamResult: '팀 승리',
 };
+
+function getMyBatters(p: Placement): BatterRecord[] {
+  if (!p.game?.batterRecords) return [];
+  const isHome = p.team === p.game.homeTeam;
+  const batters = isHome ? p.game.batterRecords.home : p.game.batterRecords.away;
+  if (!batters) return [];
+
+  const orderStr = String(p.battingOrder);
+  const result: BatterRecord[] = [];
+
+  for (let i = 0; i < batters.length; i++) {
+    if (batters[i].order === orderStr) {
+      result.push(batters[i]);
+      for (let j = i + 1; j < batters.length; j++) {
+        if (batters[j].order === '') {
+          result.push(batters[j]);
+        } else {
+          break;
+        }
+      }
+      break;
+    }
+  }
+  return result;
+}
 
 export default function MyPlacementsPage() {
   const { data: session, status: authStatus } = useSession();
@@ -134,6 +175,8 @@ export default function MyPlacementsPage() {
             const matchLabel = p.game
               ? `${p.game.awayTeam} vs ${p.game.homeTeam}`
               : p.gameId;
+            const myBatters = getMyBatters(p);
+            const predictionXp = (p.xpBreakdown?.teamResult ?? 0) + p.xpFromPrediction;
 
             return (
               <div key={p._id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -182,38 +225,74 @@ export default function MyPlacementsPage() {
                   )}
                 </div>
 
-                {/* XP 상세 (펼쳤을 때만) */}
-                {isExpanded && isSettled && p.xpBreakdown && (
+                {/* 상세 펼침 */}
+                {isExpanded && isSettled && (
                   <div className="border-t border-gray-100 px-4 py-3 bg-gray-50">
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                      {Object.entries(XP_LABELS).map(([key, label]) => {
-                        const val = (p.xpBreakdown as any)[key];
-                        if (!val || val === 0) return null;
-                        const isNeg = val < 0;
-                        return (
-                          <div key={key} className="flex justify-between">
-                            <span className="text-gray-500">{label}</span>
-                            <span className={`font-medium ${isNeg ? 'text-red-400' : 'text-gray-700'}`}>
-                              {isNeg ? '' : '+'}{val}
+
+                    {/* 선수 실제 성적 */}
+                    {myBatters.length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-xs text-gray-400 mb-2">선수 성적</p>
+                        {myBatters.map((b, i) => (
+                          <div key={i} className="bg-white rounded-xl p-3 mb-1 border border-gray-100">
+                            <p className="text-sm font-bold text-gray-900 mb-1">
+                              {b.name}
+                              <span className="text-xs text-gray-400 font-normal ml-2">{b.position}</span>
+                            </p>
+                            <div className="flex gap-3 text-xs text-gray-600">
+                              <span>{b.atBats}타수</span>
+                              <span className="font-semibold text-gray-900">{b.hits}안타</span>
+                              <span>{b.rbi}타점</span>
+                              <span>{b.runs}득점</span>
+                              <span>타율 {b.avg}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* XP 상세 */}
+                    {p.xpBreakdown && (
+                      <div>
+                        <p className="text-xs text-gray-400 mb-2">XP 상세</p>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                          {Object.entries(XP_LABELS).map(([key, label]) => {
+                            const val = (p.xpBreakdown as any)[key];
+                            if (!val || val === 0) return null;
+                            const isNeg = val < 0;
+                            return (
+                              <div key={key} className="flex justify-between">
+                                <span className="text-gray-500">{label}</span>
+                                <span className={`font-medium ${isNeg ? 'text-red-400' : 'text-gray-700'}`}>
+                                  {isNeg ? '' : '+'}{val}
+                                </span>
+                              </div>
+                            );
+                          })}
+                          {/* 승리 예측 (teamResult + prediction 합산) */}
+                          {predictionXp !== 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">승리 예측</span>
+                              <span className="font-medium text-gray-700">+{predictionXp}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between font-bold">
+                          <span className="text-gray-700">합계</span>
+                          <span className={isPositive ? 'text-emerald-500' : 'text-red-400'}>
+                            {isPositive ? '+' : ''}{totalXpItem} XP
+                          </span>
+                        </div>
+                        {p.isCorrect !== undefined && (
+                          <div className="mt-1 flex items-center gap-1">
+                            <span className={p.isCorrect ? 'text-emerald-500' : 'text-red-400'}>
+                              {p.isCorrect ? '✓' : '✗'}
+                            </span>
+                            <span className="text-gray-400 text-xs">
+                              예측: {p.predictedWinner} {p.isCorrect ? '적중!' : '실패'}
                             </span>
                           </div>
-                        );
-                      })}
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between font-bold">
-                      <span className="text-gray-700">합계</span>
-                      <span className={isPositive ? 'text-emerald-500' : 'text-red-400'}>
-                        {isPositive ? '+' : ''}{totalXpItem} XP
-                      </span>
-                    </div>
-                    {p.isCorrect !== undefined && (
-                      <div className="mt-1 flex items-center gap-1">
-                        <span className={p.isCorrect ? 'text-emerald-500' : 'text-red-400'}>
-                          {p.isCorrect ? '✓' : '✗'}
-                        </span>
-                        <span className="text-gray-400 text-xs">
-                          예측: {p.predictedWinner} {p.isCorrect ? '적중!' : '실패'}
-                        </span>
+                        )}
                       </div>
                     )}
                   </div>
