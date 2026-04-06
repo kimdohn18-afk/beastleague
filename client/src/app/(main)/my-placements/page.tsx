@@ -134,7 +134,6 @@ export default function MyPlacementsPage() {
   const correctCount = settled.filter((p) => p.isCorrect).length;
   const accuracy = settled.length > 0 ? Math.round((correctCount / settled.length) * 100) : 0;
 
-  // 시즌 합산 계산
   const seasonStats = settled.reduce(
     (acc, p) => {
       const batters = getMyBatters(p);
@@ -145,12 +144,12 @@ export default function MyPlacementsPage() {
         acc.runs += parseInt(b.runs) || 0;
       }
       if (p.xpBreakdown) {
-        acc.homeRun += p.xpBreakdown.homeRun / 40 || 0;
-        acc.double += p.xpBreakdown.double / 12 || 0;
-        acc.triple += p.xpBreakdown.triple / 20 || 0;
-        acc.stolenBase += p.xpBreakdown.stolenBase / 15 || 0;
-        acc.caughtStealing += Math.abs(p.xpBreakdown.caughtStealing / 10) || 0;
-        acc.walkOff += p.xpBreakdown.walkOff / 25 || 0;
+        acc.homeRun += Math.round(p.xpBreakdown.homeRun / 40) || 0;
+        acc.double += Math.round(p.xpBreakdown.double / 12) || 0;
+        acc.triple += Math.round(p.xpBreakdown.triple / 20) || 0;
+        acc.stolenBase += Math.round(p.xpBreakdown.stolenBase / 15) || 0;
+        acc.caughtStealing += Math.round(Math.abs(p.xpBreakdown.caughtStealing / 10)) || 0;
+        acc.walkOff += Math.round(p.xpBreakdown.walkOff / 25) || 0;
         acc.noHitGames += p.xpBreakdown.noHitPenalty < 0 ? 1 : 0;
         acc.teamWins += p.xpBreakdown.teamResult > 0 ? 1 : 0;
       }
@@ -170,7 +169,6 @@ export default function MyPlacementsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
-      {/* 상단 통계 */}
       <div className="bg-white border-b border-gray-100 px-4 pt-6 pb-5">
         <h1 className="text-gray-900 text-lg font-bold mb-4">내 배치</h1>
         <div className="flex gap-3">
@@ -189,14 +187,11 @@ export default function MyPlacementsPage() {
         </div>
       </div>
 
-      {/* 탭 */}
       <div className="bg-white border-b border-gray-100 flex">
         <button
           onClick={() => setTab('history')}
           className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
-            tab === 'history'
-              ? 'text-orange-500 border-b-2 border-orange-400'
-              : 'text-gray-400'
+            tab === 'history' ? 'text-orange-500 border-b-2 border-orange-400' : 'text-gray-400'
           }`}
         >
           경기별 기록
@@ -204,27 +199,21 @@ export default function MyPlacementsPage() {
         <button
           onClick={() => setTab('season')}
           className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
-            tab === 'season'
-              ? 'text-orange-500 border-b-2 border-orange-400'
-              : 'text-gray-400'
+            tab === 'season' ? 'text-orange-500 border-b-2 border-orange-400' : 'text-gray-400'
           }`}
         >
           시즌 성적
         </button>
       </div>
 
-      {/* 시즌 성적 탭 */}
       {tab === 'season' && (
         <div className="p-4">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            {/* 타율 대형 표시 */}
             <div className="p-6 text-center border-b border-gray-100">
               <p className="text-gray-400 text-xs mb-1">시즌 타율</p>
               <p className="text-4xl font-bold text-gray-900">{seasonAvg}</p>
               <p className="text-gray-400 text-xs mt-2">{settled.length}경기 참여</p>
             </div>
-
-            {/* 주요 기록 */}
             <div className="grid grid-cols-3 border-b border-gray-100">
               <div className="p-4 text-center border-r border-gray-100">
                 <p className="text-gray-400 text-[10px] mb-1">타수</p>
@@ -236,10 +225,9 @@ export default function MyPlacementsPage() {
               </div>
               <div className="p-4 text-center">
                 <p className="text-gray-400 text-[10px] mb-1">홈런</p>
-                <p className="text-lg font-bold text-gray-900">{Math.round(seasonStats.homeRun)}</p>
+                <p className="text-lg font-bold text-gray-900">{seasonStats.homeRun}</p>
               </div>
             </div>
-
             <div className="grid grid-cols-3 border-b border-gray-100">
               <div className="p-4 text-center border-r border-gray-100">
                 <p className="text-gray-400 text-[10px] mb-1">타점</p>
@@ -251,29 +239,27 @@ export default function MyPlacementsPage() {
               </div>
               <div className="p-4 text-center">
                 <p className="text-gray-400 text-[10px] mb-1">도루</p>
-                <p className="text-lg font-bold text-gray-900">{Math.round(seasonStats.stolenBase)}</p>
+                <p className="text-lg font-bold text-gray-900">{seasonStats.stolenBase}</p>
               </div>
             </div>
-
             <div className="grid grid-cols-3 border-b border-gray-100">
               <div className="p-4 text-center border-r border-gray-100">
                 <p className="text-gray-400 text-[10px] mb-1">2루타</p>
-                <p className="text-lg font-bold text-gray-900">{Math.round(seasonStats.double)}</p>
+                <p className="text-lg font-bold text-gray-900">{seasonStats.double}</p>
               </div>
               <div className="p-4 text-center border-r border-gray-100">
                 <p className="text-gray-400 text-[10px] mb-1">3루타</p>
-                <p className="text-lg font-bold text-gray-900">{Math.round(seasonStats.triple)}</p>
+                <p className="text-lg font-bold text-gray-900">{seasonStats.triple}</p>
               </div>
               <div className="p-4 text-center">
                 <p className="text-gray-400 text-[10px] mb-1">끝내기</p>
-                <p className="text-lg font-bold text-gray-900">{Math.round(seasonStats.walkOff)}</p>
+                <p className="text-lg font-bold text-gray-900">{seasonStats.walkOff}</p>
               </div>
             </div>
-
             <div className="grid grid-cols-3">
               <div className="p-4 text-center border-r border-gray-100">
                 <p className="text-gray-400 text-[10px] mb-1">도루실패</p>
-                <p className="text-lg font-bold text-red-400">{Math.round(seasonStats.caughtStealing)}</p>
+                <p className="text-lg font-bold text-red-400">{seasonStats.caughtStealing}</p>
               </div>
               <div className="p-4 text-center border-r border-gray-100">
                 <p className="text-gray-400 text-[10px] mb-1">무안타 경기</p>
@@ -284,8 +270,6 @@ export default function MyPlacementsPage() {
                 <p className="text-lg font-bold text-emerald-500">{seasonStats.teamWins}</p>
               </div>
             </div>
-
-            {/* XP 합산 */}
             <div className="border-t border-gray-100 p-4">
               <div className="flex justify-between items-center">
                 <span className="text-gray-600 text-sm font-medium">시즌 총 XP</span>
@@ -296,7 +280,6 @@ export default function MyPlacementsPage() {
         </div>
       )}
 
-      {/* 경기별 기록 탭 */}
       {tab === 'history' && (
         <div className="p-4 space-y-3">
           {placements.length === 0 ? (
@@ -334,7 +317,6 @@ export default function MyPlacementsPage() {
                         {isSettled ? '정산완료' : '진행중'}
                       </span>
                     </div>
-
                     <p className="font-semibold text-gray-900 mb-1">{matchLabel}</p>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="bg-gray-100 text-gray-700 text-sm font-medium px-3 py-1 rounded-full">
@@ -368,18 +350,15 @@ export default function MyPlacementsPage() {
                     )}
                   </div>
 
-                  {/* 상세 펼침 */}
                   {isExpanded && isSettled && (
                     <div className="border-t border-gray-100 px-4 py-3 bg-gray-50">
-
-                      {/* 선수 실제 성적 */}
                       {myBatters.length > 0 && (
                         <div className="mb-3">
                           <p className="text-xs text-gray-400 mb-2">선수 성적</p>
                           {myBatters.map((b, i) => (
                             <div key={i} className="bg-white rounded-xl p-3 mb-1 border border-gray-100">
                               <p className="text-sm font-bold text-gray-900 mb-1">
-                                {b.name}
+                                {i === 0 ? `${p.battingOrder}번 타자` : '교체 선수'}
                                 <span className="text-xs text-gray-400 font-normal ml-2">{b.position}</span>
                               </p>
                               <div className="flex gap-3 text-xs text-gray-600">
@@ -394,7 +373,6 @@ export default function MyPlacementsPage() {
                         </div>
                       )}
 
-                      {/* XP 상세 */}
                       {p.xpBreakdown && (
                         <div>
                           <p className="text-xs text-gray-400 mb-2">XP 상세</p>
