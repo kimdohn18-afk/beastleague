@@ -1,5 +1,20 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
+export interface IXpBreakdown {
+  hits: number;
+  rbi: number;
+  runs: number;
+  noHitPenalty: number;
+  homeRun: number;
+  double: number;
+  triple: number;
+  stolenBase: number;
+  caughtStealing: number;
+  walkOff: number;
+  teamResult: number;
+  total: number;
+}
+
 export interface IPlacement extends Document {
   userId: Types.ObjectId;
   characterId: Types.ObjectId;
@@ -12,8 +27,27 @@ export interface IPlacement extends Document {
   isCorrect?: boolean;
   xpFromPlayer: number;
   xpFromPrediction: number;
+  xpBreakdown?: IXpBreakdown;
   createdAt: Date;
 }
+
+const xpBreakdownSchema = new Schema<IXpBreakdown>(
+  {
+    hits:           { type: Number, default: 0 },
+    rbi:            { type: Number, default: 0 },
+    runs:           { type: Number, default: 0 },
+    noHitPenalty:   { type: Number, default: 0 },
+    homeRun:        { type: Number, default: 0 },
+    double:         { type: Number, default: 0 },
+    triple:         { type: Number, default: 0 },
+    stolenBase:     { type: Number, default: 0 },
+    caughtStealing: { type: Number, default: 0 },
+    walkOff:        { type: Number, default: 0 },
+    teamResult:     { type: Number, default: 0 },
+    total:          { type: Number, default: 0 },
+  },
+  { _id: false }
+);
 
 const placementSchema = new Schema<IPlacement>(
   {
@@ -28,6 +62,7 @@ const placementSchema = new Schema<IPlacement>(
     isCorrect:       { type: Boolean },
     xpFromPlayer:    { type: Number, default: 0 },
     xpFromPrediction:{ type: Number, default: 0 },
+    xpBreakdown:     { type: xpBreakdownSchema },
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );
