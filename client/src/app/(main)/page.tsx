@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import LogoutButton from '@/components/LogoutButton';
 
 interface Character {
   _id: string;
@@ -26,7 +27,6 @@ export default function MainPage() {
       router.push('/');
       return;
     }
-
     if (status === 'authenticated') {
       fetchCharacter();
     }
@@ -39,7 +39,6 @@ export default function MainPage() {
           Authorization: `Bearer ${(session as any)?.accessToken}`,
         },
       });
-
       if (!res.ok) {
         if (res.status === 404) {
           router.push('/character');
@@ -47,7 +46,6 @@ export default function MainPage() {
         }
         throw new Error('Failed to fetch character');
       }
-
       const data = await res.json();
       setCharacter(data);
     } catch (error) {
@@ -65,15 +63,11 @@ export default function MainPage() {
     );
   }
 
-  if (!character) {
-    return null;
-  }
+  if (!character) return null;
 
-  // XP 진행도 계산 (레벨당 1000 XP 가정)
   const xpForNextLevel = 1000;
   const xpProgress = (character.xp / xpForNextLevel) * 100;
 
-  // 동물별 색상
   const animalColors: Record<string, { gradient: string; shadow: string }> = {
     dragon: {
       gradient: 'radial-gradient(circle at 30% 30%, #a78bfa, #7c3aed, #5b21b6)',
@@ -101,11 +95,11 @@ export default function MainPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative">
-      {/* 캐릭터 이름 */}
+      {/* 캐릭터 이름 + 로그아웃 */}
       <div className="flex items-center gap-3 mb-2">
-  <h1 className="text-3xl font-bold text-gray-900">{character.name}</h1>
-  <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
-</div>
+        <h1 className="text-3xl font-bold text-gray-900">{character.name}</h1>
+        <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
+      </div>
       <p className="text-gray-600 mb-8">Lv. {character.level}</p>
 
       {/* 3D 구체 캐릭터 */}
@@ -136,58 +130,37 @@ export default function MainPage() {
         </div>
       </div>
 
-      {/* FAB 메뉴 버튼 */}
-      <div className="fixed bottom-6 right-6 z-50">
-        {/* 메뉴 아이템들 */}
+      {/* FAB 메뉴 */}
+      <div className="fixed bottom-24 right-6 z-50">
         <div
           className={`flex flex-col gap-3 mb-3 transition-all duration-300 ${
             menuOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
           }`}
         >
           <Link
-            href="/placements/history"
+            href="/my-placements"
             className="bg-white text-gray-700 px-4 py-3 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2 whitespace-nowrap"
           >
             <span>📋</span>
-            <span className="text-sm font-medium">배치 기록</span>
+            <span className="text-sm font-medium">내 배치</span>
           </Link>
-
           <Link
-            href="/placements/today"
+            href="/match"
             className="bg-white text-gray-700 px-4 py-3 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2 whitespace-nowrap"
           >
             <span>⚾</span>
-            <span className="text-sm font-medium">오늘의 배치</span>
-          </Link>
-
-          <Link
-            href="/rankings"
-            className="bg-white text-gray-700 px-4 py-3 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2 whitespace-nowrap"
-          >
-            <span>📊</span>
-            <span className="text-sm font-medium">성장 비교</span>
+            <span className="text-sm font-medium">오늘 경기</span>
           </Link>
         </div>
 
-        {/* 메인 FAB 버튼 */}
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className={`w-14 h-14 bg-orange-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center ${
             menuOpen ? 'rotate-45' : 'rotate-0'
           }`}
         >
-          <svg
-            className="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
         </button>
       </div>
