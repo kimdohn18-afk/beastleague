@@ -85,7 +85,7 @@ placementsRouter.get('/history', authenticateUser, async (req: Request, res: Res
     const list = await Placement.aggregate([
       { $match: { userId: req.user!.userId } },
       { $sort: { createdAt: -1 } },
-      { $limit: 30 },
+      { $limit: 100 },
       {
         $lookup: {
           from: 'games',
