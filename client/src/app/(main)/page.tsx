@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import LogoutButton from '@/components/LogoutButton';
 
 interface Character {
@@ -20,7 +19,6 @@ export default function MainPage() {
   const router = useRouter();
   const [character, setCharacter] = useState<Character | null>(null);
   const [loading, setLoading] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
 
@@ -37,9 +35,7 @@ export default function MainPage() {
   const fetchCharacter = async () => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/characters/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
         if (res.status === 404) {
@@ -74,9 +70,6 @@ export default function MainPage() {
     );
   }
 
-  const xpForNextLevel = 1000;
-  const xpProgress = (character.xp / xpForNextLevel) * 100;
-
   const animalColors: Record<string, { gradient: string; shadow: string }> = {
     dragon: {
       gradient: 'radial-gradient(circle at 30% 30%, #a78bfa, #7c3aed, #5b21b6)',
@@ -103,14 +96,18 @@ export default function MainPage() {
   const currentAnimal = animalColors[character.animal] || animalColors.dragon;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative">
-      <div className="flex items-center gap-3 mb-2">
-        <h1 className="text-3xl font-bold text-gray-900">{character.name}</h1>
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+      {/* 로그아웃 - 오른쪽 상단 */}
+      <div className="absolute top-6 right-6">
         <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
       </div>
-      <p className="text-gray-600 mb-8">Lv. {character.level}</p>
 
-      <div className="relative w-80 h-80 mb-8">
+      {/* 캐릭터 이름 + 레벨 */}
+      <h1 className="text-3xl font-bold text-gray-900 mb-1">{character.name}</h1>
+      <p className="text-gray-400 text-sm mb-8">Lv. {character.level} · XP {character.xp}</p>
+
+      {/* 3D 구체 캐릭터 */}
+      <div className="relative w-72 h-72 mb-8">
         <div
           className="w-full h-full rounded-full"
           style={{
@@ -119,55 +116,6 @@ export default function MainPage() {
             transform: 'translateZ(0)',
           }}
         />
-      </div>
-
-      <div className="w-full max-w-md mb-8">
-        <div className="flex justify-between text-sm text-gray-600 mb-2">
-          <span>XP</span>
-          <span>
-            {character.xp} / {xpForNextLevel}
-          </span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-          <div
-            className="bg-orange-500 h-full rounded-full transition-all duration-500"
-            style={{ width: `${xpProgress}%` }}
-          />
-        </div>
-      </div>
-
-      <div className="fixed bottom-24 right-6 z-50">
-        <div
-          className={`flex flex-col gap-3 mb-3 transition-all duration-300 ${
-            menuOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
-          }`}
-        >
-          <Link
-            href="/my-placements"
-            className="bg-white text-gray-700 px-4 py-3 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2 whitespace-nowrap"
-          >
-            <span>📋</span>
-            <span className="text-sm font-medium">내 배치</span>
-          </Link>
-          <Link
-            href="/match"
-            className="bg-white text-gray-700 px-4 py-3 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2 whitespace-nowrap"
-          >
-            <span>⚾</span>
-            <span className="text-sm font-medium">오늘 경기</span>
-          </Link>
-        </div>
-
-        <button
-          onClick={() => setMenuOpen(!menuOpen)}
-          className={`w-14 h-14 bg-orange-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center ${
-            menuOpen ? 'rotate-45' : 'rotate-0'
-          }`}
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
       </div>
     </div>
   );
