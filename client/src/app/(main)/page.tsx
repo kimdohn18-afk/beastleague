@@ -102,6 +102,7 @@ export default function MainPage() {
   const [deleting, setDeleting] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [helpPage, setHelpPage] = useState(0);
+  const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'granted' | 'denied'>('idle');
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
@@ -146,7 +147,35 @@ export default function MainPage() {
     setDeleting(false);
     setShowDelete(false);
   };
+  
+const handlePushSetup = async () => {
+  setPushStatus('loading');
+  setMenuOpen(false);
+  try {
+    const fcmToken = await requestFcmToken();
+    if (fcmToken) {
+      await fetch(`${apiUrl}/api/push/subscribe`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fcmToken }),
+      });
+      setPushStatus('granted');
+      alert('알림이 설정되었습니다! 경기 정산 시 알림을 받을 수 있어요.');
+    } else {
+      setPushStatus('denied');
+      alert('알림 권한이 차단되었습니다. 브라우저 설정에서 알림을 허용해주세요.');
+    }
+  } catch (e) {
+    console.error('[Push] Setup failed:', e);
+    setPushStatus('idle');
+    alert('알림 설정 중 오류가 발생했습니다.');
+  }
+};
 
+  
   /* ── 도움말 터치 스와이프 ── */
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const handleTouchStart = (e: React.TouchEvent) => setTouchStartX(e.touches[0].clientX);
