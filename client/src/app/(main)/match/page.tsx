@@ -9,6 +9,7 @@ interface Game {
   homeTeam: string;
   awayTeam: string;
   status: string;
+  startTime?: string;
   homeScore?: number;
   awayScore?: number;
 }
@@ -18,6 +19,22 @@ interface Selection {
   predictedWinner: string;
   selectedTeam: string;
   selectedOrder: number;
+}
+
+function isGameStartedByTime(game: Game): boolean {
+  if (game.status === 'finished' || game.status === 'live') return true;
+  if (!game.startTime || !game.date) return false;
+  try {
+    const [hour, minute] = game.startTime.split(':').map(Number);
+    const now = new Date(Date.now() + 9 * 3600 * 1000);
+    const currentHour = now.getUTCHours();
+    const currentMinute = now.getUTCMinutes();
+    const currentDate = now.toISOString().slice(0, 10);
+    if (currentDate === game.date) {
+      return currentHour > hour || (currentHour === hour && currentMinute >= minute);
+    }
+  } catch {}
+  return false;
 }
 
 export default function MatchPage() {
@@ -49,10 +66,7 @@ export default function MatchPage() {
     setLoading(true);
     try {
       const res = await fetch(`${apiUrl}/api/games?date=${todayKST()}`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        setGames(data);
-      }
+      if (res.ok) setGames(await res.json());
     } catch (e) { console.error(e); }
     setLoading(false);
   }
@@ -69,21 +83,17 @@ export default function MatchPage() {
             selectedTeam: data.team,
             selectedOrder: data.battingOrder || 0,
           });
-
-          // 배치한 경기가 이미 시작/종료되었으면 수정 불가
-          if (data.status === 'settled') {
-            setPlacementLocked(true);
-          }
+          if (data.status === 'settled') setPlacementLocked(true);
         }
       }
     } catch (e) { console.error(e); }
   }
 
-  // 게임 목록 로드 후, 배치한 경기의 상태 확인
+  // 배치한 경기가 시작됐으면 잠금
   useEffect(() => {
     if (selection && games.length > 0) {
       const placedGame = games.find(g => g.gameId === selection.gameId);
-      if (placedGame && placedGame.status !== 'scheduled') {
+      if (placedGame && isGameStartedByTime(placedGame)) {
         setPlacementLocked(true);
       }
     }
@@ -144,9 +154,7 @@ export default function MatchPage() {
         const err = await res.json();
         setToast(err.error || '선택 실패');
       }
-    } catch (e) {
-      setToast('서버 오류');
-    }
+    } catch (e) { setToast('서버 오류'); }
     setSubmitting(false);
     setTimeout(() => setToast(null), 2000);
   }
@@ -170,7 +178,6 @@ export default function MatchPage() {
       <h1 className="text-gray-900 text-lg font-bold mb-1">{todayKST()}</h1>
       <p className="text-gray-400 text-sm mb-4">{games.length}경기</p>
 
-      {/* 배치 확정 안내 */}
       {placementLocked && selection && (
         <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
           <p className="text-orange-600 text-sm font-bold">오늘의 배치가 확정되었습니다</p>
@@ -187,21 +194,14 @@ export default function MatchPage() {
           {games.map((game) => {
             const isExpanded = expandedGame === game.gameId;
             const isSelected = selection?.gameId === game.gameId;
-            const isFinished = game.status === 'finished';
-            const isLive = game.status === 'live';
-            const isGameLocked = isFinished || isLive;
-
-            // 배치한 경기가 시작됐으면 모든 카드 수정 불가
+            const isGameLocked = isGameStartedByTime(game);
             const cannotModify = placementLocked || isGameLocked;
 
             return (
               <div
                 key={game.gameId}
-                className={`rounded-2xl overflow-hidden transition-all shadow-sm ${
-                  isSelected ? 'ring-2 ring-orange-400' : ''
-                }`}
+                className={`rounded-2xl overflow-hidden transition-all shadow-sm ${isSelected ? 'ring-2 ring-orange-400' : ''}`}
               >
-                {/* 접힌 카드 */}
                 <div
                   onClick={() => !cannotModify && handleExpand(game.gameId)}
                   className={`bg-white p-4 border border-gray-100 ${cannotModify ? 'opacity-60' : 'cursor-pointer active:bg-gray-50'}`}
@@ -209,99 +209,61 @@ export default function MatchPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-gray-800 font-medium flex-1 text-center">{game.awayTeam}</span>
                     <span className="text-gray-300 text-sm mx-3">
-                      {isFinished ? `${game.awayScore} : ${game.homeScore}` : isLive ? '경기 중' : 'vs'}
+                      {game.status === 'finished' ? `${game.awayScore} : ${game.homeScore}` : isGameLocked ? '경기 중' : game.startTime ? `${game.startTime}` : 'vs'}
                     </span>
                     <span className="text-gray-800 font-medium flex-1 text-center">{game.homeTeam}</span>
                   </div>
 
                   {isSelected && !isExpanded && selection && (
                     <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between">
-                      <span className="text-orange-500 text-xs">
-                        {selection.predictedWinner} 승리
-                      </span>
-                      <span className="text-orange-500 text-xs">
-                        {selection.selectedTeam} {selection.selectedOrder}번 타자
-                      </span>
+                      <span className="text-orange-500 text-xs">{selection.predictedWinner} 승리</span>
+                      <span className="text-orange-500 text-xs">{selection.selectedTeam} {selection.selectedOrder}번 타자</span>
                     </div>
                   )}
 
-                  {isGameLocked && (
-                    <p className="text-gray-400 text-xs text-center mt-1">
-                      {isLive ? '경기 중' : '경기 종료'}
-                    </p>
+                  {isGameLocked && game.status !== 'finished' && (
+                    <p className="text-gray-400 text-xs text-center mt-1">경기 시작됨</p>
+                  )}
+                  {game.status === 'finished' && (
+                    <p className="text-gray-400 text-xs text-center mt-1">경기 종료</p>
                   )}
                 </div>
 
-                {/* 펼쳐진 카드 — 잠긴 상태면 절대 표시 안 함 */}
                 {isExpanded && !cannotModify && (
                   <div className="bg-white border-t border-gray-100 p-4 space-y-4">
-                    {/* 승패 예측 */}
                     <div>
                       <p className="text-gray-400 text-xs mb-2">승리 예측</p>
                       <div className="flex gap-3">
-                        <button
-                          onClick={() => handlePrediction(game.gameId, game.awayTeam)}
-                          className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
-                            selection?.predictedWinner === game.awayTeam
-                              ? 'bg-orange-400 text-white shadow-md'
-                              : 'bg-gray-100 text-gray-500'
-                          }`}
-                        >
-                          {game.awayTeam}
-                        </button>
-                        <button
-                          onClick={() => handlePrediction(game.gameId, game.homeTeam)}
-                          className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
-                            selection?.predictedWinner === game.homeTeam
-                              ? 'bg-orange-400 text-white shadow-md'
-                              : 'bg-gray-100 text-gray-500'
-                          }`}
-                        >
-                          {game.homeTeam}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* 타순 선택 */}
-                    <div>
-                      <p className="text-gray-400 text-xs mb-2">{game.awayTeam} 타순</p>
-                      <div className="grid grid-cols-9 gap-1">
-                        {[1,2,3,4,5,6,7,8,9].map((n) => (
+                        {[game.awayTeam, game.homeTeam].map((t) => (
                           <button
-                            key={`away-${n}`}
-                            onClick={() => handleBattingOrder(game.gameId, game.awayTeam, n)}
-                            className={`py-2 rounded-xl text-xs font-medium transition ${
-                              selection?.selectedTeam === game.awayTeam && selection?.selectedOrder === n
-                                ? 'bg-orange-400 text-white shadow-md'
-                                : 'bg-gray-100 text-gray-500'
+                            key={t}
+                            onClick={() => handlePrediction(game.gameId, t)}
+                            className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
+                              selection?.predictedWinner === t ? 'bg-orange-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'
                             }`}
-                          >
-                            {n}
-                          </button>
+                          >{t}</button>
                         ))}
                       </div>
                     </div>
 
-                    <div>
-                      <p className="text-gray-400 text-xs mb-2">{game.homeTeam} 타순</p>
-                      <div className="grid grid-cols-9 gap-1">
-                        {[1,2,3,4,5,6,7,8,9].map((n) => (
-                          <button
-                            key={`home-${n}`}
-                            onClick={() => handleBattingOrder(game.gameId, game.homeTeam, n)}
-                            className={`py-2 rounded-xl text-xs font-medium transition ${
-                              selection?.selectedTeam === game.homeTeam && selection?.selectedOrder === n
-                                ? 'bg-orange-400 text-white shadow-md'
-                                : 'bg-gray-100 text-gray-500'
-                            }`}
-                          >
-                            {n}
-                          </button>
-                        ))}
+                    {[{ label: game.awayTeam, team: game.awayTeam }, { label: game.homeTeam, team: game.homeTeam }].map(({ label, team }) => (
+                      <div key={team}>
+                        <p className="text-gray-400 text-xs mb-2">{label} 타순</p>
+                        <div className="grid grid-cols-9 gap-1">
+                          {[1,2,3,4,5,6,7,8,9].map((n) => (
+                            <button
+                              key={`${team}-${n}`}
+                              onClick={() => handleBattingOrder(game.gameId, team, n)}
+                              className={`py-2 rounded-xl text-xs font-medium transition ${
+                                selection?.selectedTeam === team && selection?.selectedOrder === n
+                                  ? 'bg-orange-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'
+                              }`}
+                            >{n}</button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    ))}
 
-                    {/* 확정 버튼 */}
                     <button
                       onClick={handleSubmit}
                       disabled={submitting || !selection?.predictedWinner || !selection?.selectedOrder}
