@@ -5,7 +5,22 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 const ANIMAL_EMOJI: Record<string, string> = {
-  bear: '\u{1F43B}', tiger: '\u{1F42F}', eagle: '\u{1F985}', wolf: '\u{1F43A}', dragon: '\u{1F432}',
+  turtle: '🐢',
+  eagle: '🦅',
+  lion: '🦁',
+  dinosaur: '🦕',
+  dog: '🐶',
+  fox: '🦊',
+  penguin: '🐧',
+  shark: '🦈',
+  bear: '🐻',
+  tiger: '🐯',
+  seagull: '🕊️',
+  // 기존 호환
+  dragon: '🐉',
+  cat: '🐱',
+  rabbit: '🐰',
+  wolf: '🐺',
 };
 
 export default function RankingPage() {
