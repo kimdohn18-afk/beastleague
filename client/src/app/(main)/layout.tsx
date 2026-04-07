@@ -3,6 +3,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import Link from 'next/link';
+import PushManager from '@/components/PushManager';
 
 const NAV_ITEMS = [
   { href: '/',               label: '캐릭터' },
@@ -32,6 +33,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      <PushManager />
       <main className="flex-1 overflow-y-auto">{children}</main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
