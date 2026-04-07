@@ -4,19 +4,22 @@ import { signIn } from 'next-auth/react';
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold text-primary">🐾 비스트리그</h1>
-          <p className="text-textSecondary text-sm">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-sm space-y-8">
+        {/* 로고 영역 */}
+        <div className="text-center space-y-3">
+          <div className="text-6xl">🐾</div>
+          <h1 className="text-3xl font-bold text-gray-900">비스트리그</h1>
+          <p className="text-gray-400 text-sm">
             실제 KBO 경기 결과로 동물 캐릭터를 육성하세요
           </p>
         </div>
 
+        {/* 소셜 로그인 */}
         <div className="space-y-3">
           <button
             onClick={() => signIn('kakao', { callbackUrl: '/' })}
-            className="w-full py-3 px-4 rounded-lg font-medium text-black"
+            className="w-full py-3.5 px-4 rounded-2xl font-bold text-gray-900 shadow-sm transition active:scale-[0.98]"
             style={{ backgroundColor: '#FEE500' }}
           >
             카카오로 시작하기
@@ -24,38 +27,15 @@ export default function LoginPage() {
 
           <button
             onClick={() => signIn('google', { callbackUrl: '/' })}
-            className="w-full py-3 px-4 rounded-lg font-medium bg-white text-gray-700 border border-gray-300"
+            className="w-full py-3.5 px-4 rounded-2xl font-bold bg-white text-gray-700 border border-gray-200 shadow-sm transition active:scale-[0.98]"
           >
             Google로 시작하기
           </button>
         </div>
 
-        <div className="border-t border-surfaceLight pt-4">
-          <p className="text-textSecondary text-xs text-center mb-3">개발 테스트용</p>
-          <div className="flex gap-2 justify-center">
-            {[
-              { emoji: '🐻', name: '번개곰', id: 'test1' },
-              { emoji: '🐯', name: '질풍호', id: 'test2' },
-              { emoji: '🦅', name: '하늘매', id: 'test3' },
-            ].map((char) => (
-              <button
-                key={char.id}
-                onClick={() =>
-                  signIn('dev-login', {
-                    userId: char.id,
-                    email: `${char.id}@beast.league`,
-                    name: char.name,
-                    callbackUrl: '/',
-                  })
-                }
-                className="flex flex-col items-center p-3 rounded-lg bg-surfaceLight hover:bg-primary/20 transition"
-              >
-                <span className="text-2xl">{char.emoji}</span>
-                <span className="text-xs text-textSecondary mt-1">{char.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        <p className="text-center text-[11px] text-gray-300">
+          로그인 시 서비스 이용약관에 동의합니다
+        </p>
       </div>
     </div>
   );
