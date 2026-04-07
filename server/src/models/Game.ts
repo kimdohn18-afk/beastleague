@@ -28,6 +28,7 @@ export interface IGame extends Document {
   homeTeam: string;
   awayTeam: string;
   status: string;
+  startTime?: string;
   homeScore?: number;
   awayScore?: number;
   batterRecords?: {
@@ -44,6 +45,7 @@ const gameSchema = new Schema<IGame>(
     homeTeam:  { type: String, required: true },
     awayTeam:  { type: String, required: true },
     status:    { type: String, required: true },
+    startTime: { type: String },
     homeScore: Number,
     awayScore: Number,
     batterRecords: {
