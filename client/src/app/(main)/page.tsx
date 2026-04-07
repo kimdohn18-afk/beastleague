@@ -13,37 +13,6 @@ interface Character {
   userId: string;
 }
 
-interface Placement {
-  _id: string;
-  date: string;
-  status: string;
-  team: string;
-  battingOrder: number;
-  predictedWinner: string;
-  isCorrect?: boolean;
-  xpFromPlayer: number;
-  xpFromPrediction: number;
-  xpBreakdown?: {
-    hits: number;
-    rbi: number;
-    runs: number;
-    noHitPenalty: number;
-    homeRun: number;
-    double: number;
-    triple: number;
-    stolenBase: number;
-    caughtStealing: number;
-    walkOff: number;
-    teamResult: number;
-    total: number;
-  };
-  game?: {
-    homeTeam: string;
-    awayTeam: string;
-    status: string;
-  };
-}
-
 const MILESTONES = [
   { xp: 500, label: '루키', reward: '기본 테두리' },
   { xp: 1500, label: '레귤러', reward: '실버 테두리' },
@@ -51,14 +20,6 @@ const MILESTONES = [
   { xp: 5000, label: 'MVP', reward: '특별 이펙트' },
   { xp: 10000, label: '전설', reward: '레전드 칭호' },
 ];
-
-const ANIMAL_NAMES: Record<string, string> = {
-  dragon: '드래곤',
-  cat: '고양이',
-  dog: '강아지',
-  bear: '곰',
-  rabbit: '토끼',
-};
 
 const ANIMAL_EMOJI: Record<string, string> = {
   dragon: '🐉',
@@ -68,16 +29,44 @@ const ANIMAL_EMOJI: Record<string, string> = {
   rabbit: '🐰',
 };
 
+const ANIMAL_NAMES: Record<string, string> = {
+  dragon: '드래곤',
+  cat: '고양이',
+  dog: '강아지',
+  bear: '곰',
+  rabbit: '토끼',
+};
+
+const ANIMAL_BG: Record<string, string> = {
+  dragon: 'from-violet-100 to-purple-50',
+  cat: 'from-amber-100 to-yellow-50',
+  dog: 'from-blue-100 to-sky-50',
+  bear: 'from-purple-100 to-fuchsia-50',
+  rabbit: 'from-rose-100 to-pink-50',
+};
+
 function getLevel(xp: number): number {
   return Math.floor(xp / 1000) + 1;
+}
+
+// 레벨에 따라 이모지 크기가 커짐 (text 크기)
+function getEmojiSize(level: number): string {
+  if (level <= 1) return 'text-[80px]';
+  if (level <= 2) return 'text-[100px]';
+  if (level <= 3) return 'text-[120px]';
+  if (level <= 5) return 'text-[140px]';
+  if (level <= 7) return 'text-[160px]';
+  if (level <= 10) return 'text-[180px]';
+  return 'text-[200px]';
 }
 
 export default function MainPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [character, setCharacter] = useState<Character | null>(null);
-  const [placements, setPlacements] = useState<Placement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showInfo, setShowInfo] = useState<'milestone' | 'compare' | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
@@ -88,37 +77,25 @@ export default function MainPage() {
       return;
     }
     if (status === 'authenticated' && token) {
-      fetchData();
+      fetchCharacter();
     }
   }, [status, token]);
 
-  const fetchData = async () => {
+  const fetchCharacter = async () => {
     try {
-      const [charRes, placementsRes] = await Promise.all([
-        fetch(`${apiUrl}/api/characters/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${apiUrl}/api/placements/history`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-
-      if (!charRes.ok) {
-        if (charRes.status === 404) {
+      const res = await fetch(`${apiUrl}/api/characters/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        if (res.status === 404) {
           router.push('/character');
           return;
         }
         throw new Error('Failed to fetch character');
       }
-
-      const charData = await charRes.json();
-      setCharacter(charData);
-
-      if (placementsRes.ok) {
-        setPlacements(await placementsRes.json());
-      }
+      setCharacter(await res.json());
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching character:', error);
     } finally {
       setLoading(false);
     }
@@ -143,214 +120,267 @@ export default function MainPage() {
 
   const level = getLevel(character.xp);
   const xpInLevel = character.xp % 1000;
-  const settled = placements.filter((p) => p.status === 'settled');
+  const emojiSize = getEmojiSize(level);
+  const emoji = ANIMAL_EMOJI[character.animalType] || '🐾';
+  const animalName = ANIMAL_NAMES[character.animalType] || character.animalType;
+  const bgGradient = ANIMAL_BG[character.animalType] || 'from-gray-100 to-gray-50';
+
+  // 마일스톤 계산
   const totalXp = character.xp;
-  const correctCount = settled.filter((p) => p.isCorrect).length;
-  const accuracy = settled.length > 0 ? Math.round((correctCount / settled.length) * 100) : 0;
-
-  // 시즌 타율 계산
-  let totalAtBats = 0;
-  let totalHits = 0;
-  for (const p of settled) {
-    if (p.xpBreakdown) {
-      const hits = p.xpBreakdown.hits / 8;
-      totalHits += hits;
-      // 타수 추정: 안타 + (무안타패널티가 있으면 최소 3타수)
-      if (p.xpBreakdown.noHitPenalty < 0) {
-        totalAtBats += 3;
-      } else if (hits > 0) {
-        totalAtBats += Math.max(hits, 1);
-      }
-    }
-  }
-  const seasonAvg = totalAtBats > 0 ? (totalHits / totalAtBats).toFixed(3) : '.000';
-
-  // 최근 정산 결과
-  const recentSettled = settled[0];
-  const recentXp = recentSettled
-    ? recentSettled.xpFromPlayer + recentSettled.xpFromPrediction
-    : null;
-
-  // 마일스톤
-  const currentMilestone = MILESTONES.find((m) => totalXp < m.xp) || MILESTONES[MILESTONES.length - 1];
-  const prevMilestoneXp = MILESTONES[MILESTONES.indexOf(currentMilestone) - 1]?.xp || 0;
-  const milestoneProgress = totalXp >= currentMilestone.xp
-    ? 100
-    : Math.round(((totalXp - prevMilestoneXp) / (currentMilestone.xp - prevMilestoneXp)) * 100);
+  const currentMilestone =
+    MILESTONES.find((m) => totalXp < m.xp) || MILESTONES[MILESTONES.length - 1];
+  const milestoneIndex = MILESTONES.indexOf(currentMilestone);
+  const prevXp = milestoneIndex > 0 ? MILESTONES[milestoneIndex - 1].xp : 0;
+  const milestoneProgress =
+    totalXp >= currentMilestone.xp
+      ? 100
+      : Math.round(((totalXp - prevXp) / (currentMilestone.xp - prevXp)) * 100);
   const xpToNext = Math.max(currentMilestone.xp - totalXp, 0);
 
-  const animalColors: Record<string, { gradient: string; shadow: string; bg: string }> = {
-    dragon: {
-      gradient: 'radial-gradient(circle at 30% 30%, #a78bfa, #7c3aed, #5b21b6)',
-      shadow: '0 12px 40px rgba(124, 58, 237, 0.3)',
-      bg: 'bg-violet-50',
-    },
-    cat: {
-      gradient: 'radial-gradient(circle at 30% 30%, #fbbf24, #f59e0b, #d97706)',
-      shadow: '0 12px 40px rgba(245, 158, 11, 0.3)',
-      bg: 'bg-amber-50',
-    },
-    dog: {
-      gradient: 'radial-gradient(circle at 30% 30%, #60a5fa, #3b82f6, #2563eb)',
-      shadow: '0 12px 40px rgba(59, 130, 246, 0.3)',
-      bg: 'bg-blue-50',
-    },
-    bear: {
-      gradient: 'radial-gradient(circle at 30% 30%, #a78bfa, #8b5cf6, #7c3aed)',
-      shadow: '0 12px 40px rgba(139, 92, 246, 0.3)',
-      bg: 'bg-purple-50',
-    },
-    rabbit: {
-      gradient: 'radial-gradient(circle at 30% 30%, #fb7185, #f43f5e, #e11d48)',
-      shadow: '0 12px 40px rgba(244, 63, 94, 0.3)',
-      bg: 'bg-rose-50',
-    },
-  };
-
-  const colors = animalColors[character.animalType] || animalColors.dragon;
+  // 초기와 비교 (레벨 1, XP 0)
+  const initialLevel = 1;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className={`min-h-screen bg-gradient-to-b ${bgGradient} pb-24 relative`}>
       {/* 상단 헤더 */}
-      <div className="bg-white px-4 pt-5 pb-4 flex items-center justify-between border-b border-gray-100">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">{character.name}</h1>
-          <p className="text-xs text-gray-400">
-            {ANIMAL_EMOJI[character.animalType] || '🐾'} {ANIMAL_NAMES[character.animalType] || character.animalType} · Lv. {level}
-          </p>
-        </div>
+      <div className="px-4 pt-5 pb-2 flex items-center justify-between">
+        <div />
         <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
       </div>
 
-      {/* 캐릭터 아바타 */}
-      <div className={`flex justify-center py-8 ${colors.bg}`}>
-        <div className="relative">
+      {/* 캐릭터 영역 - 화면 중앙 */}
+      <div className="flex flex-col items-center justify-center" style={{ minHeight: '60vh' }}>
+        {/* 이모지 - 레벨에 따라 크기 변화 */}
+        <div
+          className={`${emojiSize} leading-none select-none transition-all duration-700 ease-out`}
+          style={{
+            filter: `drop-shadow(0 8px 24px rgba(0,0,0,0.1))`,
+          }}
+        >
+          {emoji}
+        </div>
+
+        {/* 이름 + 레벨 */}
+        <div className="mt-6 text-center">
+          <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
+          <p className="text-sm text-gray-400 mt-1">
+            {animalName} · Lv. {level}
+          </p>
+        </div>
+
+        {/* XP 미니 바 */}
+        <div className="mt-4 w-40">
+          <div className="w-full bg-white/60 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-orange-400 h-full rounded-full transition-all duration-500"
+              style={{ width: `${(xpInLevel / 1000) * 100}%` }}
+            />
+          </div>
+          <p className="text-[10px] text-gray-400 text-center mt-1">
+            {xpInLevel} / 1,000 XP
+          </p>
+        </div>
+      </div>
+
+      {/* FAB 버튼 */}
+      <div className="fixed bottom-24 right-4 z-50">
+        {/* 메뉴 아이템들 */}
+        {menuOpen && (
+          <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
+            <button
+              onClick={() => {
+                setShowInfo('milestone');
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
+              🎯 다음 레벨 / 마일스톤
+            </button>
+            <button
+              onClick={() => {
+                setShowInfo('compare');
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
+              📊 초기와 비교
+            </button>
+            <button
+              onClick={() => {
+                router.push('/my-placements');
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
+              📋 내 배치
+            </button>
+            <button
+              onClick={() => {
+                router.push('/match');
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              ⚾ 오늘의 경기
+            </button>
+          </div>
+        )}
+
+        {/* FAB 원형 버튼 */}
+        <button
+          onClick={() => {
+            setMenuOpen(!menuOpen);
+            setShowInfo(null);
+          }}
+          className={`w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg flex items-center justify-center text-2xl transition-transform duration-300 hover:bg-orange-600 active:scale-95 ${
+            menuOpen ? 'rotate-45' : ''
+          }`}
+        >
+          +
+        </button>
+      </div>
+
+      {/* 메뉴 바깥 클릭 시 닫기 */}
+      {menuOpen && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+
+      {/* 다음 레벨 / 마일스톤 모달 */}
+      {showInfo === 'milestone' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowInfo(null)}>
           <div
-            className="w-40 h-40 rounded-full"
-            style={{
-              background: colors.gradient,
-              boxShadow: colors.shadow,
-            }}
-          />
-          <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-white text-gray-700 px-4 py-1 rounded-full text-sm font-bold shadow-md border border-gray-100">
-            Lv. {level}
-          </div>
-        </div>
-      </div>
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-gray-800 mb-4">레벨 & 마일스톤</h2>
 
-      {/* 레벨 진행 바 */}
-      <div className="bg-white px-4 py-3 border-b border-gray-100">
-        <div className="flex justify-between text-xs text-gray-400 mb-1">
-          <span>다음 레벨까지</span>
-          <span>{xpInLevel} / 1000 XP</span>
-        </div>
-        <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-          <div
-            className="bg-orange-400 h-full rounded-full transition-all duration-500"
-            style={{ width: `${(xpInLevel / 1000) * 100}%` }}
-          />
-        </div>
-      </div>
+            {/* 다음 레벨 */}
+            <div className="mb-5">
+              <p className="text-sm text-gray-500 mb-1">다음 레벨까지</p>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="bg-orange-400 h-full rounded-full transition-all"
+                    style={{ width: `${(xpInLevel / 1000) * 100}%` }}
+                  />
+                </div>
+                <span className="text-sm text-gray-600 font-medium">
+                  {xpInLevel}/1000
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                Lv. {level} → Lv. {level + 1} ({1000 - xpInLevel} XP 남음)
+              </p>
+            </div>
 
-      {/* 시즌 프로필 카드 */}
-      <div className="px-4 mt-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <p className="text-sm font-bold text-gray-700">시즌 성적</p>
-          </div>
-          <div className="flex">
-            <div className="flex-1 p-4 text-center border-r border-gray-100">
-              <p className="text-gray-400 text-[10px] mb-1">타율</p>
-              <p className="text-2xl font-bold text-gray-900">{seasonAvg}</p>
-            </div>
-            <div className="flex-1 p-4 text-center border-r border-gray-100">
-              <p className="text-gray-400 text-[10px] mb-1">총 XP</p>
-              <p className="text-2xl font-bold text-orange-500">{totalXp}</p>
-            </div>
-            <div className="flex-1 p-4 text-center">
-              <p className="text-gray-400 text-[10px] mb-1">적중률</p>
-              <p className="text-2xl font-bold text-emerald-500">{accuracy}%</p>
-            </div>
-          </div>
-          <div className="px-4 py-2 bg-gray-50 text-center">
-            <p className="text-xs text-gray-400">
-              {settled.length}경기 참여 · 승리 예측 {correctCount}회 적중
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* 마일스톤 */}
-      <div className="px-4 mt-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-bold text-gray-700">다음 마일스톤</p>
-            <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-medium">
-              {currentMilestone.label}
-            </span>
-          </div>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="flex-1">
-              <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-                <div
-                  className="bg-gradient-to-r from-orange-400 to-orange-500 h-full rounded-full transition-all duration-500"
-                  style={{ width: `${milestoneProgress}%` }}
-                />
+            {/* 마일스톤 목록 */}
+            <div>
+              <p className="text-sm text-gray-500 mb-2">마일스톤 진행</p>
+              <div className="space-y-3">
+                {MILESTONES.map((m) => {
+                  const achieved = totalXp >= m.xp;
+                  const isCurrent = m === currentMilestone && !achieved;
+                  return (
+                    <div key={m.xp} className="flex items-center gap-3">
+                      <span className={`text-lg ${achieved ? '' : 'grayscale opacity-40'}`}>
+                        {achieved ? '✅' : '🔒'}
+                      </span>
+                      <div className="flex-1">
+                        <p className={`text-sm font-medium ${achieved ? 'text-gray-800' : 'text-gray-400'}`}>
+                          {m.label}
+                          <span className="text-xs text-gray-400 ml-1">({m.xp.toLocaleString()} XP)</span>
+                        </p>
+                        <p className="text-xs text-gray-400">{m.reward}</p>
+                      </div>
+                      {isCurrent && (
+                        <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">
+                          {milestoneProgress}%
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
-              {milestoneProgress}%
-            </span>
-          </div>
-          <div className="flex justify-between items-center">
-            <p className="text-xs text-gray-400">
-              {xpToNext > 0 ? `${xpToNext} XP 남음` : '달성!'}
-            </p>
-            <p className="text-xs text-gray-400">
-              보상: {currentMilestone.reward}
-            </p>
-          </div>
-        </div>
-      </div>
 
-      {/* 최근 결과 */}
-      <div className="px-4 mt-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-          <p className="text-sm font-bold text-gray-700 mb-3">최근 경기</p>
-          {recentSettled ? (
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-900 font-medium">
-                  {recentSettled.game
-                    ? `${recentSettled.game.awayTeam} vs ${recentSettled.game.homeTeam}`
-                    : recentSettled.date}
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {recentSettled.date} · {recentSettled.team} {recentSettled.battingOrder}번 타자
-                  {recentSettled.isCorrect !== undefined && (
-                    <span className={recentSettled.isCorrect ? 'text-emerald-500 ml-1' : 'text-red-400 ml-1'}>
-                      {recentSettled.isCorrect ? '· 예측 적중!' : '· 예측 실패'}
-                    </span>
-                  )}
-                </p>
-              </div>
-              <span className={`text-lg font-bold ${recentXp !== null && recentXp >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
-                {recentXp !== null ? `${recentXp >= 0 ? '+' : ''}${recentXp}` : '-'} XP
-              </span>
-            </div>
-          ) : (
-            <div className="text-center py-4">
-              <p className="text-sm text-gray-400 mb-2">아직 경기 기록이 없습니다</p>
-              <button
-                onClick={() => router.push('/match')}
-                className="text-sm text-orange-500 font-medium"
-              >
-                첫 배치하러 가기 →
-              </button>
-            </div>
-          )}
+            <button
+              onClick={() => setShowInfo(null)}
+              className="w-full mt-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
+            >
+              닫기
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* 초기와 비교 모달 */}
+      {showInfo === 'compare' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowInfo(null)}>
+          <div
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-gray-800 mb-4">초기와 비교</h2>
+
+            <div className="flex items-center justify-center gap-8 mb-6">
+              {/* 초기 */}
+              <div className="text-center">
+                <div className="text-[40px] leading-none grayscale opacity-50 mb-2">{emoji}</div>
+                <p className="text-xs text-gray-400">처음</p>
+                <p className="text-sm font-bold text-gray-400">Lv. {initialLevel}</p>
+                <p className="text-xs text-gray-400">0 XP</p>
+              </div>
+
+              {/* 화살표 */}
+              <div className="text-2xl text-orange-400">→</div>
+
+              {/* 현재 */}
+              <div className="text-center">
+                <div className={`${getEmojiSize(level)} leading-none mb-2`} style={{ fontSize: '60px' }}>{emoji}</div>
+                <p className="text-xs text-orange-500 font-medium">현재</p>
+                <p className="text-sm font-bold text-gray-800">Lv. {level}</p>
+                <p className="text-xs text-orange-500">{totalXp.toLocaleString()} XP</p>
+              </div>
+            </div>
+
+            {/* 성장 요약 */}
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-500">레벨 상승</span>
+                <span className="font-bold text-gray-800">+{level - initialLevel} 레벨</span>
+              </div>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-500">획득 XP</span>
+                <span className="font-bold text-orange-500">+{totalXp.toLocaleString()} XP</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">캐릭터 크기</span>
+                <span className="font-bold text-gray-800">
+                  {level <= 1
+                    ? '기본'
+                    : level <= 3
+                    ? '약간 성장'
+                    : level <= 5
+                    ? '성장 중'
+                    : level <= 7
+                    ? '많이 성장'
+                    : '최대 크기'}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowInfo(null)}
+              className="w-full mt-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
