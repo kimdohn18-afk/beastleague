@@ -228,17 +228,20 @@ def collect_date(date_str):
         print(f"⚾ {away_team} {score_a} vs {score_h} {home_team} (ID: {game_id}, 상태: {status})")
 
         if status == "1":
+            # G_TM 필드에서 시작 시간 추출 (예: "18:30")
+            start_time = game.get("G_TM", "")
             game_data = {
                 "gameId": game_id,
                 "date": f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}",
                 "homeTeam": home_team,
                 "awayTeam": away_team,
                 "status": "scheduled",
+                "startTime": start_time,
                 "homeScore": 0,
                 "awayScore": 0,
             }
             send_to_server(game_data, api_url, api_key)
-            print(f"  📋 경기 예정 → scheduled로 저장")
+            print(f"  📋 경기 예정 ({start_time}) → scheduled로 저장")
             continue
 
         if status not in ("2", "3"):
