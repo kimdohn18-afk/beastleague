@@ -2,8 +2,14 @@ import { Router, Request, Response } from 'express';
 import { authenticateUser } from '../middleware/auth';
 import { Character } from '../models/Character';
 import { StatLog } from '../models/StatLog';
+import { Placement } from '../models/Placement';
 
 export const charactersRouter = Router();
+
+const VALID_ANIMALS = [
+  'turtle', 'eagle', 'lion', 'dinosaur', 'dog',
+  'fox', 'penguin', 'shark', 'bear', 'tiger', 'seagull',
+];
 
 // POST /api/characters
 charactersRouter.post('/', authenticateUser, async (req: Request, res: Response) => {
@@ -14,6 +20,9 @@ charactersRouter.post('/', authenticateUser, async (req: Request, res: Response)
 
     const { name, animalType } = req.body as { name: string; animalType: string };
     if (!name || !animalType) return res.status(400).json({ error: 'name, animalType 필수' });
+    if (!VALID_ANIMALS.includes(animalType)) {
+      return res.status(400).json({ error: '유효하지 않은 동물 타입입니다' });
+    }
 
     const character = await Character.create({ userId, name, animalType });
     return res.status(201).json(character);
@@ -28,6 +37,26 @@ charactersRouter.get('/me', authenticateUser, async (req: Request, res: Response
     const character = await Character.findOne({ userId: req.user!.userId }).lean();
     if (!character) return res.status(404).json({ error: '캐릭터가 없습니다' });
     return res.json(character);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// DELETE /api/characters/me
+charactersRouter.delete('/me', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const character = await Character.findOne({ userId });
+    if (!character) return res.status(404).json({ error: '캐릭터가 없습니다' });
+
+    // 캐릭터 + 관련 배치 + 스탯로그 모두 삭제
+    await Promise.all([
+      Character.deleteOne({ userId }),
+      Placement.deleteMany({ userId }),
+      StatLog.deleteMany({ userId }),
+    ]);
+
+    return res.json({ message: '캐릭터가 삭제되었습니다' });
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
