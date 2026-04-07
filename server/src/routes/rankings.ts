@@ -3,16 +3,36 @@ import { authenticateUser } from '../middleware/auth';
 import { Character } from '../models/Character';
 import { StatLog } from '../models/StatLog';
 import { Battle } from '../models/Battle';
+import { Placement } from '../models/Placement';
 import mongoose from 'mongoose';
 
 export const rankingsRouter = Router();
 
 type RankingType = 'level' | 'totalStats' | 'weeklyGrowth' | 'battlePoints';
 
+function todayKST(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 async function getRanking(type: RankingType, limit: number) {
   if (type === 'level') {
-    return Character.find().sort({ level: -1, xp: -1 }).limit(limit)
+    const characters = await Character.find().sort({ xp: -1 }).limit(limit)
       .select('userId name animalType level xp stats').lean();
+
+    // 오늘 배치한 유저 목록 조회
+    const today = todayKST();
+    const userIds = characters.map((c) => c.userId);
+    const todayPlacements = await Placement.find({
+      userId: { $in: userIds },
+      date: today,
+    }).select('userId').lean();
+
+    const placedUserIds = new Set(todayPlacements.map((p) => String(p.userId)));
+
+    return characters.map((c) => ({
+      ...c,
+      placedToday: placedUserIds.has(String(c.userId)),
+    }));
   }
 
   if (type === 'totalStats') {
