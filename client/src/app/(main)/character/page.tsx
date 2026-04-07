@@ -5,11 +5,17 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 const ANIMALS = [
-  { type: 'bear', emoji: '🐻', name: '곰' },
-  { type: 'tiger', emoji: '🐯', name: '호랑이' },
-  { type: 'eagle', emoji: '🦅', name: '독수리' },
-  { type: 'wolf', emoji: '🐺', name: '늑대' },
-  { type: 'dragon', emoji: '🐲', name: '용' },
+  { type: 'turtle',   emoji: '🐢', name: '거북이' },
+  { type: 'eagle',    emoji: '🦅', name: '독수리' },
+  { type: 'lion',     emoji: '🦁', name: '사자' },
+  { type: 'dinosaur', emoji: '🦕', name: '공룡' },
+  { type: 'dog',      emoji: '🐶', name: '강아지' },
+  { type: 'fox',      emoji: '🦊', name: '여우' },
+  { type: 'penguin',  emoji: '🐧', name: '펭귄' },
+  { type: 'shark',    emoji: '🦈', name: '상어' },
+  { type: 'bear',     emoji: '🐻', name: '곰' },
+  { type: 'tiger',    emoji: '🐯', name: '호랑이' },
+  { type: 'seagull',  emoji: '🕊️', name: '갈매기' },
 ];
 
 export default function CharacterCreatePage() {
@@ -21,8 +27,9 @@ export default function CharacterCreatePage() {
   const [error, setError] = useState('');
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-  const token = (session as any)?.backendToken;
-  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const token = (session as any)?.backendToken || (session as any)?.accessToken;
+
+  const selectedAnimal = ANIMALS.find((a) => a.type === selected);
 
   async function handleCreate() {
     if (!selected || !name.trim()) {
@@ -30,10 +37,14 @@ export default function CharacterCreatePage() {
       return;
     }
     setSubmitting(true);
+    setError('');
     try {
       const res = await fetch(`${apiUrl}/api/characters`, {
         method: 'POST',
-        headers,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ name: name.trim(), animalType: selected }),
       });
       if (res.ok) {
@@ -49,43 +60,65 @@ export default function CharacterCreatePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 gap-6">
-      <h1 className="text-gray-900 text-xl font-bold">캐릭터 만들기</h1>
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 pb-24">
+      <h1 className="text-gray-900 text-xl font-bold mb-2">캐릭터 만들기</h1>
+      <p className="text-gray-400 text-sm mb-8">동물을 선택하고 이름을 지어주세요</p>
 
+      {/* 선택된 동물 미리보기 */}
+      <div className="mb-8 h-28 flex items-center justify-center">
+        {selectedAnimal ? (
+          <div className="text-center">
+            <div className="text-7xl leading-none">{selectedAnimal.emoji}</div>
+            <p className="text-sm text-gray-500 mt-2">{selectedAnimal.name}</p>
+          </div>
+        ) : (
+          <div className="text-center">
+            <div className="text-5xl leading-none opacity-30">🐾</div>
+            <p className="text-xs text-gray-300 mt-2">동물을 선택하세요</p>
+          </div>
+        )}
+      </div>
+
+      {/* 이름 입력 */}
       <input
         type="text"
         placeholder="캐릭터 이름"
         value={name}
         onChange={(e) => setName(e.target.value)}
         maxLength={10}
-        className="w-full max-w-xs bg-white text-gray-900 px-4 py-3 rounded-2xl text-center outline-none focus:ring-2 focus:ring-orange-400 border border-gray-200 shadow-sm"
+        className="w-full max-w-xs bg-white text-gray-900 px-4 py-3 rounded-2xl text-center outline-none focus:ring-2 focus:ring-orange-400 border border-gray-200 shadow-sm mb-6"
       />
 
-      <div className="grid grid-cols-5 gap-3">
+      {/* 동물 선택 그리드 (11종) */}
+      <div className="grid grid-cols-4 gap-2.5 w-full max-w-xs mb-6">
         {ANIMALS.map((a) => (
           <button
             key={a.type}
             onClick={() => setSelected(a.type)}
-            className={`flex flex-col items-center p-3 rounded-2xl transition shadow-sm ${
+            className={`flex flex-col items-center p-2.5 rounded-2xl transition-all ${
               selected === a.type
                 ? 'bg-orange-400 scale-110 shadow-md'
-                : 'bg-white border border-gray-200'
+                : 'bg-white border border-gray-200 shadow-sm'
             }`}
           >
-            <span className="text-3xl">{a.emoji}</span>
-            <span className={`text-xs mt-1 ${
-              selected === a.type ? 'text-white' : 'text-gray-500'
-            }`}>{a.name}</span>
+            <span className="text-2xl">{a.emoji}</span>
+            <span
+              className={`text-[10px] mt-1 ${
+                selected === a.type ? 'text-white font-medium' : 'text-gray-500'
+              }`}
+            >
+              {a.name}
+            </span>
           </button>
         ))}
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
       <button
         onClick={handleCreate}
         disabled={submitting || !selected || !name.trim()}
-        className="w-full max-w-xs bg-orange-400 text-white py-3 rounded-2xl font-bold disabled:opacity-40 shadow-md"
+        className="w-full max-w-xs bg-orange-400 text-white py-3.5 rounded-2xl font-bold disabled:opacity-40 shadow-md transition active:scale-[0.98]"
       >
         {submitting ? '만드는 중...' : '시작하기'}
       </button>
