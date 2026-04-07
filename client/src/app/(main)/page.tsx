@@ -13,51 +13,50 @@ interface Character {
   userId: string;
 }
 
-const MILESTONES = [
-  { xp: 500, label: '루키', reward: '기본 테두리' },
-  { xp: 1500, label: '레귤러', reward: '실버 테두리' },
-  { xp: 3000, label: '올스타', reward: '골드 테두리' },
-  { xp: 5000, label: 'MVP', reward: '특별 이펙트' },
-  { xp: 10000, label: '전설', reward: '레전드 칭호' },
-];
-
 const ANIMAL_EMOJI: Record<string, string> = {
+  turtle: '🐢',
+  eagle: '🦅',
+  lion: '🦁',
+  dinosaur: '🦕',
+  dog: '🐶',
+  fox: '🦊',
+  penguin: '🐧',
+  shark: '🦈',
+  bear: '🐻',
+  tiger: '🐯',
+  seagull: '🕊️',
+  // 기존 호환
   dragon: '🐉',
   cat: '🐱',
-  dog: '🐶',
-  bear: '🐻',
   rabbit: '🐰',
 };
 
 const ANIMAL_NAMES: Record<string, string> = {
+  turtle: '거북이',
+  eagle: '독수리',
+  lion: '사자',
+  dinosaur: '공룡',
+  dog: '강아지',
+  fox: '여우',
+  penguin: '펭귄',
+  shark: '상어',
+  bear: '곰',
+  tiger: '호랑이',
+  seagull: '갈매기',
   dragon: '드래곤',
   cat: '고양이',
-  dog: '강아지',
-  bear: '곰',
   rabbit: '토끼',
 };
 
-const ANIMAL_BG: Record<string, string> = {
-  dragon: 'from-violet-100 to-purple-50',
-  cat: 'from-amber-100 to-yellow-50',
-  dog: 'from-blue-100 to-sky-50',
-  bear: 'from-purple-100 to-fuchsia-50',
-  rabbit: 'from-rose-100 to-pink-50',
-};
-
-function getLevel(xp: number): number {
-  return Math.floor(xp / 1000) + 1;
-}
-
-// 레벨에 따라 이모지 크기가 커짐 (text 크기)
-function getEmojiSize(level: number): string {
-  if (level <= 1) return 'text-[80px]';
-  if (level <= 2) return 'text-[100px]';
-  if (level <= 3) return 'text-[120px]';
-  if (level <= 5) return 'text-[140px]';
-  if (level <= 7) return 'text-[160px]';
-  if (level <= 10) return 'text-[180px]';
-  return 'text-[200px]';
+// XP → 이모지 크기 (px). 0 XP = 60px, 연속적으로 커져서 10000+ XP = 220px
+function getEmojiPx(xp: number): number {
+  const minPx = 60;
+  const maxPx = 220;
+  // 로그 스케일로 부드럽게 커짐 (0~10000 범위 기준, 그 이상도 계속 미세하게 커짐)
+  if (xp <= 0) return minPx;
+  const progress = Math.log(1 + xp) / Math.log(1 + 10000); // 0~1 (10000일 때 1)
+  const clamped = Math.min(progress, 1.3); // 10000 이상이어도 약간 더 커질 수 있게
+  return Math.round(minPx + (maxPx - minPx) * Math.min(clamped, 1.0) + Math.max(0, clamped - 1.0) * 20);
 }
 
 export default function MainPage() {
@@ -66,14 +65,16 @@ export default function MainPage() {
   const [character, setCharacter] = useState<Character | null>(null);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [showInfo, setShowInfo] = useState<'milestone' | 'compare' | null>(null);
+  const [showCompare, setShowCompare] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      router.push('/');
+      router.push('/login');
       return;
     }
     if (status === 'authenticated' && token) {
@@ -101,6 +102,25 @@ export default function MainPage() {
     }
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/characters/me`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        router.push('/character');
+      } else {
+        alert('삭제에 실패했습니다');
+      }
+    } catch (e) {
+      alert('서버 오류');
+    }
+    setDeleting(false);
+    setShowDelete(false);
+  };
+
   if (loading || status === 'loading') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -118,30 +138,13 @@ export default function MainPage() {
     );
   }
 
-  const level = getLevel(character.xp);
-  const xpInLevel = character.xp % 1000;
-  const emojiSize = getEmojiSize(level);
   const emoji = ANIMAL_EMOJI[character.animalType] || '🐾';
   const animalName = ANIMAL_NAMES[character.animalType] || character.animalType;
-  const bgGradient = ANIMAL_BG[character.animalType] || 'from-gray-100 to-gray-50';
-
-  // 마일스톤 계산
-  const totalXp = character.xp;
-  const currentMilestone =
-    MILESTONES.find((m) => totalXp < m.xp) || MILESTONES[MILESTONES.length - 1];
-  const milestoneIndex = MILESTONES.indexOf(currentMilestone);
-  const prevXp = milestoneIndex > 0 ? MILESTONES[milestoneIndex - 1].xp : 0;
-  const milestoneProgress =
-    totalXp >= currentMilestone.xp
-      ? 100
-      : Math.round(((totalXp - prevXp) / (currentMilestone.xp - prevXp)) * 100);
-  const xpToNext = Math.max(currentMilestone.xp - totalXp, 0);
-
-  // 초기와 비교 (레벨 1, XP 0)
-  const initialLevel = 1;
+  const emojiPx = getEmojiPx(character.xp);
+  const initialPx = getEmojiPx(0);
 
   return (
-    <div className={`min-h-screen bg-gradient-to-b ${bgGradient} pb-24 relative`}>
+    <div className="min-h-screen bg-gray-50 pb-24 relative">
       {/* 상단 헤더 */}
       <div className="px-4 pt-5 pb-2 flex items-center justify-between">
         <div />
@@ -149,56 +152,34 @@ export default function MainPage() {
       </div>
 
       {/* 캐릭터 영역 - 화면 중앙 */}
-      <div className="flex flex-col items-center justify-center" style={{ minHeight: '60vh' }}>
-        {/* 이모지 - 레벨에 따라 크기 변화 */}
+      <div className="flex flex-col items-center justify-center" style={{ minHeight: '65vh' }}>
+        {/* 이모지 - XP에 따라 부드럽게 크기 변화 */}
         <div
-          className={`${emojiSize} leading-none select-none transition-all duration-700 ease-out`}
+          className="leading-none select-none transition-all duration-700 ease-out"
           style={{
-            filter: `drop-shadow(0 8px 24px rgba(0,0,0,0.1))`,
+            fontSize: `${emojiPx}px`,
+            filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.08))',
           }}
         >
           {emoji}
         </div>
 
-        {/* 이름 + 레벨 */}
+        {/* 이름 + XP */}
         <div className="mt-6 text-center">
           <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
           <p className="text-sm text-gray-400 mt-1">
-            {animalName} · Lv. {level}
-          </p>
-        </div>
-
-        {/* XP 미니 바 */}
-        <div className="mt-4 w-40">
-          <div className="w-full bg-white/60 rounded-full h-1.5 overflow-hidden">
-            <div
-              className="bg-orange-400 h-full rounded-full transition-all duration-500"
-              style={{ width: `${(xpInLevel / 1000) * 100}%` }}
-            />
-          </div>
-          <p className="text-[10px] text-gray-400 text-center mt-1">
-            {xpInLevel} / 1,000 XP
+            {animalName} · {character.xp.toLocaleString()} XP
           </p>
         </div>
       </div>
 
       {/* FAB 버튼 */}
       <div className="fixed bottom-24 right-4 z-50">
-        {/* 메뉴 아이템들 */}
         {menuOpen && (
           <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
             <button
               onClick={() => {
-                setShowInfo('milestone');
-                setMenuOpen(false);
-              }}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
-            >
-              🎯 다음 레벨 / 마일스톤
-            </button>
-            <button
-              onClick={() => {
-                setShowInfo('compare');
+                setShowCompare(true);
                 setMenuOpen(false);
               }}
               className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
@@ -219,18 +200,27 @@ export default function MainPage() {
                 router.push('/match');
                 setMenuOpen(false);
               }}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
             >
               ⚾ 오늘의 경기
+            </button>
+            <button
+              onClick={() => {
+                setShowDelete(true);
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50"
+            >
+              🗑️ 캐릭터 삭제
             </button>
           </div>
         )}
 
-        {/* FAB 원형 버튼 */}
         <button
           onClick={() => {
             setMenuOpen(!menuOpen);
-            setShowInfo(null);
+            setShowCompare(false);
+            setShowDelete(false);
           }}
           className={`w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg flex items-center justify-center text-2xl transition-transform duration-300 hover:bg-orange-600 active:scale-95 ${
             menuOpen ? 'rotate-45' : ''
@@ -242,72 +232,76 @@ export default function MainPage() {
 
       {/* 메뉴 바깥 클릭 시 닫기 */}
       {menuOpen && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setMenuOpen(false)}
-        />
+        <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
       )}
 
-      {/* 다음 레벨 / 마일스톤 모달 */}
-      {showInfo === 'milestone' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowInfo(null)}>
+      {/* 초기와 비교 모달 */}
+      {showCompare && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+          onClick={() => setShowCompare(false)}
+        >
           <div
             className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-lg font-bold text-gray-800 mb-4">레벨 & 마일스톤</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-6 text-center">초기와 비교</h2>
 
-            {/* 다음 레벨 */}
-            <div className="mb-5">
-              <p className="text-sm text-gray-500 mb-1">다음 레벨까지</p>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="bg-orange-400 h-full rounded-full transition-all"
-                    style={{ width: `${(xpInLevel / 1000) * 100}%` }}
-                  />
+            <div className="flex items-end justify-center gap-10 mb-8">
+              {/* 초기 */}
+              <div className="text-center">
+                <div
+                  className="leading-none mx-auto grayscale opacity-40"
+                  style={{ fontSize: `${initialPx}px` }}
+                >
+                  {emoji}
                 </div>
-                <span className="text-sm text-gray-600 font-medium">
-                  {xpInLevel}/1000
-                </span>
+                <p className="text-xs text-gray-400 mt-3">처음</p>
+                <p className="text-sm font-bold text-gray-400">0 XP</p>
               </div>
-              <p className="text-xs text-gray-400 mt-1">
-                Lv. {level} → Lv. {level + 1} ({1000 - xpInLevel} XP 남음)
-              </p>
+
+              {/* 화살표 */}
+              <div className="text-2xl text-orange-400 mb-6">→</div>
+
+              {/* 현재 */}
+              <div className="text-center">
+                <div
+                  className="leading-none mx-auto"
+                  style={{ fontSize: `${Math.min(emojiPx, 100)}px` }}
+                >
+                  {emoji}
+                </div>
+                <p className="text-xs text-orange-500 font-medium mt-3">현재</p>
+                <p className="text-sm font-bold text-gray-800">
+                  {character.xp.toLocaleString()} XP
+                </p>
+              </div>
             </div>
 
-            {/* 마일스톤 목록 */}
-            <div>
-              <p className="text-sm text-gray-500 mb-2">마일스톤 진행</p>
-              <div className="space-y-3">
-                {MILESTONES.map((m) => {
-                  const achieved = totalXp >= m.xp;
-                  const isCurrent = m === currentMilestone && !achieved;
-                  return (
-                    <div key={m.xp} className="flex items-center gap-3">
-                      <span className={`text-lg ${achieved ? '' : 'grayscale opacity-40'}`}>
-                        {achieved ? '✅' : '🔒'}
-                      </span>
-                      <div className="flex-1">
-                        <p className={`text-sm font-medium ${achieved ? 'text-gray-800' : 'text-gray-400'}`}>
-                          {m.label}
-                          <span className="text-xs text-gray-400 ml-1">({m.xp.toLocaleString()} XP)</span>
-                        </p>
-                        <p className="text-xs text-gray-400">{m.reward}</p>
-                      </div>
-                      {isCurrent && (
-                        <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">
-                          {milestoneProgress}%
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
+            {/* 성장 요약 */}
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-500">획득 XP</span>
+                <span className="font-bold text-orange-500">
+                  +{character.xp.toLocaleString()} XP
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">캐릭터 크기</span>
+                <span className="font-bold text-gray-800">
+                  {emojiPx <= 60
+                    ? '기본'
+                    : emojiPx <= 100
+                    ? '성장 중'
+                    : emojiPx <= 160
+                    ? '많이 성장'
+                    : '거대'}
+                </span>
               </div>
             </div>
 
             <button
-              onClick={() => setShowInfo(null)}
+              onClick={() => setShowCompare(false)}
               className="w-full mt-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
             >
               닫기
@@ -316,68 +310,37 @@ export default function MainPage() {
         </div>
       )}
 
-      {/* 초기와 비교 모달 */}
-      {showInfo === 'compare' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowInfo(null)}>
+      {/* 캐릭터 삭제 확인 모달 */}
+      {showDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+          onClick={() => setShowDelete(false)}
+        >
           <div
-            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6"
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-lg font-bold text-gray-800 mb-4">초기와 비교</h2>
-
-            <div className="flex items-center justify-center gap-8 mb-6">
-              {/* 초기 */}
-              <div className="text-center">
-                <div className="text-[40px] leading-none grayscale opacity-50 mb-2">{emoji}</div>
-                <p className="text-xs text-gray-400">처음</p>
-                <p className="text-sm font-bold text-gray-400">Lv. {initialLevel}</p>
-                <p className="text-xs text-gray-400">0 XP</p>
-              </div>
-
-              {/* 화살표 */}
-              <div className="text-2xl text-orange-400">→</div>
-
-              {/* 현재 */}
-              <div className="text-center">
-                <div className={`${getEmojiSize(level)} leading-none mb-2`} style={{ fontSize: '60px' }}>{emoji}</div>
-                <p className="text-xs text-orange-500 font-medium">현재</p>
-                <p className="text-sm font-bold text-gray-800">Lv. {level}</p>
-                <p className="text-xs text-orange-500">{totalXp.toLocaleString()} XP</p>
-              </div>
+            <div className="text-4xl mb-3">{emoji}</div>
+            <h2 className="text-lg font-bold text-gray-800 mb-2">캐릭터를 삭제할까요?</h2>
+            <p className="text-sm text-gray-400 mb-6">
+              <strong>{character.name}</strong>과(와) 모든 배치 기록이 삭제됩니다.
+              <br />이 작업은 되돌릴 수 없습니다.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDelete(false)}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 disabled:opacity-50"
+              >
+                {deleting ? '삭제 중...' : '삭제'}
+              </button>
             </div>
-
-            {/* 성장 요약 */}
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-500">레벨 상승</span>
-                <span className="font-bold text-gray-800">+{level - initialLevel} 레벨</span>
-              </div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-500">획득 XP</span>
-                <span className="font-bold text-orange-500">+{totalXp.toLocaleString()} XP</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">캐릭터 크기</span>
-                <span className="font-bold text-gray-800">
-                  {level <= 1
-                    ? '기본'
-                    : level <= 3
-                    ? '약간 성장'
-                    : level <= 5
-                    ? '성장 중'
-                    : level <= 7
-                    ? '많이 성장'
-                    : '최대 크기'}
-                </span>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowInfo(null)}
-              className="w-full mt-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
-            >
-              닫기
-            </button>
           </div>
         </div>
       )}
