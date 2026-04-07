@@ -28,6 +28,7 @@ export default function MatchPage() {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [placementLocked, setPlacementLocked] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken;
@@ -48,7 +49,10 @@ export default function MatchPage() {
     setLoading(true);
     try {
       const res = await fetch(`${apiUrl}/api/games?date=${todayKST()}`, { headers });
-      if (res.ok) setGames(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setGames(data);
+      }
     } catch (e) { console.error(e); }
     setLoading(false);
   }
@@ -65,16 +69,33 @@ export default function MatchPage() {
             selectedTeam: data.team,
             selectedOrder: data.battingOrder || 0,
           });
+
+          // 배치한 경기가 이미 시작/종료되었으면 수정 불가
+          if (data.status === 'settled') {
+            setPlacementLocked(true);
+          }
         }
       }
     } catch (e) { console.error(e); }
   }
 
+  // 게임 목록 로드 후, 배치한 경기의 상태 확인
+  useEffect(() => {
+    if (selection && games.length > 0) {
+      const placedGame = games.find(g => g.gameId === selection.gameId);
+      if (placedGame && placedGame.status !== 'scheduled') {
+        setPlacementLocked(true);
+      }
+    }
+  }, [selection, games]);
+
   function handleExpand(gameId: string) {
+    if (placementLocked) return;
     setExpandedGame(expandedGame === gameId ? null : gameId);
   }
 
   function handlePrediction(gameId: string, team: string) {
+    if (placementLocked) return;
     setSelection((prev) => ({
       gameId,
       predictedWinner: team,
@@ -84,6 +105,7 @@ export default function MatchPage() {
   }
 
   function handleBattingOrder(gameId: string, team: string, order: number) {
+    if (placementLocked) return;
     setSelection((prev) => ({
       gameId,
       predictedWinner: prev?.predictedWinner || '',
@@ -93,6 +115,11 @@ export default function MatchPage() {
   }
 
   async function handleSubmit() {
+    if (placementLocked) {
+      setToast('이미 시작된 경기의 배치는 수정할 수 없습니다');
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
     if (!selection || !selection.predictedWinner || !selection.selectedOrder) {
       setToast('승패 예측과 타순을 모두 선택해주세요');
       setTimeout(() => setToast(null), 2000);
@@ -143,6 +170,16 @@ export default function MatchPage() {
       <h1 className="text-gray-900 text-lg font-bold mb-1">{todayKST()}</h1>
       <p className="text-gray-400 text-sm mb-4">{games.length}경기</p>
 
+      {/* 배치 확정 안내 */}
+      {placementLocked && selection && (
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
+          <p className="text-orange-600 text-sm font-bold">오늘의 배치가 확정되었습니다</p>
+          <p className="text-orange-400 text-xs mt-1">
+            경기가 시작되어 수정할 수 없습니다 · {selection.selectedTeam} {selection.selectedOrder}번 타자 · {selection.predictedWinner} 승리 예측
+          </p>
+        </div>
+      )}
+
       {games.length === 0 ? (
         <p className="text-gray-400 text-center mt-20">오늘 경기가 없습니다</p>
       ) : (
@@ -152,7 +189,10 @@ export default function MatchPage() {
             const isSelected = selection?.gameId === game.gameId;
             const isFinished = game.status === 'finished';
             const isLive = game.status === 'live';
-            const isLocked = isFinished || isLive;
+            const isGameLocked = isFinished || isLive;
+
+            // 배치한 경기가 시작됐으면 모든 카드 수정 불가
+            const cannotModify = placementLocked || isGameLocked;
 
             return (
               <div
@@ -163,13 +203,13 @@ export default function MatchPage() {
               >
                 {/* 접힌 카드 */}
                 <div
-                  onClick={() => !isLocked && handleExpand(game.gameId)}
-                  className={`bg-white p-4 border border-gray-100 ${isLocked ? 'opacity-60' : 'cursor-pointer active:bg-gray-50'}`}
+                  onClick={() => !cannotModify && handleExpand(game.gameId)}
+                  className={`bg-white p-4 border border-gray-100 ${cannotModify ? 'opacity-60' : 'cursor-pointer active:bg-gray-50'}`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-gray-800 font-medium flex-1 text-center">{game.awayTeam}</span>
                     <span className="text-gray-300 text-sm mx-3">
-                      {isFinished ? `${game.awayScore} : ${game.homeScore}` : 'vs'}
+                      {isFinished ? `${game.awayScore} : ${game.homeScore}` : isLive ? '경기 중' : 'vs'}
                     </span>
                     <span className="text-gray-800 font-medium flex-1 text-center">{game.homeTeam}</span>
                   </div>
@@ -185,15 +225,15 @@ export default function MatchPage() {
                     </div>
                   )}
 
-                  {isLocked && (
+                  {isGameLocked && (
                     <p className="text-gray-400 text-xs text-center mt-1">
                       {isLive ? '경기 중' : '경기 종료'}
                     </p>
                   )}
                 </div>
 
-                {/* 펼쳐진 카드 */}
-                {isExpanded && (
+                {/* 펼쳐진 카드 — 잠긴 상태면 절대 표시 안 함 */}
+                {isExpanded && !cannotModify && (
                   <div className="bg-white border-t border-gray-100 p-4 space-y-4">
                     {/* 승패 예측 */}
                     <div>
