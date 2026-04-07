@@ -236,20 +236,19 @@ const handlePushSetup = async () => {
 
       {/* ───── FAB 버튼 ───── */}
       <div className="fixed bottom-24 right-4 z-50">
-        {menuOpen && (
+                {menuOpen && (
           <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
+            <button
+              onClick={handlePushSetup}
+              disabled={pushStatus === 'loading'}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
+              {pushStatus === 'granted' ? '✅ 알림 설정됨' : pushStatus === 'loading' ? '⏳ 설정 중...' : '🔔 알림 설정'}
+            </button>
             <button
               onClick={() => { setShowHelp(true); setHelpPage(0); setMenuOpen(false); }}
               className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
             >
-              <button
-  onClick={handlePushSetup}
-  disabled={pushStatus === 'loading'}
-  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
->
-  {pushStatus === 'granted' ? '✅ 알림 설정됨' : pushStatus === 'loading' ? '⏳ 설정 중...' : '🔔 알림 설정'}
-</button>
-
               ❓ 도움말
             </button>
             <button
