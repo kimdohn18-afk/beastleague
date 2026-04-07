@@ -5,22 +5,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 const ANIMAL_EMOJI: Record<string, string> = {
-  turtle: '🐢',
-  eagle: '🦅',
-  lion: '🦁',
-  dinosaur: '🦕',
-  dog: '🐶',
-  fox: '🦊',
-  penguin: '🐧',
-  shark: '🦈',
-  bear: '🐻',
-  tiger: '🐯',
-  seagull: '🕊️',
-  // 기존 호환
-  dragon: '🐉',
-  cat: '🐱',
-  rabbit: '🐰',
-  wolf: '🐺',
+  turtle: '🐢', eagle: '🦅', lion: '🦁', dinosaur: '🦕', dog: '🐶',
+  fox: '🦊', penguin: '🐧', shark: '🦈', bear: '🐻', tiger: '🐯',
+  seagull: '🕊️', dragon: '🐉', cat: '🐱', rabbit: '🐰', wolf: '🐺',
 };
 
 export default function RankingPage() {
@@ -31,8 +18,7 @@ export default function RankingPage() {
   const [loading, setLoading] = useState(true);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-  const token = (session as any)?.backendToken;
-  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const token = (session as any)?.backendToken || (session as any)?.accessToken;
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login');
@@ -43,6 +29,7 @@ export default function RankingPage() {
   async function fetchRankings() {
     setLoading(true);
     try {
+      const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
       const [listRes, meRes] = await Promise.all([
         fetch(`${apiUrl}/api/rankings?type=level&limit=100`, { headers }),
         fetch(`${apiUrl}/api/rankings/me?type=level`, { headers }),
@@ -67,7 +54,7 @@ export default function RankingPage() {
     );
   }
 
-  const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+  const medals = ['🥇', '🥈', '🥉'];
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -82,9 +69,10 @@ export default function RankingPage() {
       ) : (
         <div className="p-4 space-y-2">
           {rankings.map((r: any, i: number) => {
-            const emoji = ANIMAL_EMOJI[r.animalType] || '\u{1F43E}';
+            const emoji = ANIMAL_EMOJI[r.animalType] || '🐾';
             const xpValue = r.xp ?? 0;
             const isTop3 = i < 3;
+            const placed = r.placedToday === true;
 
             return (
               <div
@@ -98,9 +86,20 @@ export default function RankingPage() {
                 </span>
                 <span className="text-2xl">{emoji}</span>
                 <div className="flex-1">
-                  <p className="text-gray-900 text-sm font-bold">{r.name || '???'}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-gray-900 text-sm font-bold">{r.name || '???'}</p>
+                    {placed ? (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full font-medium">
+                        배치완료
+                      </span>
+                    ) : (
+                      <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">
+                        미배치
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <p className="text-orange-500 text-sm font-bold">{xpValue} XP</p>
+                <p className="text-orange-500 text-sm font-bold">{xpValue.toLocaleString()} XP</p>
               </div>
             );
           })}
