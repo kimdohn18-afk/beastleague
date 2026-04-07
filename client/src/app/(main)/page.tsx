@@ -242,6 +242,14 @@ const handlePushSetup = async () => {
               onClick={() => { setShowHelp(true); setHelpPage(0); setMenuOpen(false); }}
               className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
             >
+              <button
+  onClick={handlePushSetup}
+  disabled={pushStatus === 'loading'}
+  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+>
+  {pushStatus === 'granted' ? '✅ 알림 설정됨' : pushStatus === 'loading' ? '⏳ 설정 중...' : '🔔 알림 설정'}
+</button>
+
               ❓ 도움말
             </button>
             <button
