@@ -35,10 +35,24 @@ placementsRouter.post('/', authenticateUser, async (req: Request, res: Response)
 
     const today = todayKST();
     const existing = await Placement.findOne({ userId, date: today });
-    if (existing) {
+        if (existing) {
       if (existing.status === 'settled') {
         return res.status(400).json({ error: '이미 정산된 배치는 수정할 수 없습니다' });
       }
+
+      // 기존 배치의 경기가 이미 시작됐는지 확인
+      const existingGame = await Game.findOne({ gameId: existing.gameId });
+      if (existingGame && existingGame.status !== 'scheduled') {
+        return res.status(400).json({ error: '이미 시작된 경기의 배치는 수정할 수 없습니다' });
+      }
+
+      // 새로 선택한 경기도 시작 전인지 확인
+      const newGame = await Game.findOne({ gameId });
+      if (!newGame) return res.status(400).json({ error: '존재하지 않는 경기입니다' });
+      if (newGame.status !== 'scheduled') {
+        return res.status(400).json({ error: '이미 시작된 경기입니다' });
+      }
+
       existing.gameId = gameId;
       existing.team = team;
       existing.battingOrder = battingOrder;
