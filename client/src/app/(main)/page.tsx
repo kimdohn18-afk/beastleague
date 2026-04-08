@@ -15,7 +15,7 @@ interface Character {
 }
 
 const ANIMAL_EMOJI: Record<string, string> = {
-  turtle: '🐢', eagle: '🦅', lion: '🦁', dinosaur: '🦕', dog: '🐶',
+  turtle: '🐢', eagle: '🦅', lion: '🦁', dinosaur: '🦖', dog: '🐶',
   fox: '🦊', penguin: '🐧', shark: '🦈', bear: '🐻', tiger: '🐯',
   seagull: '🕊️', dragon: '🐉', cat: '🐱', rabbit: '🐰',
 };
