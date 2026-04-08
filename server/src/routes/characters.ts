@@ -9,6 +9,7 @@ export const charactersRouter = Router();
 const VALID_ANIMALS = [
   'turtle', 'eagle', 'lion', 'dinosaur', 'dog',
   'fox', 'penguin', 'shark', 'bear', 'tiger', 'seagull',
+  'dragon', 'cat', 'rabbit', 'gorilla', 'elephant',
 ];
 
 // POST /api/characters
@@ -49,7 +50,6 @@ charactersRouter.delete('/me', authenticateUser, async (req: Request, res: Respo
     const character = await Character.findOne({ userId });
     if (!character) return res.status(404).json({ error: '캐릭터가 없습니다' });
 
-    // 캐릭터 + 관련 배치 + 스탯로그 모두 삭제
     await Promise.all([
       Character.deleteOne({ userId }),
       Placement.deleteMany({ userId }),
