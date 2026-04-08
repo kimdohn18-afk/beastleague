@@ -156,7 +156,6 @@ def save_csv(date_str, all_records):
 
 
 def send_to_server(game_data, api_url, api_key):
-    """서버로 전송 + 정산 호출"""
     try:
         res = requests.post(
             f"{api_url}/api/internal/games",
@@ -191,7 +190,6 @@ def send_to_server(game_data, api_url, api_key):
 
 
 def wake_up_server(api_url):
-    """Render 무료 서버가 자고 있을 수 있으므로 미리 깨움"""
     print("🔔 서버 웨이크업 요청...")
     try:
         res = requests.get(f"{api_url}/api/games?date=2000-01-01", timeout=120)
@@ -199,8 +197,8 @@ def wake_up_server(api_url):
     except Exception as e:
         print(f"  ⚠️ 서버 웨이크업 실패: {e}")
 
+
 def send_push_reminder(api_url, api_key):
-    """배치 안 한 유저에게 알림 전송"""
     print("🔔 미배치 유저 알림 발송...")
     try:
         res = requests.post(
@@ -216,22 +214,6 @@ def send_push_reminder(api_url, api_key):
     except Exception as e:
         print(f"  ❌ 알림 발송 실패: {e}")
 
-def send_push_reminder(api_url, api_key):
-    """배치 안 한 유저에게 알림 전송"""
-    print("🔔 미배치 유저 알림 발송...")
-    try:
-        res = requests.post(
-            f"{api_url}/api/internal/test-push-reminder",
-            headers={"Content-Type": "application/json", "x-api-key": api_key},
-            timeout=60
-        )
-        if res.status_code == 200:
-            result = res.json()
-            print(f"  ✅ 알림 발송: {result.get('sent', 0)}명")
-        else:
-            print(f"  ⚠️ 알림 응답: {res.status_code} {res.text[:200]}")
-    except Exception as e:
-        print(f"  ❌ 알림 발송 실패: {e}")
 
 def collect_date(date_str):
     season_id = date_str[:4]
@@ -245,6 +227,8 @@ def collect_date(date_str):
     games = get_schedule(date_str)
     if not games:
         print("  경기가 없습니다.")
+        if api_key:
+            send_push_reminder(api_url, api_key)
         return
 
     all_records = []
@@ -261,7 +245,6 @@ def collect_date(date_str):
         print(f"⚾ {away_team} {score_a} vs {score_h} {home_team} (ID: {game_id}, 상태: {status})")
 
         if status == "1":
-            # G_TM 필드에서 시작 시간 추출 (예: "18:30")
             start_time = game.get("G_TM", "")
             game_data = {
                 "gameId": game_id,
@@ -308,11 +291,6 @@ def collect_date(date_str):
                     "avg": p["avg"]
                 })
 
-        if events:
-            print(f"\n  [주요 기록]")
-            for ev in events:
-                print(f"    {ev['type']}: {ev['detail']}")
-
         if api_key:
             away_batters = []
             home_batters = []
@@ -351,7 +329,6 @@ def collect_date(date_str):
     if all_records:
         save_csv(date_str, all_records)
 
-    # 미배치 유저에게 알림 발송
     if api_key:
         send_push_reminder(api_url, api_key)
 
