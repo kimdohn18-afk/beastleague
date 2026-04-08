@@ -156,8 +156,35 @@ export default function MainPage() {
   };
   
 const handlePushSetup = async () => {
-  setPushStatus('loading');
   setMenuOpen(false);
+
+  // 이미 알림이 켜져 있으면 → 끄기
+  if (pushStatus === 'granted') {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+      if (reg) {
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) await sub.unsubscribe();
+      }
+      await fetch(`${apiUrl}/api/push/unsubscribe`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fcmToken: 'all' }),
+      });
+      setPushStatus('idle');
+      alert('알림이 해제되었습니다.');
+    } catch (e) {
+      console.error('[Push] Unsubscribe failed:', e);
+      alert('알림 해제 중 오류가 발생했습니다.');
+    }
+    return;
+  }
+
+  // 알림 켜기
+  setPushStatus('loading');
   try {
     const fcmToken = await requestFcmToken();
     if (fcmToken) {
@@ -170,7 +197,7 @@ const handlePushSetup = async () => {
         body: JSON.stringify({ fcmToken }),
       });
       setPushStatus('granted');
-      alert('알림이 설정되었습니다! 경기 정산 시 알림을 받을 수 있어요.');
+      alert('알림이 설정되었습니다! 배치 미완료 시 알림을 받을 수 있어요.');
     } else {
       setPushStatus('denied');
       alert('알림 권한이 차단되었습니다. 브라우저 설정에서 알림을 허용해주세요.');
