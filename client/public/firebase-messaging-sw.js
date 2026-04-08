@@ -13,11 +13,9 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  // 앱이 열려있으면 PushManager가 처리하므로 여기서는 건너뜀
-  // onBackgroundMessage는 앱이 닫혀있을 때만 호출됨 (자동)
-  const title = payload.notification?.title || '비스트리그';
+  const title = payload.data?.title || '비스트리그';
   const options = {
-    body: payload.notification?.body || '',
+    body: payload.data?.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     data: payload.data || {},
