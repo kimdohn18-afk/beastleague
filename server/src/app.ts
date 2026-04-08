@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import { generalLimiter } from './middleware/rateLimit';
 import { authRouter } from './routes/auth';
 import { gamesRouter } from './routes/games';
 import { charactersRouter } from './routes/characters';
@@ -26,7 +27,6 @@ export function createApp(): express.Application {
 
   app.use(cors({
     origin(origin, callback) {
-      // 서버 간 호출(origin 없음)은 허용 (내부 API, 수집기 등)
       if (!origin) return callback(null, true);
       if (allowedOrigins.some(o => origin === o || origin.endsWith('.vercel.app'))) {
         return callback(null, true);
@@ -39,6 +39,7 @@ export function createApp(): express.Application {
   app.use(helmet());
   app.use(morgan('dev'));
   app.use(express.json());
+  app.use(generalLimiter);
 
   app.use('/api/auth', authRouter);
   app.use('/api/games', gamesRouter);
