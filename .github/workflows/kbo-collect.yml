@@ -2,13 +2,12 @@ name: KBO Data Collector
 
 on:
   schedule:
-    - cron: '0 7 * * *'
-    - cron: '0 14 * * *'
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * *'     # UTC 00:00 = KST 09:00 (어제 미정산 + 오늘 일정)
+    - cron: '0 14 * * *'    # UTC 14:00 = KST 23:00 (오늘 결과 + 정산)
   workflow_dispatch:
     inputs:
       date:
-        description: '날짜 (YYYYMMDD)'
+        description: '수집 날짜 (YYYYMMDD)'
         required: false
         default: ''
 
@@ -32,12 +31,22 @@ jobs:
           INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
         run: |
           if [ -n "${{ github.event.inputs.date }}" ]; then
+            echo "📌 수동 실행: ${{ github.event.inputs.date }}"
             python kbo_collector.py ${{ github.event.inputs.date }}
           else
             HOUR=$(TZ=Asia/Seoul date +%H)
+            TODAY=$(TZ=Asia/Seoul date +%Y%m%d)
+            YESTERDAY=$(TZ=Asia/Seoul date -d "yesterday" +%Y%m%d)
+
             if [ "$HOUR" -lt 12 ]; then
-              python kbo_collector.py $(TZ=Asia/Seoul date +%Y%m%d)
+              echo "🌅 오전 실행 (KST $HOUR시)"
+              echo "  → 어제 ($YESTERDAY) 미정산 경기 수집"
+              python kbo_collector.py $YESTERDAY
+              echo "  → 오늘 ($TODAY) 일정 수집"
+              python kbo_collector.py $TODAY
             else
-              python kbo_collector.py
+              echo "🌙 야간 실행 (KST $HOUR시)"
+              echo "  → 오늘 ($TODAY) 결과 수집 + 정산"
+              python kbo_collector.py $TODAY
             fi
           fi
