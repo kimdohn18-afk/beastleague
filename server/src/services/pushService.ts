@@ -46,7 +46,6 @@ export async function sendPushToUser(
       });
       sent++;
     } catch (err: any) {
-      // 만료된 토큰 정리
       if (
         err.code === 'messaging/invalid-registration-token' ||
         err.code === 'messaging/registration-token-not-registered'
@@ -57,7 +56,6 @@ export async function sendPushToUser(
     }
   }
 
-  // 만료 토큰 삭제
   if (tokensToRemove.length > 0) {
     await PushSubscription.deleteMany({ fcmToken: { $in: tokensToRemove } });
   }
@@ -81,7 +79,6 @@ export async function sendPushToAll(
   let sent = 0;
   const tokensToRemove: string[] = [];
 
-  // 500개씩 배치 전송
   const tokens = subs.map((s) => s.fcmToken);
   const batchSize = 500;
 
@@ -125,11 +122,9 @@ export async function sendPushToUnplacedUsers(): Promise<number> {
 
   const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
-  // 오늘 배치한 유저 ID 목록
   const { Placement } = await import('../models/Placement');
   const placedUserIds = await Placement.distinct('userId', { date: today });
 
-  // 배치 안 한 유저의 푸시 구독 찾기
   const subs = await PushSubscription.find({
     userId: { $nin: placedUserIds },
   }).lean();
@@ -146,16 +141,13 @@ export async function sendPushToUnplacedUsers(): Promise<number> {
     try {
       const res = await admin.messaging().sendEachForMulticast({
         tokens: batch,
-        notification: {
+        data: {
           title: '🐾 비스트리그',
           body: '오늘 배치를 아직 안 했어요! 경기 시작 전에 배치하세요.',
+          url: '/match',
         },
-        data: { url: '/match' },
         webpush: {
-          notification: {
-            icon: '/icon-192.png',
-            badge: '/icon-192.png',
-          },
+          fcmOptions: {},
         },
       });
       sent += res.successCount;
