@@ -11,6 +11,7 @@ interface Character {
   name: string;
   animalType: string;
   xp: number;
+  streak: number;
   userId: string;
 }
 
@@ -35,6 +36,15 @@ function getEmojiPx(xp: number): number {
   const progress = Math.log(1 + xp) / Math.log(1 + 10000);
   const clamped = Math.min(progress, 1.3);
   return Math.round(minPx + (maxPx - minPx) * Math.min(clamped, 1.0) + Math.max(0, clamped - 1.0) * 20);
+}
+
+function getStreakLabel(streak: number): { text: string; color: string } | null {
+  if (streak <= 0) return null;
+  if (streak >= 30) return { text: `🏆 ${streak}일 연속`, color: 'text-yellow-500' };
+  if (streak >= 14) return { text: `🔥 ${streak}일 연속`, color: 'text-red-500' };
+  if (streak >= 7) return { text: `🔥 ${streak}일 연속`, color: 'text-orange-500' };
+  if (streak >= 3) return { text: `🔥 ${streak}일 연속`, color: 'text-orange-400' };
+  return { text: `${streak}일 연속`, color: 'text-gray-400' };
 }
 
 const HELP_CARDS = [
@@ -74,6 +84,21 @@ const HELP_CARDS = [
       '',
       '무안타(3타석↑) -15',
       '팀 승리 +25 · 승리예측 적중 +25',
+    ],
+  },
+  {
+    icon: '🔥',
+    title: '연속 배치 보너스',
+    lines: [
+      '매일 배치하면 연속 보너스!',
+      '',
+      '3일 이상: 매일 +5 XP',
+      '7일 달성: +50 XP 추가 지급',
+      '14일 달성: +100 XP 추가 지급',
+      '30일 달성: +200 XP 추가 지급',
+      '30일 이후: 매일 +10 XP',
+      '',
+      '경기 없는 날은 건너뛰어도 OK!',
     ],
   },
   {
@@ -257,6 +282,7 @@ export default function MainPage() {
   const emojiPx = getEmojiPx(character.xp);
   const initialPx = getEmojiPx(0);
   const card = HELP_CARDS[helpPage];
+  const streakLabel = getStreakLabel(character.streak || 0);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24 relative">
@@ -277,6 +303,11 @@ export default function MainPage() {
           <p className="text-sm text-gray-400 mt-1">
             {animalName} · {character.xp.toLocaleString()} XP
           </p>
+          {streakLabel && (
+            <p className={`text-sm font-semibold mt-2 ${streakLabel.color}`}>
+              {streakLabel.text}
+            </p>
+          )}
         </div>
       </div>
 
@@ -364,76 +395,4 @@ export default function MainPage() {
               </div>
             </div>
             <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-500">획득 XP</span>
-                <span className="font-bold text-orange-500">+{character.xp.toLocaleString()} XP</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">캐릭터 크기</span>
-                <span className="font-bold text-gray-800">
-                  {emojiPx <= 60 ? '기본' : emojiPx <= 100 ? '성장 중' : emojiPx <= 160 ? '많이 성장' : '거대'}
-                </span>
-              </div>
-            </div>
-            <button onClick={() => setShowCompare(false)} className="w-full mt-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">닫기</button>
-          </div>
-        </div>
-      )}
-
-      {showDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowDelete(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="text-4xl mb-3">{emoji}</div>
-            <h2 className="text-lg font-bold text-gray-800 mb-2">캐릭터를 삭제할까요?</h2>
-            <p className="text-sm text-gray-400 mb-6">
-              <strong>{character.name}</strong>과(와) 모든 배치 기록이 삭제됩니다.
-              <br />이 작업은 되돌릴 수 없습니다.
-            </p>
-            <div className="flex gap-3">
-              <button onClick={() => setShowDelete(false)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">취소</button>
-              <button onClick={handleDelete} disabled={deleting} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 disabled:opacity-50">
-                {deleting ? '삭제 중...' : '삭제'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showWelcome && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowWelcome(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 pt-8 pb-4 text-center">
-              <div className="text-5xl mb-4">🎉</div>
-              <h3 className="text-lg font-bold text-gray-800 mb-2">캐릭터가 탄생했어요!</h3>
-              <p className="text-sm text-gray-500 leading-relaxed mb-6">
-                매일 KBO 경기에 배치하면<br />
-                실제 선수 성적에 따라 XP를 얻고<br />
-                캐릭터가 성장합니다!
-              </p>
-              <div className="bg-orange-50 rounded-xl p-4 mb-4 text-left">
-                <p className="text-sm font-bold text-orange-600 mb-2">🔔 알림 설정 추천!</p>
-                <p className="text-xs text-orange-500 leading-relaxed">
-                  알림을 켜면 배치를 잊지 않도록<br />
-                  매일 경기 전에 알려드려요.<br />
-                  오른쪽 하단 + 버튼 → 알림 설정
-                </p>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
-                <p className="text-sm font-bold text-gray-700 mb-2">❓ 도움말</p>
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  배치 방법, XP 규칙 등 자세한 내용은<br />
-                  + 버튼 → 도움말에서 확인하세요.
-                </p>
-              </div>
-            </div>
-            <div className="px-6 pb-6">
-              <button onClick={() => setShowWelcome(false)} className="w-full py-3 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">
-                시작하기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+              <div className="flex justify-between text<span class="cursor">█</span>
