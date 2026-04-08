@@ -59,3 +59,16 @@ internalRouter.post('/test-push-reminder', async (req: Request, res: Response) =
     return res.status(500).json({ error: String(err) });
   }
 });
+
+// 테스트: 모든 구독자에게 알림 전송
+internalRouter.post('/test-push-all', async (req: Request, res: Response) => {
+  try {
+    const { sendPushToAll } = await import('../services/pushService');
+    const title = req.body.title || '🐾 비스트리그';
+    const body = req.body.body || '테스트 알림입니다!';
+    const count = await sendPushToAll(title, body);
+    return res.json({ success: true, sent: count });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
