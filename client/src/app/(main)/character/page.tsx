@@ -8,7 +8,7 @@ const ANIMALS = [
   { type: 'turtle',   emoji: '🐢', name: '거북이' },
   { type: 'eagle',    emoji: '🦅', name: '독수리' },
   { type: 'lion',     emoji: '🦁', name: '사자' },
-  { type: 'dinosaur', emoji: '🦕', name: '공룡' },
+  { type: 'dinosaur', emoji: '🦖', name: '공룡' },
   { type: 'dog',      emoji: '🐶', name: '강아지' },
   { type: 'fox',      emoji: '🦊', name: '여우' },
   { type: 'penguin',  emoji: '🐧', name: '펭귄' },
@@ -16,6 +16,11 @@ const ANIMALS = [
   { type: 'bear',     emoji: '🐻', name: '곰' },
   { type: 'tiger',    emoji: '🐯', name: '호랑이' },
   { type: 'seagull',  emoji: '🕊️', name: '갈매기' },
+  { type: 'dragon',   emoji: '🐉', name: '드래곤' },
+  { type: 'cat',      emoji: '🐱', name: '고양이' },
+  { type: 'rabbit',   emoji: '🐰', name: '토끼' },
+  { type: 'gorilla',  emoji: '🦍', name: '고릴라' },
+  { type: 'elephant', emoji: '🐘', name: '코끼리' },
 ];
 
 export default function CharacterCreatePage() {
