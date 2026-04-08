@@ -1,0 +1,27 @@
+name: KBO Push Reminder
+
+on:
+  schedule:
+    - cron: '0 7 * * 1-5'   # UTC 07:00 = KST 16:00 (평일)
+    - cron: '0 4 * * 0,6'   # UTC 04:00 = KST 13:00 (주말)
+  workflow_dispatch:
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r collector/requirements.txt
+
+      - name: Send push reminder
+        working-directory: collector
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
+        run: python push_reminder.py
