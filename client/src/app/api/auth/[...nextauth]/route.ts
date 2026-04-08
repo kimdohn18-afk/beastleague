@@ -1,8 +1,6 @@
 import NextAuth from 'next-auth';
 import KakaoProvider from 'next-auth/providers/kakao';
 import GoogleProvider from 'next-auth/providers/google';
-import CredentialsProvider from 'next-auth/providers/credentials';
-import jwt from 'jsonwebtoken';
 
 const handler = NextAuth({
   providers: [
@@ -28,23 +26,6 @@ const handler = NextAuth({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     }),
-    CredentialsProvider({
-      id: 'dev-login',
-      name: 'Dev Login',
-      credentials: {
-        userId: { label: 'User ID', type: 'text' },
-        email: { label: 'Email', type: 'text' },
-        name: { label: 'Name', type: 'text' },
-      },
-      async authorize(credentials) {
-        if (!credentials?.userId) return null;
-        return {
-          id: credentials.userId,
-          email: credentials.email,
-          name: credentials.name,
-        };
-      },
-    }),
   ],
   callbacks: {
     async signIn({ user, account }) {
@@ -56,7 +37,7 @@ const handler = NextAuth({
           body: JSON.stringify({
             email: user.email,
             name: user.name,
-            provider: account?.provider || 'dev',
+            provider: account?.provider || 'unknown',
             providerId: user.id || account?.providerAccountId,
           }),
         });
