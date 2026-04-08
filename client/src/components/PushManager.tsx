@@ -15,12 +15,16 @@ export default function PushManager() {
     if (status !== 'authenticated' || !token) return;
     if (typeof window === 'undefined' || !('Notification' in window)) return;
 
-    // FCM 토큰 등록
-    (async () => {
-      const fcmToken = await requestFcmToken();
-      if (!fcmToken) return;
+    // 이미 권한이 granted인 경우에만 자동 토큰 갱신
+    if (Notification.permission === 'granted') {
+      registerToken();
+    }
 
+    async function registerToken() {
       try {
+        const fcmToken = await requestFcmToken();
+        if (!fcmToken) return;
+
         await fetch(`${apiUrl}/api/push/subscribe`, {
           method: 'POST',
           headers: {
@@ -29,11 +33,11 @@ export default function PushManager() {
           },
           body: JSON.stringify({ fcmToken }),
         });
-        console.log('[Push] Subscribed');
+        console.log('[Push] Token refreshed & subscribed');
       } catch (e) {
-        console.error('[Push] Subscribe failed:', e);
+        console.error('[Push] Auto-refresh failed:', e);
       }
-    })();
+    }
 
     // 포그라운드 메시지 수신
     const unsub = onForegroundMessage((payload: any) => {
