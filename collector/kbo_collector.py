@@ -199,6 +199,22 @@ def wake_up_server(api_url):
     except Exception as e:
         print(f"  ⚠️ 서버 웨이크업 실패: {e}")
 
+def send_push_reminder(api_url, api_key):
+    """배치 안 한 유저에게 알림 전송"""
+    print("🔔 미배치 유저 알림 발송...")
+    try:
+        res = requests.post(
+            f"{api_url}/api/internal/test-push-reminder",
+            headers={"Content-Type": "application/json", "x-api-key": api_key},
+            timeout=60
+        )
+        if res.status_code == 200:
+            result = res.json()
+            print(f"  ✅ 알림 발송: {result.get('sent', 0)}명")
+        else:
+            print(f"  ⚠️ 알림 응답: {res.status_code} {res.text[:200]}")
+    except Exception as e:
+        print(f"  ❌ 알림 발송 실패: {e}")
 
 def collect_date(date_str):
     season_id = date_str[:4]
@@ -317,6 +333,10 @@ def collect_date(date_str):
 
     if all_records:
         save_csv(date_str, all_records)
+
+    # 미배치 유저에게 알림 발송
+    if api_key:
+        send_push_reminder(api_url, api_key)
 
     print(f"\n=== 수집 완료 ===")
 
