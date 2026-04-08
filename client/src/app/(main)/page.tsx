@@ -37,7 +37,6 @@ function getEmojiPx(xp: number): number {
   return Math.round(minPx + (maxPx - minPx) * Math.min(clamped, 1.0) + Math.max(0, clamped - 1.0) * 20);
 }
 
-/* ───── 도움말 카드 데이터 ───── */
 const HELP_CARDS = [
   {
     icon: '🐾',
@@ -106,7 +105,7 @@ export default function MainPage() {
   const [helpPage, setHelpPage] = useState(0);
   const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'granted' | 'denied'>('idle');
   const [showWelcome, setShowWelcome] = useState(false);
-    // 알림 상태 자동 감지
+
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'granted') setPushStatus('granted');
@@ -139,7 +138,6 @@ export default function MainPage() {
       const data = await res.json();
       setCharacter(data);
 
-      // 캐릭터 생성 후 첫 방문이면 웰컴 팝업
       const welcomeKey = `welcome-shown-${data._id}`;
       if (!localStorage.getItem(welcomeKey)) {
         setShowWelcome(true);
@@ -151,63 +149,82 @@ export default function MainPage() {
       setLoading(false);
     }
   };
-  
-const handlePushSetup = async () => {
-  setMenuOpen(false);
 
-  // 이미 알림이 켜져 있으면 → 끄기
-  if (pushStatus === 'granted') {
+  const handleDelete = async () => {
+    setDeleting(true);
     try {
-      const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-      if (reg) {
-        const sub = await reg.pushManager.getSubscription();
-        if (sub) await sub.unsubscribe();
-      }
-      await fetch(`${apiUrl}/api/push/unsubscribe`, {
+      const res = await fetch(`${apiUrl}/api/characters/me`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ fcmToken: 'all' }),
+        headers: { Authorization: `Bearer ${token}` },
       });
-      setPushStatus('idle');
-      alert('알림이 해제되었습니다.');
+      if (res.ok) {
+        alert('캐릭터가 삭제되었습니다.');
+        router.push('/character');
+      } else {
+        const data = await res.json();
+        alert(data.error || '삭제 실패');
+      }
     } catch (e) {
-      console.error('[Push] Unsubscribe failed:', e);
-      alert('알림 해제 중 오류가 발생했습니다.');
+      console.error('Delete failed:', e);
+      alert('삭제 중 오류가 발생했습니다.');
+    } finally {
+      setDeleting(false);
+      setShowDelete(false);
     }
-    return;
-  }
+  };
 
-  // 알림 켜기
-  setPushStatus('loading');
-  try {
-    const fcmToken = await requestFcmToken();
-    if (fcmToken) {
-      await fetch(`${apiUrl}/api/push/subscribe`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ fcmToken }),
-      });
-      setPushStatus('granted');
-      alert('알림이 설정되었습니다! 배치 미완료 시 알림을 받을 수 있어요.');
-    } else {
-      setPushStatus('denied');
-      alert('알림 권한이 차단되었습니다. 브라우저 설정에서 알림을 허용해주세요.');
+  const handlePushSetup = async () => {
+    setMenuOpen(false);
+
+    if (pushStatus === 'granted') {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+        if (reg) {
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) await sub.unsubscribe();
+        }
+        await fetch(`${apiUrl}/api/push/unsubscribe`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fcmToken: 'all' }),
+        });
+        setPushStatus('idle');
+        alert('알림이 해제되었습니다.');
+      } catch (e) {
+        console.error('[Push] Unsubscribe failed:', e);
+        alert('알림 해제 중 오류가 발생했습니다.');
+      }
+      return;
     }
-  } catch (e) {
-    console.error('[Push] Setup failed:', e);
-    setPushStatus('idle');
-    alert('알림 설정 중 오류가 발생했습니다.');
-  }
-};
 
-  
-  /* ── 도움말 터치 스와이프 ── */
+    setPushStatus('loading');
+    try {
+      const fcmToken = await requestFcmToken();
+      if (fcmToken) {
+        await fetch(`${apiUrl}/api/push/subscribe`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fcmToken }),
+        });
+        setPushStatus('granted');
+        alert('알림이 설정되었습니다! 배치 미완료 시 알림을 받을 수 있어요.');
+      } else {
+        setPushStatus('denied');
+        alert('알림 권한이 차단되었습니다. 브라우저 설정에서 알림을 허용해주세요.');
+      }
+    } catch (e) {
+      console.error('[Push] Setup failed:', e);
+      setPushStatus('idle');
+      alert('알림 설정 중 오류가 발생했습니다.');
+    }
+  };
+
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const handleTouchStart = (e: React.TouchEvent) => setTouchStartX(e.touches[0].clientX);
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -243,13 +260,11 @@ const handlePushSetup = async () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24 relative">
-      {/* 상단 헤더 */}
       <div className="px-4 pt-5 pb-2 flex items-center justify-between">
         <div />
         <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
       </div>
 
-      {/* 캐릭터 영역 */}
       <div className="flex flex-col items-center justify-center" style={{ minHeight: '65vh' }}>
         <div
           className="leading-none select-none transition-all duration-700 ease-out"
@@ -265,50 +280,29 @@ const handlePushSetup = async () => {
         </div>
       </div>
 
-      {/* ───── FAB 버튼 ───── */}
       <div className="fixed bottom-24 right-4 z-50">
-                {menuOpen && (
+        {menuOpen && (
           <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
-            <button
-              onClick={handlePushSetup}
-              disabled={pushStatus === 'loading'}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
-            >
+            <button onClick={handlePushSetup} disabled={pushStatus === 'loading'} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
               {pushStatus === 'granted' ? '✅ 알림 설정됨' : pushStatus === 'loading' ? '⏳ 설정 중...' : '🔔 알림 설정'}
             </button>
-            <button
-              onClick={() => { setShowHelp(true); setHelpPage(0); setMenuOpen(false); }}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
-            >
+            <button onClick={() => { setShowHelp(true); setHelpPage(0); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
               ❓ 도움말
             </button>
-            <button
-              onClick={() => { setShowCompare(true); setMenuOpen(false); }}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
-            >
+            <button onClick={() => { setShowCompare(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
               📊 초기와 비교
             </button>
-            <button
-              onClick={() => { router.push('/my-placements'); setMenuOpen(false); }}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
-            >
+            <button onClick={() => { router.push('/my-placements'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
               📋 내 배치
             </button>
-            <button
-              onClick={() => { router.push('/match'); setMenuOpen(false); }}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
-            >
+            <button onClick={() => { router.push('/match'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
               ⚾ 오늘의 경기
             </button>
-            <button
-              onClick={() => { setShowDelete(true); setMenuOpen(false); }}
-              className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50"
-            >
+            <button onClick={() => { setShowDelete(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50">
               🗑️ 캐릭터 삭제
             </button>
           </div>
         )}
-
         <button
           onClick={() => { setMenuOpen(!menuOpen); setShowCompare(false); setShowDelete(false); setShowHelp(false); }}
           className={`w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg flex items-center justify-center text-2xl transition-transform duration-300 hover:bg-orange-600 active:scale-95 ${menuOpen ? 'rotate-45' : ''}`}
@@ -319,77 +313,32 @@ const handlePushSetup = async () => {
 
       {menuOpen && <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />}
 
-      {/* ───── 도움말 모달 (카드 슬라이드) ───── */}
       {showHelp && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-          onClick={() => setShowHelp(false)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-          >
-            {/* 카드 내용 */}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowHelp(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
             <div className="px-6 pt-8 pb-4 text-center min-h-[320px] flex flex-col items-center justify-center">
               <div className="text-5xl mb-4">{card.icon}</div>
               <h3 className="text-lg font-bold text-gray-800 mb-4">{card.title}</h3>
               <div className="space-y-0.5">
                 {card.lines.map((line, i) =>
-                  line === '' ? (
-                    <div key={i} className="h-3" />
-                  ) : (
-                    <p key={i} className="text-sm text-gray-500 leading-relaxed">
-                      {line}
-                    </p>
-                  )
+                  line === '' ? <div key={i} className="h-3" /> : <p key={i} className="text-sm text-gray-500 leading-relaxed">{line}</p>
                 )}
               </div>
             </div>
-
-            {/* 하단: dot indicator + 버튼 */}
             <div className="px-6 pb-6">
-              {/* dots */}
               <div className="flex justify-center gap-1.5 mb-4">
                 {HELP_CARDS.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setHelpPage(i)}
-                    className={`w-2 h-2 rounded-full transition-all ${
-                      i === helpPage ? 'bg-orange-400 w-4' : 'bg-gray-200'
-                    }`}
-                  />
+                  <button key={i} onClick={() => setHelpPage(i)} className={`w-2 h-2 rounded-full transition-all ${i === helpPage ? 'bg-orange-400 w-4' : 'bg-gray-200'}`} />
                 ))}
               </div>
-
-              {/* 이전/다음 버튼 */}
               <div className="flex gap-3">
                 {helpPage > 0 ? (
-                  <button
-                    onClick={() => setHelpPage(helpPage - 1)}
-                    className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
-                  >
-                    이전
-                  </button>
-                ) : (
-                  <div className="flex-1" />
-                )}
-
+                  <button onClick={() => setHelpPage(helpPage - 1)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">이전</button>
+                ) : <div className="flex-1" />}
                 {helpPage < HELP_CARDS.length - 1 ? (
-                  <button
-                    onClick={() => setHelpPage(helpPage + 1)}
-                    className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500"
-                  >
-                    다음
-                  </button>
+                  <button onClick={() => setHelpPage(helpPage + 1)} className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">다음</button>
                 ) : (
-                  <button
-                    onClick={() => setShowHelp(false)}
-                    className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500"
-                  >
-                    닫기
-                  </button>
+                  <button onClick={() => setShowHelp(false)} className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">닫기</button>
                 )}
               </div>
             </div>
@@ -397,7 +346,6 @@ const handlePushSetup = async () => {
         </div>
       )}
 
-      {/* ───── 초기와 비교 모달 ───── */}
       {showCompare && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowCompare(false)}>
           <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
@@ -432,7 +380,6 @@ const handlePushSetup = async () => {
         </div>
       )}
 
-      {/* ───── 캐릭터 삭제 모달 ───── */}
       {showDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowDelete(false)}>
           <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
@@ -451,16 +398,10 @@ const handlePushSetup = async () => {
           </div>
         </div>
       )}
-            {/* ───── 웰컴 팝업 ───── */}
+
       {showWelcome && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-          onClick={() => setShowWelcome(false)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowWelcome(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 pt-8 pb-4 text-center">
               <div className="text-5xl mb-4">🎉</div>
               <h3 className="text-lg font-bold text-gray-800 mb-2">캐릭터가 탄생했어요!</h3>
@@ -469,7 +410,6 @@ const handlePushSetup = async () => {
                 실제 선수 성적에 따라 XP를 얻고<br />
                 캐릭터가 성장합니다!
               </p>
-
               <div className="bg-orange-50 rounded-xl p-4 mb-4 text-left">
                 <p className="text-sm font-bold text-orange-600 mb-2">🔔 알림 설정 추천!</p>
                 <p className="text-xs text-orange-500 leading-relaxed">
@@ -478,7 +418,6 @@ const handlePushSetup = async () => {
                   오른쪽 하단 + 버튼 → 알림 설정
                 </p>
               </div>
-
               <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
                 <p className="text-sm font-bold text-gray-700 mb-2">❓ 도움말</p>
                 <p className="text-xs text-gray-500 leading-relaxed">
@@ -487,12 +426,8 @@ const handlePushSetup = async () => {
                 </p>
               </div>
             </div>
-
             <div className="px-6 pb-6">
-              <button
-                onClick={() => setShowWelcome(false)}
-                className="w-full py-3 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500"
-              >
+              <button onClick={() => setShowWelcome(false)} className="w-full py-3 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">
                 시작하기
               </button>
             </div>
@@ -502,26 +437,3 @@ const handlePushSetup = async () => {
     </div>
   );
 }
-
-const handleDelete = async () => {
-  setDeleting(true);
-  try {
-    const res = await fetch(`${apiUrl}/api/characters/me`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      alert('캐릭터가 삭제되었습니다.');
-      router.push('/character');
-    } else {
-      const data = await res.json();
-      alert(data.error || '삭제 실패');
-    }
-  } catch (e) {
-    console.error('Delete failed:', e);
-    alert('삭제 중 오류가 발생했습니다.');
-  } finally {
-    setDeleting(false);
-    setShowDelete(false);
-  }
-};
