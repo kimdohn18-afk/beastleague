@@ -33,8 +33,11 @@ pushRouter.post('/subscribe', authenticateUser, async (req: Request, res: Respon
 // DELETE /api/push/unsubscribe — FCM 토큰 삭제
 pushRouter.delete('/unsubscribe', authenticateUser, async (req: Request, res: Response) => {
   try {
+    const userId = req.user!.userId;
     const { fcmToken } = req.body as { fcmToken: string };
-    if (fcmToken) {
+    if (fcmToken === 'all') {
+      await PushSubscription.deleteMany({ userId });
+    } else if (fcmToken) {
       await PushSubscription.deleteOne({ fcmToken });
     }
     return res.json({ message: '구독 해제' });
