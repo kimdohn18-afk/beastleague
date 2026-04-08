@@ -22,6 +22,34 @@ async function main() {
   httpServer.listen(PORT, () => {
     console.log(`[Server] Running on port ${PORT}`);
   });
+
+  // 매일 KST 16:00 (UTC 07:00)에 미배치 유저에게 알림
+  const { sendPushToUnplacedUsers } = await import('./services/pushService');
+
+  function scheduleReminder() {
+    const now = new Date();
+    const utcTarget = new Date(now);
+    utcTarget.setUTCHours(7, 0, 0, 0);
+
+    if (utcTarget.getTime() <= now.getTime()) {
+      utcTarget.setUTCDate(utcTarget.getUTCDate() + 1);
+    }
+
+    const delay = utcTarget.getTime() - now.getTime();
+    console.log(`[Reminder] Next push in ${Math.round(delay / 60000)}min (KST 16:00)`);
+
+    setTimeout(async () => {
+      try {
+        const count = await sendPushToUnplacedUsers();
+        console.log(`[Reminder] Sent ${count} reminders`);
+      } catch (e) {
+        console.error('[Reminder] Failed:', e);
+      }
+      scheduleReminder();
+    }, delay);
+  }
+
+  scheduleReminder();
 }
 
 main().catch((err) => {
