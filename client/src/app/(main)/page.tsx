@@ -18,12 +18,14 @@ const ANIMAL_EMOJI: Record<string, string> = {
   turtle: '🐢', eagle: '🦅', lion: '🦁', dinosaur: '🦖', dog: '🐶',
   fox: '🦊', penguin: '🐧', shark: '🦈', bear: '🐻', tiger: '🐯',
   seagull: '🕊️', dragon: '🐉', cat: '🐱', rabbit: '🐰',
+  gorilla: '🦍', elephant: '🐘',
 };
 
 const ANIMAL_NAMES: Record<string, string> = {
   turtle: '거북이', eagle: '독수리', lion: '사자', dinosaur: '공룡', dog: '강아지',
   fox: '여우', penguin: '펭귄', shark: '상어', bear: '곰', tiger: '호랑이',
   seagull: '갈매기', dragon: '드래곤', cat: '고양이', rabbit: '토끼',
+  gorilla: '고릴라', elephant: '코끼리',
 };
 
 function getEmojiPx(xp: number): number {
