@@ -39,13 +39,9 @@ export async function sendPushToUser(
     try {
       await admin.messaging().send({
         token: sub.fcmToken,
-        notification: { title, body },
-        data: data || {},
+        data: { ...(data || {}), title, body },
         webpush: {
-          notification: {
-            icon: '/icon-192.png',
-            badge: '/icon-192.png',
-          },
+          fcmOptions: {},
         },
       });
       sent++;
@@ -94,13 +90,9 @@ export async function sendPushToAll(
     try {
       const res = await admin.messaging().sendEachForMulticast({
         tokens: batch,
-        notification: { title, body },
-        data: data || {},
+        data: { ...(data || {}), title, body },
         webpush: {
-          notification: {
-            icon: '/icon-192.png',
-            badge: '/icon-192.png',
-          },
+          fcmOptions: {},
         },
       });
       sent += res.successCount;
