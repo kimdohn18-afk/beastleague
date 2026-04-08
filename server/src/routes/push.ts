@@ -14,7 +14,10 @@ pushRouter.post('/subscribe', authenticateUser, async (req: Request, res: Respon
       return res.status(400).json({ error: 'fcmToken 필수' });
     }
 
-    // upsert: 같은 토큰이면 userId 업데이트
+    // 같은 유저의 기존 토큰 모두 삭제
+    await PushSubscription.deleteMany({ userId });
+
+    // 새 토큰 등록
     await PushSubscription.findOneAndUpdate(
       { fcmToken },
       { userId, fcmToken },
