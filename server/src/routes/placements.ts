@@ -15,15 +15,9 @@ function nowKST(): Date {
   return new Date(Date.now() + 9 * 3600 * 1000);
 }
 
-/**
- * 경기 시작 시간이 지났는지 확인
- * game.startTime = "18:30" 형식, game.date = "2026-04-07" 형식
- */
 function isGameStarted(game: any): boolean {
-  // DB status로 먼저 체크
   if (game.status !== 'scheduled') return true;
 
-  // startTime이 있으면 시간 기반 체크
   if (game.startTime && game.date) {
     try {
       const [hour, minute] = game.startTime.split(':').map(Number);
@@ -32,7 +26,6 @@ function isGameStarted(game: any): boolean {
       const currentMinute = now.getUTCMinutes();
       const currentDate = now.toISOString().slice(0, 10);
 
-      // 같은 날짜이고, 현재 시간이 시작 시간 이후이면 시작된 것으로 판단
       if (currentDate === game.date) {
         if (currentHour > hour || (currentHour === hour && currentMinute >= minute)) {
           return true;
@@ -44,6 +37,37 @@ function isGameStarted(game: any): boolean {
   }
 
   return false;
+}
+
+/**
+ * streak 계산: "직전 경기일"에 배치했으면 streak+1, 아니면 리셋
+ */
+async function updateStreak(character: any, today: string): Promise<void> {
+  // 오늘 이미 streak 업데이트 했으면 스킵 (같은 날 배치 수정)
+  if (character.lastPlacementDate === today) return;
+
+  // 오늘 이전의 가장 최근 경기일 조회
+  const lastGameDay = await Game.findOne({
+    date: { $lt: today },
+    status: { $in: ['finished', 'scheduled', 'in_progress'] },
+  })
+    .sort({ date: -1 })
+    .select('date')
+    .lean();
+
+  if (!lastGameDay) {
+    // 이전 경기 기록 없음 → 첫 배치
+    character.streak = 1;
+  } else if (character.lastPlacementDate === lastGameDay.date) {
+    // 직전 경기일에 배치했음 → 연속
+    character.streak = (character.streak || 0) + 1;
+  } else {
+    // 직전 경기일에 배치 안 했음 → 리셋
+    character.streak = 1;
+  }
+
+  character.lastPlacementDate = today;
+  await character.save();
 }
 
 // POST /api/placements
@@ -76,13 +100,11 @@ placementsRouter.post('/', authenticateUser, async (req: Request, res: Response)
         return res.status(400).json({ error: '이미 정산된 배치는 수정할 수 없습니다' });
       }
 
-      // 기존 배치의 경기가 이미 시작됐는지 확인
       const existingGame = await Game.findOne({ gameId: existing.gameId });
       if (existingGame && isGameStarted(existingGame)) {
         return res.status(400).json({ error: '이미 시작된 경기의 배치는 수정할 수 없습니다' });
       }
 
-      // 새로 선택한 경기도 시작 전인지 확인
       const newGame = await Game.findOne({ gameId });
       if (!newGame) return res.status(400).json({ error: '존재하지 않는 경기입니다' });
       if (isGameStarted(newGame)) {
@@ -94,6 +116,10 @@ placementsRouter.post('/', authenticateUser, async (req: Request, res: Response)
       existing.battingOrder = battingOrder;
       existing.predictedWinner = predictedWinner;
       await existing.save();
+
+      // 배치 수정이지만 streak은 이미 업데이트됨 (같은 날이므로 스킵)
+      await updateStreak(character, today);
+
       return res.status(200).json(existing);
     }
 
@@ -113,6 +139,9 @@ placementsRouter.post('/', authenticateUser, async (req: Request, res: Response)
       predictedWinner,
       date: today,
     });
+
+    // streak 업데이트
+    await updateStreak(character, today);
 
     return res.status(201).json(placement);
   } catch (err) {
