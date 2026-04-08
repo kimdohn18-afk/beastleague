@@ -14,7 +14,15 @@ async function main() {
 
   const app = createApp();
   const httpServer = http.createServer(app);
-  const io = new SocketIOServer(httpServer, { cors: { origin: '*' } });
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: [
+        'https://beastleague-client.vercel.app',
+        'https://beastleague-client-git-main-kimdohn18-afks-projects.vercel.app',
+      ],
+      credentials: true,
+    },
+  });
 
   app.locals.io = io;
   setupSocket(io);
@@ -23,7 +31,6 @@ async function main() {
     console.log(`[Server] Running on port ${PORT}`);
   });
 
-  // 매일 KST 16:00 (UTC 07:00)에 미배치 유저에게 알림
   const { sendPushToUnplacedUsers } = await import('./services/pushService');
 
   function scheduleReminder() {
