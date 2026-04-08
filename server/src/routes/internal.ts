@@ -47,7 +47,9 @@ internalRouter.post('/games/:gameId/settle', async (req: Request, res: Response)
   } catch (err) {
     return res.status(400).json({ error: String(err) });
   }
-  // 테스트: 미배치 유저에게 알림 전송
+});
+
+// 테스트: 미배치 유저에게 알림 전송
 internalRouter.post('/test-push-reminder', async (req: Request, res: Response) => {
   try {
     const { sendPushToUnplacedUsers } = await import('../services/pushService');
