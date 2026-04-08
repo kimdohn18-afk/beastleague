@@ -103,6 +103,13 @@ export default function MainPage() {
   const [showHelp, setShowHelp] = useState(false);
   const [helpPage, setHelpPage] = useState(0);
   const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'granted' | 'denied'>('idle');
+    // 알림 상태 자동 감지
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') setPushStatus('granted');
+      else if (Notification.permission === 'denied') setPushStatus('denied');
+    }
+  }, []);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
