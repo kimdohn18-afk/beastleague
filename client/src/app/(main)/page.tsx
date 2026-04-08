@@ -134,23 +134,6 @@ export default function MainPage() {
         if (res.status === 404) { router.push('/character'); return; }
         throw new Error('Failed to fetch character');
       }
-      setCharacter(await res.json());
-    } catch (error) {
-      console.error('Error fetching character:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCharacter = async () => {
-    try {
-      const res = await fetch(`${apiUrl}/api/characters/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        if (res.status === 404) { router.push('/character'); return; }
-        throw new Error('Failed to fetch character');
-      }
       const data = await res.json();
       setCharacter(data);
 
