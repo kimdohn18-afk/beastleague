@@ -5,9 +5,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 const ANIMAL_EMOJI: Record<string, string> = {
-  turtle: '🐢', eagle: '🦅', lion: '🦁', dinosaur: '🦕', dog: '🐶',
+  turtle: '🐢', eagle: '🦅', lion: '🦁', dinosaur: '🦖', dog: '🐶',
   fox: '🦊', penguin: '🐧', shark: '🦈', bear: '🐻', tiger: '🐯',
-  seagull: '🕊️', dragon: '🐉', cat: '🐱', rabbit: '🐰', wolf: '🐺',
+  seagull: '🕊️', dragon: '🐉', cat: '🐱', rabbit: '🐰',
+  gorilla: '🦍', elephant: '🐘',
 };
 
 export default function RankingPage() {
