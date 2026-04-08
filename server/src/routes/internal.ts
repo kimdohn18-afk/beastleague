@@ -72,3 +72,44 @@ internalRouter.post('/test-push-all', async (req: Request, res: Response) => {
     return res.status(500).json({ error: String(err) });
   }
 });
+
+// 중복 토큰 정리
+internalRouter.post('/cleanup-tokens', async (req: Request, res: Response) => {
+  try {
+    const { PushSubscription } = await import('../models/PushSubscription');
+    const all = await PushSubscription.find().lean();
+    
+    const seen = new Set<string>();
+    const duplicateIds: string[] = [];
+    
+    for (const sub of all) {
+      const key = `${sub.userId}-${sub.fcmToken}`;
+      if (seen.has(key)) {
+        duplicateIds.push(sub._id.toString());
+      } else {
+        seen.add(key);
+      }
+    }
+    
+    // 같은 유저의 오래된 토큰도 정리 (유저당 최신 1개만 유지)
+    const userTokens = new Map<string, { id: string; date: Date }>();
+    for (const sub of all) {
+      const uid = sub.userId.toString();
+      const existing = userTokens.get(uid);
+      if (!existing || sub.createdAt > existing.date) {
+        if (existing) duplicateIds.push(existing.id);
+        userTokens.set(uid, { id: sub._id.toString(), date: sub.createdAt });
+      } else {
+        duplicateIds.push(sub._id.toString());
+      }
+    }
+    
+    const deleted = await PushSubscription.deleteMany({ _id: { $in: duplicateIds } });
+    const remaining = await PushSubscription.countDocuments();
+    
+    return res.json({ success: true, deleted: deleted.deletedCount, remaining });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
