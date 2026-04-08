@@ -15,7 +15,27 @@ import { pushRouter } from './routes/push';
 export function createApp(): express.Application {
   const app = express();
 
-  app.use(cors());
+  const allowedOrigins = [
+    'https://beastleague-client.vercel.app',
+    'https://beastleague-client-git-main-kimdohn18-afks-projects.vercel.app',
+  ];
+
+  if (process.env.NODE_ENV !== 'production') {
+    allowedOrigins.push('http://localhost:3000');
+  }
+
+  app.use(cors({
+    origin(origin, callback) {
+      // 서버 간 호출(origin 없음)은 허용 (내부 API, 수집기 등)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.some(o => origin === o || origin.endsWith('.vercel.app'))) {
+        return callback(null, true);
+      }
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+  }));
+
   app.use(helmet());
   app.use(morgan('dev'));
   app.use(express.json());
