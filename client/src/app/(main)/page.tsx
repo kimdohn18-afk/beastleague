@@ -502,3 +502,26 @@ const handlePushSetup = async () => {
     </div>
   );
 }
+
+const handleDelete = async () => {
+  setDeleting(true);
+  try {
+    const res = await fetch(`${apiUrl}/api/characters/me`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      alert('캐릭터가 삭제되었습니다.');
+      router.push('/character');
+    } else {
+      const data = await res.json();
+      alert(data.error || '삭제 실패');
+    }
+  } catch (e) {
+    console.error('Delete failed:', e);
+    alert('삭제 중 오류가 발생했습니다.');
+  } finally {
+    setDeleting(false);
+    setShowDelete(false);
+  }
+};
