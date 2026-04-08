@@ -103,6 +103,7 @@ export default function MainPage() {
   const [showHelp, setShowHelp] = useState(false);
   const [helpPage, setHelpPage] = useState(0);
   const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'granted' | 'denied'>('idle');
+  const [showWelcome, setShowWelcome] = useState(false);
     // 알림 상태 자동 감지
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -141,18 +142,29 @@ export default function MainPage() {
     }
   };
 
-  const handleDelete = async () => {
-    setDeleting(true);
+  const fetchCharacter = async () => {
     try {
       const res = await fetch(`${apiUrl}/api/characters/me`, {
-        method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) { router.push('/character'); }
-      else { alert('삭제에 실패했습니다'); }
-    } catch (e) { alert('서버 오류'); }
-    setDeleting(false);
-    setShowDelete(false);
+      if (!res.ok) {
+        if (res.status === 404) { router.push('/character'); return; }
+        throw new Error('Failed to fetch character');
+      }
+      const data = await res.json();
+      setCharacter(data);
+
+      // 캐릭터 생성 후 첫 방문이면 웰컴 팝업
+      const welcomeKey = `welcome-shown-${data._id}`;
+      if (!localStorage.getItem(welcomeKey)) {
+        setShowWelcome(true);
+        localStorage.setItem(welcomeKey, 'true');
+      }
+    } catch (error) {
+      console.error('Error fetching character:', error);
+    } finally {
+      setLoading(false);
+    }
   };
   
 const handlePushSetup = async () => {
@@ -449,6 +461,54 @@ const handlePushSetup = async () => {
               <button onClick={() => setShowDelete(false)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">취소</button>
               <button onClick={handleDelete} disabled={deleting} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 disabled:opacity-50">
                 {deleting ? '삭제 중...' : '삭제'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+            {/* ───── 웰컴 팝업 ───── */}
+      {showWelcome && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+          onClick={() => setShowWelcome(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-8 pb-4 text-center">
+              <div className="text-5xl mb-4">🎉</div>
+              <h3 className="text-lg font-bold text-gray-800 mb-2">캐릭터가 탄생했어요!</h3>
+              <p className="text-sm text-gray-500 leading-relaxed mb-6">
+                매일 KBO 경기에 배치하면<br />
+                실제 선수 성적에 따라 XP를 얻고<br />
+                캐릭터가 성장합니다!
+              </p>
+
+              <div className="bg-orange-50 rounded-xl p-4 mb-4 text-left">
+                <p className="text-sm font-bold text-orange-600 mb-2">🔔 알림 설정 추천!</p>
+                <p className="text-xs text-orange-500 leading-relaxed">
+                  알림을 켜면 배치를 잊지 않도록<br />
+                  매일 경기 전에 알려드려요.<br />
+                  오른쪽 하단 + 버튼 → 알림 설정
+                </p>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
+                <p className="text-sm font-bold text-gray-700 mb-2">❓ 도움말</p>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  배치 방법, XP 규칙 등 자세한 내용은<br />
+                  + 버튼 → 도움말에서 확인하세요.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-6 pb-6">
+              <button
+                onClick={() => setShowWelcome(false)}
+                className="w-full py-3 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500"
+              >
+                시작하기
               </button>
             </div>
           </div>
