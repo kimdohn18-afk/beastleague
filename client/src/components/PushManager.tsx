@@ -41,8 +41,8 @@ export default function PushManager() {
 
     // 포그라운드 메시지 수신
     const unsub = onForegroundMessage((payload: any) => {
-      const title = payload.notification?.title || '비스트리그';
-      const body = payload.notification?.body || '';
+      const title = payload.data?.title || payload.notification?.title || '비스트리그';
+      const body = payload.data?.body || payload.notification?.body || '';
       setToast({ title, body });
       setTimeout(() => setToast(null), 5000);
     });
