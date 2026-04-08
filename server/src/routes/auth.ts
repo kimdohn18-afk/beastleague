@@ -6,20 +6,23 @@ const router = Router();
 
 router.post('/register', async (req: Request, res: Response) => {
   try {
+    // 비밀 키 검증
+    const registerSecret = req.headers['x-register-secret'];
+    if (!registerSecret || registerSecret !== process.env.AUTH_REGISTER_SECRET) {
+      return res.status(403).json({ error: '접근 권한이 없습니다' });
+    }
+
     const { email, name, provider, providerId } = req.body;
 
     if (!provider || !providerId) {
       return res.status(400).json({ error: 'provider and providerId are required' });
     }
 
-    // Search by provider + providerId first
     let user = await User.findOne({ provider, providerId });
 
     if (!user && email) {
-      // Try finding by email
       user = await User.findOne({ email });
       if (user) {
-        // Update providerId
         user.providerId = providerId;
         user.provider = provider;
         await user.save();
