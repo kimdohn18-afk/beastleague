@@ -33,7 +33,10 @@ const handler = NextAuth({
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
         const res = await fetch(`${apiUrl}/api/auth/register`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-register-secret': process.env.AUTH_REGISTER_SECRET || '',
+          },
           body: JSON.stringify({
             email: user.email,
             name: user.name,
