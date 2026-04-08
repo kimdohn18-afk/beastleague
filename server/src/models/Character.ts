@@ -5,16 +5,20 @@ export interface ICharacter extends Document {
   name: string;
   animalType: string;
   xp: number;
+  streak: number;
+  lastPlacementDate: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
 const characterSchema = new Schema<ICharacter>(
   {
-    userId:     { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    name:       { type: String, required: true },
-    animalType: { type: String, required: true },
-    xp:         { type: Number, default: 0 },
+    userId:             { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    name:               { type: String, required: true },
+    animalType:         { type: String, required: true },
+    xp:                 { type: Number, default: 0 },
+    streak:             { type: Number, default: 0 },
+    lastPlacementDate:  { type: String, default: null },
   },
   { timestamps: true }
 );
