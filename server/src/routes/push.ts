@@ -4,6 +4,16 @@ import { PushSubscription } from '../models/PushSubscription';
 
 export const pushRouter = Router();
 
+// GET /api/push/status — 구독 상태 확인
+pushRouter.get('/status', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const count = await PushSubscription.countDocuments({ userId: req.user!.userId });
+    return res.json({ subscribed: count > 0 });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
 // POST /api/push/subscribe — FCM 토큰 등록
 pushRouter.post('/subscribe', authenticateUser, async (req: Request, res: Response) => {
   try {
@@ -14,10 +24,8 @@ pushRouter.post('/subscribe', authenticateUser, async (req: Request, res: Respon
       return res.status(400).json({ error: 'fcmToken 필수' });
     }
 
-    // 같은 유저의 기존 토큰 모두 삭제
     await PushSubscription.deleteMany({ userId });
 
-    // 새 토큰 등록
     await PushSubscription.findOneAndUpdate(
       { fcmToken },
       { userId, fcmToken },
