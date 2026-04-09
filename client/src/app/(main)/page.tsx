@@ -118,11 +118,41 @@ export default function MainPage() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!token) return;
-    if (typeof window === 'undefined' || !('Notification' in window)) return;
-    if (Notification.permission !== 'granted') return;
-    const checkSub = async () => {
+useEffect(() => {
+  if (!token) return;
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  if (localStorage.getItem('push-manually-disabled') === 'true') return;
+  const checkAndAutoSubscribe = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/api/push/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.subscribed) {
+          setPushStatus('granted');
+        } else {
+          const fcmToken = await requestFcmToken();
+          if (fcmToken) {
+            await fetch(`${apiUrl}/api/push/subscribe`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ fcmToken }),
+            });
+            setPushStatus('granted');
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[Push] Auto subscribe failed:', e);
+    }
+  };
+  checkAndAutoSubscribe();
+}, [token]);
       try {
         const res = await fetch(`${apiUrl}/api/push/status`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -152,6 +182,7 @@ useEffect(() => {
   if (!character || !token) return;
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (/KAKAOTALK/i.test(navigator.userAgent)) return;
+    if (character.xp === 0) return;
   const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
   if (localStorage.getItem('push-prompt-dismissed') === today) return;
   if (Notification.permission === 'denied') {
@@ -248,6 +279,7 @@ useEffect(() => {
           },
           body: JSON.stringify({ fcmToken: 'all' }),
         });
+                localStorage.setItem('push-manually-disabled', 'true');
         setPushStatus('idle');
         alert('알림이 해제되었습니다.');
       } catch (e) {
@@ -269,6 +301,7 @@ useEffect(() => {
           },
           body: JSON.stringify({ fcmToken }),
         });
+     localStorage.removeItem('push-manually-disabled');
         setPushStatus('granted');
         alert('알림이 설정되었습니다! 배치 미완료 시 알림을 받을 수 있어요.');
       } else {
