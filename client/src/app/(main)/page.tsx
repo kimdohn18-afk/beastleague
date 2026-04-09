@@ -153,21 +153,7 @@ useEffect(() => {
   };
   checkAndAutoSubscribe();
 }, [token]);
-      try {
-        const res = await fetch(`${apiUrl}/api/push/status`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setPushStatus(data.subscribed ? 'granted' : 'idle');
-        }
-      } catch (e) {
-        console.error('[Push] Status check failed:', e);
-      }
-    };
-    checkSub();
-  }, [token]);
-
+    
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/login');
