@@ -285,22 +285,31 @@ export default function MainPage() {
 
 return (
     <div className="min-h-screen bg-gray-50 pb-24 relative">
-      {typeof navigator !== 'undefined' && /KAKAOTALK/i.test(navigator.userAgent) && (
-        <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
-          <div className="text-5xl mb-4">🌐</div>
-          <h2 className="text-lg font-bold text-gray-800 mb-2">크롬에서 열어주세요</h2>
-          <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-            카카오톡 브라우저에서는 알림 등<br />
-            일부 기능이 제한됩니다.
-          </p>
-          <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
-            <p className="text-xs text-gray-500 leading-relaxed">
-              우측 하단 <strong>⋮</strong> 메뉴 탭<br />
-              → <strong>다른 브라우저로 열기</strong> 선택
-            </p>
-          </div>
-        </div>
-      )}
+{typeof navigator !== 'undefined' && /KAKAOTALK/i.test(navigator.userAgent) && (
+  <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
+    <div className="text-5xl mb-4">🌐</div>
+    <h2 className="text-lg font-bold text-gray-800 mb-2">기본 브라우저에서 열어주세요</h2>
+    <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+      카카오톡 브라우저에서는 알림 등<br />
+      일부 기능이 제한됩니다.
+    </p>
+    {/iPhone|iPad/i.test(navigator.userAgent) ? (
+      <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
+        <p className="text-xs text-gray-500 leading-relaxed">
+          우측 하단 <strong>공유(↗) 아이콘</strong> 탭<br />
+          → <strong>Safari로 열기</strong> 선택
+        </p>
+      </div>
+    ) : (
+      <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
+        <p className="text-xs text-gray-500 leading-relaxed">
+          우측 하단 <strong>⋮</strong> 메뉴 탭<br />
+          → <strong>다른 브라우저로 열기</strong> 선택
+        </p>
+      </div>
+    )}
+  </div>
+)}
       <div className="px-4 pt-5 pb-2 flex items-center justify-between">
         <div />
         <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
