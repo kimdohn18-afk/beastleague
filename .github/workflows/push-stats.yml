@@ -1,0 +1,21 @@
+name: Push Stats
+
+on:
+  workflow_dispatch:
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r collector/requirements.txt
+      - name: Check push stats
+        working-directory: collector
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
+        run: python push_stats.py
