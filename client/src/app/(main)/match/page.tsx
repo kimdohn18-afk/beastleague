@@ -2,6 +2,7 @@
 
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import { requestFcmToken } from '@/lib/firebase';
 
 interface Game {
   gameId: string;
@@ -46,6 +47,8 @@ export default function MatchPage() {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [placementLocked, setPlacementLocked] = useState(false);
+  const [showPushPrompt, setShowPushPrompt] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken;
@@ -89,7 +92,6 @@ export default function MatchPage() {
     } catch (e) { console.error(e); }
   }
 
-  // 배치한 경기가 시작됐으면 잠금
   useEffect(() => {
     if (selection && games.length > 0) {
       const placedGame = games.find(g => g.gameId === selection.gameId);
@@ -124,6 +126,51 @@ export default function MatchPage() {
     }));
   }
 
+  async function shouldShowPushPrompt(): Promise<boolean> {
+    if (typeof window === 'undefined' || !('Notification' in window)) return false;
+    if (Notification.permission === 'denied') return false;
+    const dismissedDate = localStorage.getItem('push-prompt-dismissed');
+    if (dismissedDate === todayKST()) return false;
+    if (Notification.permission === 'default') return true;
+    try {
+      const res = await fetch(`${apiUrl}/api/push/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return !data.subscribed;
+      }
+    } catch {}
+    return false;
+  }
+
+  async function handlePushAccept() {
+    setPushLoading(true);
+    try {
+      const fcmToken = await requestFcmToken();
+      if (fcmToken) {
+        await fetch(`${apiUrl}/api/push/subscribe`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ fcmToken }),
+        });
+        setToast('알림이 설정되었습니다!');
+      } else {
+        setToast('알림 권한이 차단되었습니다');
+      }
+    } catch {
+      setToast('알림 설정 중 오류가 발생했습니다');
+    }
+    setPushLoading(false);
+    setShowPushPrompt(false);
+    setTimeout(() => setToast(null), 2000);
+  }
+
+  function handlePushDismiss() {
+    localStorage.setItem('push-prompt-dismissed', todayKST());
+    setShowPushPrompt(false);
+  }
+
   async function handleSubmit() {
     if (placementLocked) {
       setToast('이미 시작된 경기의 배치는 수정할 수 없습니다');
@@ -150,6 +197,10 @@ export default function MatchPage() {
       if (res.ok) {
         setToast('선택 완료!');
         setExpandedGame(null);
+        const shouldShow = await shouldShowPushPrompt();
+        if (shouldShow) {
+          setTimeout(() => setShowPushPrompt(true), 500);
+        }
       } else {
         const err = await res.json();
         setToast(err.error || '선택 실패');
@@ -213,14 +264,12 @@ export default function MatchPage() {
                     </span>
                     <span className="text-gray-800 font-medium flex-1 text-center">{game.homeTeam}</span>
                   </div>
-
                   {isSelected && !isExpanded && selection && (
                     <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between">
                       <span className="text-orange-500 text-xs">{selection.predictedWinner} 승리</span>
                       <span className="text-orange-500 text-xs">{selection.selectedTeam} {selection.selectedOrder}번 타자</span>
                     </div>
                   )}
-
                   {isGameLocked && game.status !== 'finished' && (
                     <p className="text-gray-400 text-xs text-center mt-1">경기 시작됨</p>
                   )}
@@ -276,6 +325,33 @@ export default function MatchPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* 배치 성공 후 알림 유도 팝업 */}
+      {showPushPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={handlePushDismiss}>
+          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="text-4xl mb-3">🔔</div>
+            <h2 className="text-lg font-bold text-gray-800 mb-2">배치 완료!</h2>
+            <p className="text-sm text-gray-500 mb-1">경기 결과가 나오면 알림으로 알려드릴까요?</p>
+            <p className="text-xs text-gray-400 mb-6">정산 결과와 XP 획득 알림을 받을 수 있어요</p>
+            <div className="flex gap-3">
+              <button
+                onClick={handlePushDismiss}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-sm font-medium hover:bg-gray-200"
+              >
+                다음에
+              </button>
+              <button
+                onClick={handlePushAccept}
+                disabled={pushLoading}
+                className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500 disabled:opacity-50"
+              >
+                {pushLoading ? '설정 중...' : '알림 받기'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
