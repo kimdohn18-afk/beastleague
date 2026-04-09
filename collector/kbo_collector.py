@@ -254,6 +254,20 @@ def collect_date(date_str):
             print(f"  📋 경기 예정 ({start_time}) → scheduled로 저장")
             continue
 
+        # 우천취소 / 경기취소
+        if status in ("4", "5"):
+            send_to_server({
+                "gameId": game_id,
+                "date": formatted,
+                "homeTeam": home_team,
+                "awayTeam": away_team,
+                "status": "cancelled",
+                "homeScore": 0,
+                "awayScore": 0,
+            })
+            print(f"  🌧️ 경기 취소 → cancelled로 저장")
+            continue
+
         # 알 수 없는 상태
         if status not in ("2", "3"):
             print(f"  ⏭️ 알 수 없는 상태 (상태: {status}), 건너뜀")
