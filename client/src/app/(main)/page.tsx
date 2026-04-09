@@ -132,11 +132,34 @@ export default function MainPage() {
   const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'granted') setPushStatus('granted');
-      else if (Notification.permission === 'denied') setPushStatus('denied');
+  if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (Notification.permission === 'denied') {
+      setPushStatus('denied');
     }
-  }, []);
+    // 'granted'여도 서버에 토큰이 있는지 확인 후 결정
+  }
+}, []);
+
+// 서버에 푸시 토큰이 등록되어 있는지 확인
+useEffect(() => {
+  if (!token) return;
+  if (Notification.permission !== 'granted') return;
+
+  const checkPushSubscription = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/api/push/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPushStatus(data.subscribed ? 'granted' : 'idle');
+      }
+    } catch (e) {
+      console.error('[Push] Status check failed:', e);
+    }
+  };
+  checkPushSubscription();
+}, [token]);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
