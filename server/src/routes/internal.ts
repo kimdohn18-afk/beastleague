@@ -113,3 +113,14 @@ internalRouter.post('/cleanup-tokens', async (req: Request, res: Response) => {
   }
 });
 
+// 구독자 통계 확인
+internalRouter.get('/push-stats', async (req: Request, res: Response) => {
+  try {
+    const { PushSubscription } = await import('../models/PushSubscription');
+    const total = await PushSubscription.countDocuments();
+    const users = await PushSubscription.distinct('userId');
+    return res.json({ totalTokens: total, uniqueUsers: users.length });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
