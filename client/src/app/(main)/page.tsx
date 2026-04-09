@@ -106,12 +106,31 @@ export default function MainPage() {
   const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'granted' | 'denied'>('idle');
   const [showWelcome, setShowWelcome] = useState(false);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'granted') setPushStatus('granted');
-      else if (Notification.permission === 'denied') setPushStatus('denied');
+useEffect(() => {
+  if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (Notification.permission === 'denied') setPushStatus('denied');
+  }
+}, []);
+
+useEffect(() => {
+  if (!token) return;
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  const checkSub = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/api/push/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPushStatus(data.subscribed ? 'granted' : 'idle');
+      }
+    } catch (e) {
+      console.error('[Push] Status check failed:', e);
     }
-  }, []);
+  };
+  checkSub();
+}, [token]);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
