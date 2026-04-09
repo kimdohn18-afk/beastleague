@@ -148,15 +148,18 @@ export default function MainPage() {
     }
   }, [status, token]);
 
-  useEffect(() => {
-    if (!character || !token) return;
-    if (typeof window === 'undefined' || !('Notification' in window)) return;
-    if (/KAKAOTALK/i.test(navigator.userAgent)) return;
-    if (Notification.permission === 'denied') return;
-    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-    if (localStorage.getItem('push-prompt-dismissed') === today) return;
-    if (Notification.permission === 'default') {
-      setTimeout(() => setShowPushPrompt(true), 1000);
+useEffect(() => {
+  if (!character || !token) return;
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (/KAKAOTALK/i.test(navigator.userAgent)) return;
+  const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  if (localStorage.getItem('push-prompt-dismissed') === today) return;
+  if (Notification.permission === 'denied') {
+    setTimeout(() => setShowPushPrompt(true), 1000);
+    return;
+  }
+  if (Notification.permission === 'default') {
+    setTimeout(() => setShowPushPrompt(true), 1000);
       return;
     }
     const checkSub = async () => {
@@ -279,28 +282,32 @@ export default function MainPage() {
     }
   };
 
-  const handlePushPromptAccept = async () => {
-    setShowPushPrompt(false);
-    setPushStatus('loading');
-    try {
-      const fcmToken = await requestFcmToken();
-      if (fcmToken) {
-        await fetch(`${apiUrl}/api/push/subscribe`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ fcmToken }),
-        });
-        setPushStatus('granted');
-      } else {
-        setPushStatus('denied');
-      }
-    } catch {
-      setPushStatus('idle');
+ const handlePushPromptAccept = async () => {
+  setShowPushPrompt(false);
+  if (Notification.permission === 'denied') {
+    setShowBlockedGuide(true);
+    return;
+  }
+  setPushStatus('loading');
+  try {
+    const fcmToken = await requestFcmToken();
+    if (fcmToken) {
+      await fetch(`${apiUrl}/api/push/subscribe`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fcmToken }),
+      });
+      setPushStatus('granted');
+    } else {
+      setPushStatus('denied');
     }
-  };
+  } catch {
+    setPushStatus('idle');
+  }
+};
 
   const handlePushPromptDismiss = () => {
     const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
