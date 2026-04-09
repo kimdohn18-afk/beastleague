@@ -106,6 +106,7 @@ export default function MainPage() {
   const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'granted' | 'denied'>('idle');
   const [showWelcome, setShowWelcome] = useState(false);
   const [showBlockedGuide, setShowBlockedGuide] = useState(false);
+  const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -146,6 +147,33 @@ export default function MainPage() {
       fetchCharacter();
     }
   }, [status, token]);
+
+  useEffect(() => {
+    if (!character || !token) return;
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (/KAKAOTALK/i.test(navigator.userAgent)) return;
+    if (Notification.permission === 'denied') return;
+    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    if (localStorage.getItem('push-prompt-dismissed') === today) return;
+    if (Notification.permission === 'default') {
+      setTimeout(() => setShowPushPrompt(true), 1000);
+      return;
+    }
+    const checkSub = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/push/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.subscribed) {
+            setTimeout(() => setShowPushPrompt(true), 1000);
+          }
+        }
+      } catch {}
+    };
+    checkSub();
+  }, [character, token]);
 
   const fetchCharacter = async () => {
     try {
@@ -251,6 +279,35 @@ export default function MainPage() {
     }
   };
 
+  const handlePushPromptAccept = async () => {
+    setShowPushPrompt(false);
+    setPushStatus('loading');
+    try {
+      const fcmToken = await requestFcmToken();
+      if (fcmToken) {
+        await fetch(`${apiUrl}/api/push/subscribe`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fcmToken }),
+        });
+        setPushStatus('granted');
+      } else {
+        setPushStatus('denied');
+      }
+    } catch {
+      setPushStatus('idle');
+    }
+  };
+
+  const handlePushPromptDismiss = () => {
+    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    localStorage.setItem('push-prompt-dismissed', today);
+    setShowPushPrompt(false);
+  };
+
   const handleTouchStart = (e: React.TouchEvent) => setTouchStartX(e.touches[0].clientX);
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX === null) return;
@@ -283,33 +340,34 @@ export default function MainPage() {
   const initialPx = getEmojiPx(0);
   const card = HELP_CARDS[helpPage];
 
-return (
+  return (
     <div className="min-h-screen bg-gray-50 pb-24 relative">
-{typeof navigator !== 'undefined' && /KAKAOTALK/i.test(navigator.userAgent) && (
-  <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
-    <div className="text-5xl mb-4">🌐</div>
-    <h2 className="text-lg font-bold text-gray-800 mb-2">기본 브라우저에서 열어주세요</h2>
-    <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-      카카오톡 브라우저에서는 알림 등<br />
-      일부 기능이 제한됩니다.
-    </p>
-    {/iPhone|iPad/i.test(navigator.userAgent) ? (
-      <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
-        <p className="text-xs text-gray-500 leading-relaxed">
-          우측 하단 <strong>공유(↗) 아이콘</strong> 탭<br />
-          → <strong>Safari로 열기</strong> 선택
-        </p>
-      </div>
-    ) : (
-      <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
-        <p className="text-xs text-gray-500 leading-relaxed">
-          우측 하단 <strong>⋮</strong> 메뉴 탭<br />
-          → <strong>다른 브라우저로 열기</strong> 선택
-        </p>
-      </div>
-    )}
-  </div>
-)}
+      {typeof navigator !== 'undefined' && /KAKAOTALK/i.test(navigator.userAgent) && (
+        <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
+          <div className="text-5xl mb-4">🌐</div>
+          <h2 className="text-lg font-bold text-gray-800 mb-2">기본 브라우저에서 열어주세요</h2>
+          <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+            카카오톡 브라우저에서는 알림 등<br />
+            일부 기능이 제한됩니다.
+          </p>
+          {/iPhone|iPad/i.test(navigator.userAgent) ? (
+            <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
+              <p className="text-xs text-gray-500 leading-relaxed">
+                우측 하단 <strong>공유(↗) 아이콘</strong> 탭<br />
+                → <strong>Safari로 열기</strong> 선택
+              </p>
+            </div>
+          ) : (
+            <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
+              <p className="text-xs text-gray-500 leading-relaxed">
+                우측 하단 <strong>⋮</strong> 메뉴 탭<br />
+                → <strong>다른 브라우저로 열기</strong> 선택
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="px-4 pt-5 pb-2 flex items-center justify-between">
         <div />
         <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
@@ -449,6 +507,32 @@ return (
         </div>
       )}
 
+      {showPushPrompt && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30" onClick={handlePushPromptDismiss}>
+          <div className="bg-white rounded-t-2xl shadow-xl w-full max-w-sm p-6 mb-0" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="text-3xl">🔔</div>
+              <div>
+                <h3 className="text-base font-bold text-gray-800">알림을 켜볼까요?</h3>
+                <p className="text-xs text-gray-400 mt-0.5">하루에 한 번만 물어볼게요</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-500 mb-5 leading-relaxed">
+              경기 전 배치 리마인더와<br />
+              정산 결과를 알림으로 받을 수 있어요.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={handlePushPromptDismiss} className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-sm font-medium">
+                다음에
+              </button>
+              <button onClick={handlePushPromptAccept} className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold">
+                알림 받기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showBlockedGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowBlockedGuide(false)}>
           <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
@@ -460,7 +544,7 @@ return (
             <div className="bg-gray-50 rounded-xl p-4 mb-3">
               <p className="text-sm font-bold text-gray-700 mb-2">📱 모바일 (Chrome)</p>
               <p className="text-xs text-gray-500 leading-relaxed">
-                주소창 왼쪽 🔒 아이콘 탭<br />
+                주소창 왼쪽 ⚙️ 아이콘 탭<br />
                 → 권한 또는 사이트 설정<br />
                 → 알림 → 허용으로 변경<br />
                 → 페이지 새로고침
