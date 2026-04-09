@@ -24,6 +24,7 @@ interface Selection {
 
 function isGameStartedByTime(game: Game): boolean {
   if (game.status === 'finished' || game.status === 'live') return true;
+  if (game.status === 'cancelled') return true;
   if (!game.startTime || !game.date) return false;
   try {
     const [hour, minute] = game.startTime.split(':').map(Number);
@@ -210,6 +211,11 @@ export default function MatchPage() {
     setTimeout(() => setToast(null), 2000);
   }
 
+  // 취소되지 않은 경기가 있는지 확인
+  const activeGames = games.filter(g => g.status !== 'cancelled');
+  const cancelledGames = games.filter(g => g.status === 'cancelled');
+  const allCancelled = games.length > 0 && activeGames.length === 0;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -227,7 +233,22 @@ export default function MatchPage() {
       )}
 
       <h1 className="text-gray-900 text-lg font-bold mb-1">{todayKST()}</h1>
-      <p className="text-gray-400 text-sm mb-4">{games.length}경기</p>
+      <p className="text-gray-400 text-sm mb-4">
+        {games.length}경기
+        {cancelledGames.length > 0 && (
+          <span className="text-red-400 ml-1">
+            (취소 {cancelledGames.length}경기)
+          </span>
+        )}
+      </p>
+
+      {allCancelled && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4 text-center">
+          <p className="text-2xl mb-2">🌧️</p>
+          <p className="text-red-500 text-sm font-bold">오늘 경기가 모두 취소되었습니다</p>
+          <p className="text-red-400 text-xs mt-1">우천 등의 사유로 경기가 진행되지 않습니다</p>
+        </div>
+      )}
 
       {placementLocked && selection && (
         <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
@@ -243,34 +264,54 @@ export default function MatchPage() {
       ) : (
         <div className="space-y-3">
           {games.map((game) => {
+            const isCancelled = game.status === 'cancelled';
             const isExpanded = expandedGame === game.gameId;
             const isSelected = selection?.gameId === game.gameId;
             const isGameLocked = isGameStartedByTime(game);
-            const cannotModify = placementLocked || isGameLocked;
+            const cannotModify = placementLocked || isGameLocked || isCancelled;
 
             return (
               <div
                 key={game.gameId}
-                className={`rounded-2xl overflow-hidden transition-all shadow-sm ${isSelected ? 'ring-2 ring-orange-400' : ''}`}
+                className={`rounded-2xl overflow-hidden transition-all shadow-sm ${
+                  isCancelled ? 'opacity-50' : isSelected ? 'ring-2 ring-orange-400' : ''
+                }`}
               >
                 <div
                   onClick={() => !cannotModify && handleExpand(game.gameId)}
-                  className={`bg-white p-4 border border-gray-100 ${cannotModify ? 'opacity-60' : 'cursor-pointer active:bg-gray-50'}`}
+                  className={`bg-white p-4 border border-gray-100 ${
+                    cannotModify ? 'opacity-60' : 'cursor-pointer active:bg-gray-50'
+                  }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-800 font-medium flex-1 text-center">{game.awayTeam}</span>
-                    <span className="text-gray-300 text-sm mx-3">
-                      {game.status === 'finished' ? `${game.awayScore} : ${game.homeScore}` : isGameLocked ? '경기 중' : game.startTime ? `${game.startTime}` : 'vs'}
+                    <span className={`font-medium flex-1 text-center ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                      {game.awayTeam}
                     </span>
-                    <span className="text-gray-800 font-medium flex-1 text-center">{game.homeTeam}</span>
+                    <span className="text-gray-300 text-sm mx-3">
+                      {isCancelled
+                        ? '취소'
+                        : game.status === 'finished'
+                          ? `${game.awayScore} : ${game.homeScore}`
+                          : isGameLocked
+                            ? '경기 중'
+                            : game.startTime
+                              ? `${game.startTime}`
+                              : 'vs'}
+                    </span>
+                    <span className={`font-medium flex-1 text-center ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                      {game.homeTeam}
+                    </span>
                   </div>
-                  {isSelected && !isExpanded && selection && (
+                  {isSelected && !isExpanded && selection && !isCancelled && (
                     <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between">
                       <span className="text-orange-500 text-xs">{selection.predictedWinner} 승리</span>
                       <span className="text-orange-500 text-xs">{selection.selectedTeam} {selection.selectedOrder}번 타자</span>
                     </div>
                   )}
-                  {isGameLocked && game.status !== 'finished' && (
+                  {isCancelled && (
+                    <p className="text-red-400 text-xs text-center mt-1">🌧️ 우천취소</p>
+                  )}
+                  {!isCancelled && isGameLocked && game.status !== 'finished' && (
                     <p className="text-gray-400 text-xs text-center mt-1">경기 시작됨</p>
                   )}
                   {game.status === 'finished' && (
@@ -328,7 +369,6 @@ export default function MatchPage() {
         </div>
       )}
 
-      {/* 배치 성공 후 알림 유도 팝업 */}
       {showPushPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={handlePushDismiss}>
           <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
