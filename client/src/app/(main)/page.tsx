@@ -1,289 +1,230 @@
 'use client';
 
-import { requestFcmToken } from '@/lib/firebase';
-import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import LogoutButton from '@/components/LogoutButton';
+import { useEffect, useState } from 'react';
+import { requestFcmToken } from '@/lib/firebase';
 
-interface Character {
-  _id: string;
-  name: string;
-  animalType: string;
-  xp: number;
-  streak: number;
-  userId: string;
+interface Game {
+  gameId: string;
+  date: string;
+  homeTeam: string;
+  awayTeam: string;
+  status: string;
+  startTime?: string;
+  homeScore?: number;
+  awayScore?: number;
 }
 
-const ANIMAL_EMOJI: Record<string, string> = {
-  turtle: '🐢', eagle: '🦅', lion: '🦁', dinosaur: '🦖', dog: '🐶',
-  fox: '🦊', penguin: '🐧', shark: '🦈', bear: '🐻', tiger: '🐯',
-  seagull: '🕊️', dragon: '🐉', cat: '🐱', rabbit: '🐰',
-  gorilla: '🦍', elephant: '🐘',
-};
-
-const ANIMAL_NAMES: Record<string, string> = {
-  turtle: '거북이', eagle: '독수리', lion: '사자', dinosaur: '공룡', dog: '강아지',
-  fox: '여우', penguin: '펭귄', shark: '상어', bear: '곰', tiger: '호랑이',
-  seagull: '갈매기', dragon: '드래곤', cat: '고양이', rabbit: '토끼',
-  gorilla: '고릴라', elephant: '코끼리',
-};
-
-function getEmojiPx(xp: number): number {
-  const minPx = 60;
-  const maxPx = 220;
-  if (xp <= 0) return minPx;
-  const progress = Math.log(1 + xp) / Math.log(1 + 10000);
-  const clamped = Math.min(progress, 1.3);
-  return Math.round(minPx + (maxPx - minPx) * Math.min(clamped, 1.0) + Math.max(0, clamped - 1.0) * 20);
+interface Selection {
+  gameId: string;
+  predictedWinner: string;
+  selectedTeam: string;
+  selectedOrder: number;
 }
 
-function getStreakLabel(streak: number): { text: string; color: string } | null {
-  if (streak <= 0) return null;
-  if (streak >= 30) return { text: `🏆 ${streak}일 연속`, color: 'text-yellow-500' };
-  if (streak >= 14) return { text: `🔥 ${streak}일 연속`, color: 'text-red-500' };
-  if (streak >= 7) return { text: `🔥 ${streak}일 연속`, color: 'text-orange-500' };
-  if (streak >= 3) return { text: `🔥 ${streak}일 연속`, color: 'text-orange-400' };
-  return { text: `${streak}일 연속`, color: 'text-gray-400' };
+function isGameStartedByTime(game: Game): boolean {
+  if (game.status === 'finished' || game.status === 'live') return true;
+  if (!game.startTime || !game.date) return false;
+  try {
+    const [hour, minute] = game.startTime.split(':').map(Number);
+    const now = new Date(Date.now() + 9 * 3600 * 1000);
+    const currentHour = now.getUTCHours();
+    const currentMinute = now.getUTCMinutes();
+    const currentDate = now.toISOString().slice(0, 10);
+    if (currentDate === game.date) {
+      return currentHour > hour || (currentHour === hour && currentMinute >= minute);
+    }
+  } catch {}
+  return false;
 }
 
-const HELP_CARDS = [
-  {
-    icon: '🐾',
-    title: '비스트리그란?',
-    lines: [
-      '실제 KBO 경기 결과로',
-      '내 동물 캐릭터가 성장하는',
-      '육성형 웹앱입니다.',
-      '',
-      '매일 배치하고, XP를 모아',
-      '캐릭터를 키워보세요!',
-    ],
-  },
-  {
-    icon: '⚾',
-    title: '배치하기',
-    lines: [
-      '① 오늘의 경기 중 하나를 선택',
-      '② 응원할 팀을 고르세요',
-      '③ 1~9번 중 타순을 선택',
-      '④ 승리팀을 예측하세요',
-      '',
-      '경기 시작 전까지만 배치 가능!',
-      '경기가 시작되면 수정할 수 없어요.',
-    ],
-  },
-  {
-    icon: '✨',
-    title: 'XP 규칙',
-    lines: [
-      '안타 +8 · 2루타 +12 · 3루타 +20',
-      '홈런 +40 · 타점 +12 · 득점 +8',
-      '도루 +15 · 도루실패 -10',
-      '끝내기 안타 +25',
-      '',
-      '무안타(3타석↑) -15',
-      '팀 승리 +25 · 승리예측 적중 +25',
-    ],
-  },
-  {
-    icon: '🔥',
-    title: '연속 배치 보너스',
-    lines: [
-      '매일 배치하면 연속 보너스!',
-      '',
-      '3일 이상: 매일 +5 XP',
-      '7일 달성: +50 XP 추가 지급',
-      '14일 달성: +100 XP 추가 지급',
-      '30일 달성: +200 XP 추가 지급',
-      '30일 이후: 매일 +10 XP',
-      '',
-      '경기 없는 날은 건너뛰어도 OK!',
-    ],
-  },
-  {
-    icon: '📈',
-    title: '캐릭터 성장',
-    lines: [
-      'XP가 쌓이면 캐릭터가',
-      '점점 커집니다!',
-      '',
-      '랭킹에서 다른 유저와',
-      '크기를 비교해보세요.',
-      '',
-      '내 배치 탭에서 경기별 기록과',
-      'XP 내역을 확인할 수 있어요.',
-    ],
-  },
-];
-
-export default function MainPage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-  const [character, setCharacter] = useState<Character | null>(null);
+export default function MatchPage() {
+  const { data: session } = useSession();
+  const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [showCompare, setShowCompare] = useState(false);
-  const [showDelete, setShowDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
-  const [helpPage, setHelpPage] = useState(0);
-  const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'granted' | 'denied'>('idle');
-  const [showWelcome, setShowWelcome] = useState(false);
+  const [expandedGame, setExpandedGame] = useState<string | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [placementLocked, setPlacementLocked] = useState(false);
+  const [showPushPrompt, setShowPushPrompt] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
 
-  // ✅ token과 apiUrl을 모든 useEffect보다 먼저 선언
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-  const token = (session as any)?.backendToken || (session as any)?.accessToken;
+  const token = (session as any)?.backendToken;
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  // 브라우저 알림 권한 확인 (denied만 체크)
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'denied') setPushStatus('denied');
-    }
-  }, []);
-
-  // 서버에 푸시 토큰이 실제로 등록되어 있는지 확인
-  useEffect(() => {
-    if (!token) return;
-    if (typeof window === 'undefined' || !('Notification' in window)) return;
-    if (Notification.permission !== 'granted') return;
-
-    const checkPushSubscription = async () => {
-      try {
-        const res = await fetch(`${apiUrl}/api/push/status`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setPushStatus(data.subscribed ? 'granted' : 'idle');
-        }
-      } catch (e) {
-        console.error('[Push] Status check failed:', e);
-      }
-    };
-    checkPushSubscription();
-  }, [token, apiUrl]);
-
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
-      return;
-    }
-    if (status === 'authenticated' && token) {
-      fetchCharacter();
-    }
-  }, [status, token]);
-
-  const fetchCharacter = async () => {
-    try {
-      const res = await fetch(`${apiUrl}/api/characters/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        if (res.status === 404) { router.push('/character'); return; }
-        throw new Error('Failed to fetch character');
-      }
-      const data = await res.json();
-      setCharacter(data);
-
-      const welcomeKey = `welcome-shown-${data._id}`;
-      if (!localStorage.getItem(welcomeKey)) {
-        setShowWelcome(true);
-        localStorage.setItem(welcomeKey, 'true');
-      }
-    } catch (error) {
-      console.error('Error fetching character:', error);
-    } finally {
-      setLoading(false);
-    }
+  const todayKST = () => {
+    const now = new Date(Date.now() + 9 * 3600 * 1000);
+    return now.toISOString().slice(0, 10);
   };
 
-  const handleDelete = async () => {
-    setDeleting(true);
+  useEffect(() => {
+    if (!token) return;
+    fetchGames();
+    fetchMyPlacement();
+  }, [token]);
+
+  async function fetchGames() {
+    setLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/api/characters/me`, {
-        method: 'DELETE',
+      const res = await fetch(`${apiUrl}/api/games?date=${todayKST()}`, { headers });
+      if (res.ok) setGames(await res.json());
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  }
+
+  async function fetchMyPlacement() {
+    try {
+      const res = await fetch(`${apiUrl}/api/placements/today`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          setSelection({
+            gameId: data.gameId,
+            predictedWinner: data.predictedWinner || '',
+            selectedTeam: data.team,
+            selectedOrder: data.battingOrder || 0,
+          });
+          if (data.status === 'settled') setPlacementLocked(true);
+        }
+      }
+    } catch (e) { console.error(e); }
+  }
+
+  useEffect(() => {
+    if (selection && games.length > 0) {
+      const placedGame = games.find(g => g.gameId === selection.gameId);
+      if (placedGame && isGameStartedByTime(placedGame)) {
+        setPlacementLocked(true);
+      }
+    }
+  }, [selection, games]);
+
+  function handleExpand(gameId: string) {
+    if (placementLocked) return;
+    setExpandedGame(expandedGame === gameId ? null : gameId);
+  }
+
+  function handlePrediction(gameId: string, team: string) {
+    if (placementLocked) return;
+    setSelection((prev) => ({
+      gameId,
+      predictedWinner: team,
+      selectedTeam: prev?.selectedTeam || '',
+      selectedOrder: prev?.selectedOrder || 0,
+    }));
+  }
+
+  function handleBattingOrder(gameId: string, team: string, order: number) {
+    if (placementLocked) return;
+    setSelection((prev) => ({
+      gameId,
+      predictedWinner: prev?.predictedWinner || '',
+      selectedTeam: team,
+      selectedOrder: order,
+    }));
+  }
+
+  /**
+   * 알림 유도 팝업을 보여줄지 판단
+   * - 브라우저 알림 권한이 granted가 아닐 때
+   * - 이전에 "다음에" 누른 적이 없을 때 (하루에 1번만)
+   * - 서버에 토큰이 등록되어 있지 않을 때
+   */
+  async function shouldShowPushPrompt(): Promise<boolean> {
+    if (typeof window === 'undefined' || !('Notification' in window)) return false;
+    if (Notification.permission === 'denied') return false;
+
+    // 오늘 이미 거절한 적 있으면 안 보여줌
+    const dismissedDate = localStorage.getItem('push-prompt-dismissed');
+    if (dismissedDate === todayKST()) return false;
+
+    // 브라우저 권한이 아직 없으면 보여줌
+    if (Notification.permission === 'default') return true;
+
+    // 권한은 있지만 서버에 토큰이 없을 수 있음
+    try {
+      const res = await fetch(`${apiUrl}/api/push/status`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        alert('캐릭터가 삭제되었습니다.');
-        router.push('/character');
-      } else {
         const data = await res.json();
-        alert(data.error || '삭제 실패');
+        return !data.subscribed;
       }
-    } catch (e) {
-      console.error('Delete failed:', e);
-      alert('삭제 중 오류가 발생했습니다.');
-    } finally {
-      setDeleting(false);
-      setShowDelete(false);
-    }
-  };
+    } catch {}
+    return false;
+  }
 
-  const handlePushSetup = async () => {
-    setMenuOpen(false);
-
-    if (pushStatus === 'granted') {
-      try {
-        const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-        if (reg) {
-          const sub = await reg.pushManager.getSubscription();
-          if (sub) await sub.unsubscribe();
-        }
-        await fetch(`${apiUrl}/api/push/unsubscribe`, {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ fcmToken: 'all' }),
-        });
-        setPushStatus('idle');
-        alert('알림이 해제되었습니다.');
-      } catch (e) {
-        console.error('[Push] Unsubscribe failed:', e);
-        alert('알림 해제 중 오류가 발생했습니다.');
-      }
-      return;
-    }
-
-    setPushStatus('loading');
+  async function handlePushAccept() {
+    setPushLoading(true);
     try {
       const fcmToken = await requestFcmToken();
       if (fcmToken) {
         await fetch(`${apiUrl}/api/push/subscribe`, {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers,
           body: JSON.stringify({ fcmToken }),
         });
-        setPushStatus('granted');
-        alert('알림이 설정되었습니다! 배치 미완료 시 알림을 받을 수 있어요.');
+        setToast('알림이 설정되었습니다!');
       } else {
-        setPushStatus('denied');
-        alert('알림 권한이 차단되었습니다. 브라우저 설정에서 알림을 허용해주세요.');
+        setToast('알림 권한이 차단되었습니다');
       }
-    } catch (e) {
-      console.error('[Push] Setup failed:', e);
-      setPushStatus('idle');
-      alert('알림 설정 중 오류가 발생했습니다.');
+    } catch {
+      setToast('알림 설정 중 오류가 발생했습니다');
     }
-  };
+    setPushLoading(false);
+    setShowPushPrompt(false);
+    setTimeout(() => setToast(null), 2000);
+  }
 
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
-  const handleTouchStart = (e: React.TouchEvent) => setTouchStartX(e.touches[0].clientX);
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX === null) return;
-    const diff = e.changedTouches[0].clientX - touchStartX;
-    if (diff > 50 && helpPage > 0) setHelpPage(helpPage - 1);
-    if (diff < -50 && helpPage < HELP_CARDS.length - 1) setHelpPage(helpPage + 1);
-    setTouchStartX(null);
-  };
+  function handlePushDismiss() {
+    localStorage.setItem('push-prompt-dismissed', todayKST());
+    setShowPushPrompt(false);
+  }
 
-  if (loading || status === 'loading') {
+  async function handleSubmit() {
+    if (placementLocked) {
+      setToast('이미 시작된 경기의 배치는 수정할 수 없습니다');
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
+    if (!selection || !selection.predictedWinner || !selection.selectedOrder) {
+      setToast('승패 예측과 타순을 모두 선택해주세요');
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/placements`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          gameId: selection.gameId,
+          team: selection.selectedTeam,
+          battingOrder: selection.selectedOrder,
+          predictedWinner: selection.predictedWinner,
+        }),
+      });
+      if (res.ok) {
+        setToast('선택 완료!');
+        setExpandedGame(null);
+
+        // 배치 성공 후 알림 유도 팝업 표시 여부 확인
+        const shouldShow = await shouldShowPushPrompt();
+        if (shouldShow) {
+          setTimeout(() => setShowPushPrompt(true), 500);
+        }
+      } else {
+        const err = await res.json();
+        setToast(err.error || '선택 실패');
+      }
+    } catch (e) { setToast('서버 오류'); }
+    setSubmitting(false);
+    setTimeout(() => setToast(null), 2000);
+  }
+
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
@@ -291,205 +232,139 @@ export default function MainPage() {
     );
   }
 
-  if (!character) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <p className="text-gray-500 mb-4">캐릭터를 불러올 수 없습니다</p>
-        <LogoutButton />
-      </div>
-    );
-  }
-
-  const emoji = ANIMAL_EMOJI[character.animalType] || '🐾';
-  const animalName = ANIMAL_NAMES[character.animalType] || character.animalType;
-  const emojiPx = getEmojiPx(character.xp);
-  const initialPx = getEmojiPx(0);
-  const card = HELP_CARDS[helpPage];
-  const streakLabel = getStreakLabel(character.streak || 0);
-
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 relative">
-      <div className="px-4 pt-5 pb-2 flex items-center justify-between">
-        <div />
-        <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
-      </div>
-
-      <div className="flex flex-col items-center justify-center" style={{ minHeight: '65vh' }}>
-        <div
-          className="leading-none select-none transition-all duration-700 ease-out"
-          style={{ fontSize: `${emojiPx}px`, filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.08))' }}
-        >
-          {emoji}
+    <div className="min-h-screen bg-gray-50 p-4 pb-24">
+      {toast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white px-4 py-2 rounded-2xl text-sm shadow-lg">
+          {toast}
         </div>
-        <div className="mt-6 text-center">
-          <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
-          <p className="text-sm text-gray-400 mt-1">
-            {animalName} · {character.xp.toLocaleString()} XP
+      )}
+
+      <h1 className="text-gray-900 text-lg font-bold mb-1">{todayKST()}</h1>
+      <p className="text-gray-400 text-sm mb-4">{games.length}경기</p>
+
+      {placementLocked && selection && (
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
+          <p className="text-orange-600 text-sm font-bold">오늘의 배치가 확정되었습니다</p>
+          <p className="text-orange-400 text-xs mt-1">
+            경기가 시작되어 수정할 수 없습니다 · {selection.selectedTeam} {selection.selectedOrder}번 타자 · {selection.predictedWinner} 승리 예측
           </p>
-          {streakLabel && (
-            <p className={`text-sm font-semibold mt-2 ${streakLabel.color}`}>
-              {streakLabel.text}
-            </p>
-          )}
-        </div>
-      </div>
-
-      <div className="fixed bottom-24 right-4 z-50">
-        {menuOpen && (
-          <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
-            <button onClick={handlePushSetup} disabled={pushStatus === 'loading'} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
-              {pushStatus === 'granted' ? '✅ 알림 설정됨' : pushStatus === 'loading' ? '⏳ 설정 중...' : '🔔 알림 설정'}
-            </button>
-            <button onClick={() => { setShowHelp(true); setHelpPage(0); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
-              ❓ 도움말
-            </button>
-            <button onClick={() => { setShowCompare(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
-              📊 초기와 비교
-            </button>
-            <button onClick={() => { router.push('/my-placements'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
-              📋 내 배치
-            </button>
-            <button onClick={() => { router.push('/match'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
-              ⚾ 오늘의 경기
-            </button>
-            <button onClick={() => { setShowDelete(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50">
-              🗑️ 캐릭터 삭제
-            </button>
-          </div>
-        )}
-        <button
-          onClick={() => { setMenuOpen(!menuOpen); setShowCompare(false); setShowDelete(false); setShowHelp(false); }}
-          className={`w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg flex items-center justify-center text-2xl transition-transform duration-300 hover:bg-orange-600 active:scale-95 ${menuOpen ? 'rotate-45' : ''}`}
-        >
-          +
-        </button>
-      </div>
-
-      {menuOpen && <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />}
-
-      {showHelp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowHelp(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-            <div className="px-6 pt-8 pb-4 text-center min-h-[320px] flex flex-col items-center justify-center">
-              <div className="text-5xl mb-4">{card.icon}</div>
-              <h3 className="text-lg font-bold text-gray-800 mb-4">{card.title}</h3>
-              <div className="space-y-0.5">
-                {card.lines.map((line, i) =>
-                  line === '' ? <div key={i} className="h-3" /> : <p key={i} className="text-sm text-gray-500 leading-relaxed">{line}</p>
-                )}
-              </div>
-            </div>
-            <div className="px-6 pb-6">
-              <div className="flex justify-center gap-1.5 mb-4">
-                {HELP_CARDS.map((_, i) => (
-                  <button key={i} onClick={() => setHelpPage(i)} className={`w-2 h-2 rounded-full transition-all ${i === helpPage ? 'bg-orange-400 w-4' : 'bg-gray-200'}`} />
-                ))}
-              </div>
-              <div className="flex gap-3">
-                {helpPage > 0 ? (
-                  <button onClick={() => setHelpPage(helpPage - 1)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">이전</button>
-                ) : <div className="flex-1" />}
-                {helpPage < HELP_CARDS.length - 1 ? (
-                  <button onClick={() => setHelpPage(helpPage + 1)} className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">다음</button>
-                ) : (
-                  <button onClick={() => setShowHelp(false)} className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">닫기</button>
-                )}
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
-      {showCompare && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowCompare(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-800 mb-6 text-center">초기와 비교</h2>
-            <div className="flex items-end justify-center gap-10 mb-8">
-              <div className="text-center">
-                <div className="leading-none mx-auto grayscale opacity-40" style={{ fontSize: `${initialPx}px` }}>{emoji}</div>
-                <p className="text-xs text-gray-400 mt-3">처음</p>
-                <p className="text-sm font-bold text-gray-400">0 XP</p>
-              </div>
-              <div className="text-2xl text-orange-400 mb-6">→</div>
-              <div className="text-center">
-                <div className="leading-none mx-auto" style={{ fontSize: `${Math.min(emojiPx, 100)}px` }}>{emoji}</div>
-                <p className="text-xs text-orange-500 font-medium mt-3">현재</p>
-                <p className="text-sm font-bold text-gray-800">{character.xp.toLocaleString()} XP</p>
-              </div>
-            </div>
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-500">획득 XP</span>
-                <span className="font-bold text-orange-500">+{character.xp.toLocaleString()} XP</span>
-              </div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-500">캐릭터 크기</span>
-                <span className="font-bold text-gray-800">
-                  {emojiPx <= 60 ? '기본' : emojiPx <= 100 ? '성장 중' : emojiPx <= 160 ? '많이 성장' : '거대'}
-                </span>
-              </div>
-              {(character.streak || 0) > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">연속 배치</span>
-                  <span className="font-bold text-orange-500">{character.streak}일</span>
+      {games.length === 0 ? (
+        <p className="text-gray-400 text-center mt-20">오늘 경기가 없습니다</p>
+      ) : (
+        <div className="space-y-3">
+          {games.map((game) => {
+            const isExpanded = expandedGame === game.gameId;
+            const isSelected = selection?.gameId === game.gameId;
+            const isGameLocked = isGameStartedByTime(game);
+            const cannotModify = placementLocked || isGameLocked;
+
+            return (
+              <div
+                key={game.gameId}
+                className={`rounded-2xl overflow-hidden transition-all shadow-sm ${isSelected ? 'ring-2 ring-orange-400' : ''}`}
+              >
+                <div
+                  onClick={() => !cannotModify && handleExpand(game.gameId)}
+                  className={`bg-white p-4 border border-gray-100 ${cannotModify ? 'opacity-60' : 'cursor-pointer active:bg-gray-50'}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-800 font-medium flex-1 text-center">{game.awayTeam}</span>
+                    <span className="text-gray-300 text-sm mx-3">
+                      {game.status === 'finished' ? `${game.awayScore} : ${game.homeScore}` : isGameLocked ? '경기 중' : game.startTime ? `${game.startTime}` : 'vs'}
+                    </span>
+                    <span className="text-gray-800 font-medium flex-1 text-center">{game.homeTeam}</span>
+                  </div>
+
+                  {isSelected && !isExpanded && selection && (
+                    <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between">
+                      <span className="text-orange-500 text-xs">{selection.predictedWinner} 승리</span>
+                      <span className="text-orange-500 text-xs">{selection.selectedTeam} {selection.selectedOrder}번 타자</span>
+                    </div>
+                  )}
+
+                  {isGameLocked && game.status !== 'finished' && (
+                    <p className="text-gray-400 text-xs text-center mt-1">경기 시작됨</p>
+                  )}
+                  {game.status === 'finished' && (
+                    <p className="text-gray-400 text-xs text-center mt-1">경기 종료</p>
+                  )}
                 </div>
-              )}
-            </div>
-            <button onClick={() => setShowCompare(false)} className="w-full mt-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">닫기</button>
-          </div>
+
+                {isExpanded && !cannotModify && (
+                  <div className="bg-white border-t border-gray-100 p-4 space-y-4">
+                    <div>
+                      <p className="text-gray-400 text-xs mb-2">승리 예측</p>
+                      <div className="flex gap-3">
+                        {[game.awayTeam, game.homeTeam].map((t) => (
+                          <button
+                            key={t}
+                            onClick={() => handlePrediction(game.gameId, t)}
+                            className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
+                              selection?.predictedWinner === t ? 'bg-orange-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'
+                            }`}
+                          >{t}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {[{ label: game.awayTeam, team: game.awayTeam }, { label: game.homeTeam, team: game.homeTeam }].map(({ label, team }) => (
+                      <div key={team}>
+                        <p className="text-gray-400 text-xs mb-2">{label} 타순</p>
+                        <div className="grid grid-cols-9 gap-1">
+                          {[1,2,3,4,5,6,7,8,9].map((n) => (
+                            <button
+                              key={`${team}-${n}`}
+                              onClick={() => handleBattingOrder(game.gameId, team, n)}
+                              className={`py-2 rounded-xl text-xs font-medium transition ${
+                                selection?.selectedTeam === team && selection?.selectedOrder === n
+                                  ? 'bg-orange-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'
+                              }`}
+                            >{n}</button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    <button
+                      onClick={handleSubmit}
+                      disabled={submitting || !selection?.predictedWinner || !selection?.selectedOrder}
+                      className="w-full bg-orange-400 text-white py-3 rounded-2xl font-bold text-sm disabled:opacity-40 transition shadow-md"
+                    >
+                      {submitting ? '저장 중...' : '선택 확정'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {showDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowDelete(false)}>
+      {/* 배치 성공 후 알림 유도 팝업 */}
+      {showPushPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={handlePushDismiss}>
           <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="text-4xl mb-3">{emoji}</div>
-            <h2 className="text-lg font-bold text-gray-800 mb-2">캐릭터를 삭제할까요?</h2>
-            <p className="text-sm text-gray-400 mb-6">
-              <strong>{character.name}</strong>과(와) 모든 배치 기록이 삭제됩니다.
-              <br />이 작업은 되돌릴 수 없습니다.
-            </p>
+            <div className="text-4xl mb-3">🔔</div>
+            <h2 className="text-lg font-bold text-gray-800 mb-2">배치 완료!</h2>
+            <p className="text-sm text-gray-500 mb-1">경기 결과가 나오면 알림으로 알려드릴까요?</p>
+            <p className="text-xs text-gray-400 mb-6">정산 결과와 XP 획득 알림을 받을 수 있어요</p>
             <div className="flex gap-3">
-              <button onClick={() => setShowDelete(false)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">취소</button>
-              <button onClick={handleDelete} disabled={deleting} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 disabled:opacity-50">
-                {deleting ? '삭제 중...' : '삭제'}
+              <button
+                onClick={handlePushDismiss}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-sm font-medium hover:bg-gray-200"
+              >
+                다음에
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showWelcome && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowWelcome(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 pt-8 pb-4 text-center">
-              <div className="text-5xl mb-4">🎉</div>
-              <h3 className="text-lg font-bold text-gray-800 mb-2">캐릭터가 탄생했어요!</h3>
-              <p className="text-sm text-gray-500 leading-relaxed mb-6">
-                매일 KBO 경기에 배치하면<br />
-                실제 선수 성적에 따라 XP를 얻고<br />
-                캐릭터가 성장합니다!
-              </p>
-              <div className="bg-orange-50 rounded-xl p-4 mb-4 text-left">
-                <p className="text-sm font-bold text-orange-600 mb-2">🔔 알림 설정 추천!</p>
-                <p className="text-xs text-orange-500 leading-relaxed">
-                  알림을 켜면 배치를 잊지 않도록<br />
-                  매일 경기 전에 알려드려요.<br />
-                  오른쪽 하단 + 버튼 → 알림 설정
-                </p>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
-                <p className="text-sm font-bold text-gray-700 mb-2">🔥 연속 배치 보너스!</p>
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  3일 연속 배치부터 보너스 XP 지급!<br />
-                  7일 +50, 14일 +100, 30일 +200 XP<br />
-                  매일 배치해서 보너스를 받으세요.
-                </p>
-              </div>
-            </div>
-            <div className="px-6 pb-6">
-              <button onClick={() => setShowWelcome(false)} className="w-full py-3 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">
-                시작하기
+              <button
+                onClick={handlePushAccept}
+                disabled={pushLoading}
+                className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500 disabled:opacity-50"
+              >
+                {pushLoading ? '설정 중...' : '알림 받기'}
               </button>
             </div>
           </div>
