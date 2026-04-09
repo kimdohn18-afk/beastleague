@@ -131,38 +131,38 @@ export default function MainPage() {
   const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'granted' | 'denied'>('idle');
   const [showWelcome, setShowWelcome] = useState(false);
 
-  useEffect(() => {
-  if (typeof window !== 'undefined' && 'Notification' in window) {
-    if (Notification.permission === 'denied') {
-      setPushStatus('denied');
-    }
-    // 'granted'여도 서버에 토큰이 있는지 확인 후 결정
-  }
-}, []);
-
-// 서버에 푸시 토큰이 등록되어 있는지 확인
-useEffect(() => {
-  if (!token) return;
-  if (Notification.permission !== 'granted') return;
-
-  const checkPushSubscription = async () => {
-    try {
-      const res = await fetch(`${apiUrl}/api/push/status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPushStatus(data.subscribed ? 'granted' : 'idle');
-      }
-    } catch (e) {
-      console.error('[Push] Status check failed:', e);
-    }
-  };
-  checkPushSubscription();
-}, [token]);
-
+  // ✅ token과 apiUrl을 모든 useEffect보다 먼저 선언
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
+
+  // 브라우저 알림 권한 확인 (denied만 체크)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'denied') setPushStatus('denied');
+    }
+  }, []);
+
+  // 서버에 푸시 토큰이 실제로 등록되어 있는지 확인
+  useEffect(() => {
+    if (!token) return;
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    const checkPushSubscription = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/push/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPushStatus(data.subscribed ? 'granted' : 'idle');
+        }
+      } catch (e) {
+        console.error('[Push] Status check failed:', e);
+      }
+    };
+    checkPushSubscription();
+  }, [token, apiUrl]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -418,4 +418,83 @@ useEffect(() => {
               </div>
             </div>
             <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex justify-between text<span class="cursor">█</span>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-500">획득 XP</span>
+                <span className="font-bold text-orange-500">+{character.xp.toLocaleString()} XP</span>
+              </div>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-500">캐릭터 크기</span>
+                <span className="font-bold text-gray-800">
+                  {emojiPx <= 60 ? '기본' : emojiPx <= 100 ? '성장 중' : emojiPx <= 160 ? '많이 성장' : '거대'}
+                </span>
+              </div>
+              {(character.streak || 0) > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">연속 배치</span>
+                  <span className="font-bold text-orange-500">{character.streak}일</span>
+                </div>
+              )}
+            </div>
+            <button onClick={() => setShowCompare(false)} className="w-full mt-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">닫기</button>
+          </div>
+        </div>
+      )}
+
+      {showDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowDelete(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="text-4xl mb-3">{emoji}</div>
+            <h2 className="text-lg font-bold text-gray-800 mb-2">캐릭터를 삭제할까요?</h2>
+            <p className="text-sm text-gray-400 mb-6">
+              <strong>{character.name}</strong>과(와) 모든 배치 기록이 삭제됩니다.
+              <br />이 작업은 되돌릴 수 없습니다.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowDelete(false)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">취소</button>
+              <button onClick={handleDelete} disabled={deleting} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 disabled:opacity-50">
+                {deleting ? '삭제 중...' : '삭제'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showWelcome && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowWelcome(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 pt-8 pb-4 text-center">
+              <div className="text-5xl mb-4">🎉</div>
+              <h3 className="text-lg font-bold text-gray-800 mb-2">캐릭터가 탄생했어요!</h3>
+              <p className="text-sm text-gray-500 leading-relaxed mb-6">
+                매일 KBO 경기에 배치하면<br />
+                실제 선수 성적에 따라 XP를 얻고<br />
+                캐릭터가 성장합니다!
+              </p>
+              <div className="bg-orange-50 rounded-xl p-4 mb-4 text-left">
+                <p className="text-sm font-bold text-orange-600 mb-2">🔔 알림 설정 추천!</p>
+                <p className="text-xs text-orange-500 leading-relaxed">
+                  알림을 켜면 배치를 잊지 않도록<br />
+                  매일 경기 전에 알려드려요.<br />
+                  오른쪽 하단 + 버튼 → 알림 설정
+                </p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
+                <p className="text-sm font-bold text-gray-700 mb-2">🔥 연속 배치 보너스!</p>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  3일 연속 배치부터 보너스 XP 지급!<br />
+                  7일 +50, 14일 +100, 30일 +200 XP<br />
+                  매일 배치해서 보너스를 받으세요.
+                </p>
+              </div>
+            </div>
+            <div className="px-6 pb-6">
+              <button onClick={() => setShowWelcome(false)} className="w-full py-3 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">
+                시작하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
