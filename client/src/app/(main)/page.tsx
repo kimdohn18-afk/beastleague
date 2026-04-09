@@ -508,8 +508,8 @@ export default function MainPage() {
       )}
 
       {showPushPrompt && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30" onClick={handlePushPromptDismiss}>
-          <div className="bg-white rounded-t-2xl shadow-xl w-full max-w-sm p-6 mb-0" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center pb-28 bg-black/30" onClick={handlePushPromptDismiss}>
+          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-3">
               <div className="text-3xl">🔔</div>
               <div>
