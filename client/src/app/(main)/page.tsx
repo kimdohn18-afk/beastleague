@@ -105,6 +105,7 @@ export default function MainPage() {
   const [helpPage, setHelpPage] = useState(0);
   const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'granted' | 'denied'>('idle');
   const [showWelcome, setShowWelcome] = useState(false);
+  const [showBlockedGuide, setShowBlockedGuide] = useState(false);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -195,6 +196,11 @@ export default function MainPage() {
 
   const handlePushSetup = async () => {
     setMenuOpen(false);
+
+    if (pushStatus === 'denied') {
+      setShowBlockedGuide(true);
+      return;
+    }
 
     if (pushStatus === 'granted') {
       try {
@@ -302,8 +308,8 @@ export default function MainPage() {
       <div className="fixed bottom-24 right-4 z-50">
         {menuOpen && (
           <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
-            <button onClick={handlePushSetup} disabled={pushStatus === 'loading'} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
-              {pushStatus === 'granted' ? '✅ 알림 설정됨' : pushStatus === 'loading' ? '⏳ 설정 중...' : '🔔 알림 설정'}
+            <button onClick={handlePushSetup} disabled={pushStatus === 'loading'} className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 border-b border-gray-50 ${pushStatus === 'denied' ? 'text-red-400' : 'text-gray-700'}`}>
+              {pushStatus === 'granted' ? '✅ 알림 설정됨' : pushStatus === 'loading' ? '⏳ 설정 중...' : pushStatus === 'denied' ? '🔕 알림 차단됨' : '🔔 알림 설정'}
             </button>
             <button onClick={() => { setShowHelp(true); setHelpPage(0); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
               ❓ 도움말
@@ -414,6 +420,39 @@ export default function MainPage() {
                 {deleting ? '삭제 중...' : '삭제'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showBlockedGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowBlockedGuide(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="text-4xl text-center mb-3">🔕</div>
+            <h2 className="text-lg font-bold text-gray-800 text-center mb-2">알림이 차단되어 있어요</h2>
+            <p className="text-sm text-gray-500 text-center mb-5">
+              브라우저 설정에서 직접 변경해야 합니다.
+            </p>
+            <div className="bg-gray-50 rounded-xl p-4 mb-3">
+              <p className="text-sm font-bold text-gray-700 mb-2">📱 모바일 (Chrome)</p>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                주소창 왼쪽 🔒 아이콘 탭<br />
+                → 권한 또는 사이트 설정<br />
+                → 알림 → 허용으로 변경<br />
+                → 페이지 새로고침
+              </p>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-4 mb-5">
+              <p className="text-sm font-bold text-gray-700 mb-2">💻 PC (Chrome)</p>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                주소창 왼쪽 🔒 아이콘 클릭<br />
+                → 사이트 설정<br />
+                → 알림 → 허용으로 변경<br />
+                → 페이지 새로고침
+              </p>
+            </div>
+            <button onClick={() => setShowBlockedGuide(false)} className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">
+              닫기
+            </button>
           </div>
         </div>
       )}
