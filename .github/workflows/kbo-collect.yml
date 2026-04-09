@@ -2,8 +2,8 @@ name: KBO Data Collector
 
 on:
   schedule:
-    - cron: '0 0 * * *'     # UTC 00:00 = KST 09:00 (어제 미정산 + 오늘 일정)
-    - cron: '0 14 * * *'    # UTC 14:00 = KST 23:00 (오늘 결과 + 정산)
+    - cron: '0 0 * * *'     # UTC 00:00 = KST 09:00 (어제 미정산 + 오늘 일정 보완)
+    - cron: '0 14 * * *'    # UTC 14:00 = KST 23:00 (오늘 결과 + 정산 + 내일 일정)
   workflow_dispatch:
     inputs:
       date:
@@ -37,16 +37,19 @@ jobs:
             HOUR=$(TZ=Asia/Seoul date +%H)
             TODAY=$(TZ=Asia/Seoul date +%Y%m%d)
             YESTERDAY=$(TZ=Asia/Seoul date -d "yesterday" +%Y%m%d)
+            TOMORROW=$(TZ=Asia/Seoul date -d "tomorrow" +%Y%m%d)
 
             if [ "$HOUR" -lt 12 ]; then
               echo "🌅 오전 실행 (KST $HOUR시)"
               echo "  → 어제 ($YESTERDAY) 미정산 경기 수집"
               python kbo_collector.py $YESTERDAY
-              echo "  → 오늘 ($TODAY) 일정 수집"
+              echo "  → 오늘 ($TODAY) 일정 보완"
               python kbo_collector.py $TODAY
             else
               echo "🌙 야간 실행 (KST $HOUR시)"
               echo "  → 오늘 ($TODAY) 결과 수집 + 정산"
               python kbo_collector.py $TODAY
+              echo "  → 내일 ($TOMORROW) 일정 미리 수집"
+              python kbo_collector.py $TOMORROW
             fi
           fi
