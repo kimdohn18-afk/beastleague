@@ -7,6 +7,9 @@ export interface ICharacter extends Document {
   xp: number;
   streak: number;
   lastPlacementDate: string | null;
+  totalPlacements: number;
+  activeTrait: string | null;
+  earnedBadges: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,6 +22,9 @@ const characterSchema = new Schema<ICharacter>(
     xp:                 { type: Number, default: 0 },
     streak:             { type: Number, default: 0 },
     lastPlacementDate:  { type: String, default: null },
+    totalPlacements:    { type: Number, default: 0 },
+    activeTrait:        { type: String, default: null },
+    earnedBadges:       [{ type: String }],
   },
   { timestamps: true }
 );
