@@ -56,8 +56,38 @@ isCorrect = true;
 
       const totalXp = breakdown.total + xpFromPrediction + xpFromStreak;
 
-character.xp = (character.xp || 0) + totalXp;
-await character.save();
+      character.xp = (character.xp || 0) + totalXp;
+      character.totalPlacements = (character.totalPlacements || 0) + 1;
+
+      // 10회 배수마다 칭호/뱃지 재계산
+      if (character.totalPlacements >= 10 && character.totalPlacements % 10 === 0) {
+        try {
+          const { calculateTraits, getBadgeById } = await import('./TraitCalculator');
+          const traitResult = await calculateTraits(character);
+          character.activeTrait = traitResult.activeTrait;
+          character.earnedBadges = traitResult.earnedBadges;
+
+          if (traitResult.newBadges.length > 0) {
+            const badgeNames = traitResult.newBadges
+              .map(id => {
+                const b = getBadgeById(id);
+                return b ? `${b.emoji} ${b.name}` : id;
+              })
+              .join(', ');
+
+            sendPushToUser(
+              String(placement.userId),
+              '🏆 새 뱃지 획득!',
+              `${badgeNames}을(를) 달성했어요!`,
+              { url: '/badges' }
+            ).catch((e) => console.error('[Push] Badge push error:', e));
+          }
+        } catch (e) {
+          console.error('[Trait] Calculation error:', e);
+        }
+      }
+
+      await character.save();
 @@ -106,16 +145,25 @@ export async function settleGame(
 battingOrder: placement.battingOrder,
 xpFromPlayer: xpFromPlayer + breakdown.teamResult,
