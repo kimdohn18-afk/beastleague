@@ -74,3 +74,44 @@ charactersRouter.get('/me/history', authenticateUser, async (req: Request, res: 
     return res.status(500).json({ error: String(err) });
   }
 });
+
+import { getAllBadges, getBadgeById } from '../services/TraitCalculator';
+
+// 전체 뱃지 목록 (잠금/해금 표시용)
+characterRouter.get('/badges/all', (req, res) => {
+  res.json(getAllBadges());
+});
+
+// 내 뱃지 정보
+characterRouter.get('/me/badges', authMiddleware, async (req, res) => {
+  try {
+    const character = await Character.findOne({ userId: req.user!._id });
+    if (!character) return res.status(404).json({ error: '캐릭터 없음' });
+
+    const allBadges = getAllBadges();
+    const earned = new Set(character.earnedBadges || []);
+
+    const badges = allBadges.map(b => ({
+      ...b,
+      earned: earned.has(b.id),
+    }));
+
+    const activeBadge = character.activeTrait
+      ? getBadgeById(character.activeTrait)
+      : null;
+
+    res.json({
+      activeTrait: activeBadge ? {
+        id: activeBadge.id,
+        emoji: activeBadge.emoji,
+        name: activeBadge.name,
+        description: activeBadge.description,
+      } : null,
+      earnedCount: earned.size,
+      totalCount: allBadges.length,
+      badges,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
