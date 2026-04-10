@@ -630,3 +630,8 @@ useEffect(() => {
     </div>
   );
 }
+
+<button onClick={() => { setMenuOpen(false); router.push('/badges'); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
+  🏆 내 뱃지
+</button>
+
