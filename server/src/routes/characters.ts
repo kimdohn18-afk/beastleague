@@ -77,8 +77,6 @@ charactersRouter.get('/me/history', authenticateUser, async (req: Request, res: 
 
 import { getAllBadges, getBadgeById } from '../services/TraitCalculator';
 
-import { getAllBadges, getBadgeById } from '../services/TraitCalculator';
-
 // 전체 뱃지 목록
 charactersRouter.get('/badges/all', (_req: Request, res: Response) => {
   res.json(getAllBadges());
