@@ -124,3 +124,33 @@ internalRouter.get('/push-stats', async (req: Request, res: Response) => {
     return res.status(500).json({ error: String(err) });
   }
 });
+
+// 기존 유저 칭호 일괄 계산
+internalRouter.post('/recalculate-traits', async (req, res) => {
+  try {
+    const { Character } = await import('../models/Character');
+    const { Placement } = await import('../models/Placement');
+    const { calculateTraits } = await import('../services/TraitCalculator');
+
+    const characters = await Character.find({});
+    let updated = 0;
+
+    for (const character of characters) {
+      const count = await Placement.countDocuments({ userId: character.userId, status: 'settled' });
+      character.totalPlacements = count;
+
+      if (count >= 1) {
+        const result = await calculateTraits(character);
+        character.activeTrait = result.activeTrait;
+        character.earnedBadges = result.earnedBadges;
+      }
+
+      await character.save();
+      updated++;
+    }
+
+    res.json({ success: true, updated });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
