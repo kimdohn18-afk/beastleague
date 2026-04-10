@@ -12,6 +12,9 @@ interface Character {
   animalType: string;
   xp: number;
   userId: string;
+  activeTrait?: string | null;
+  earnedBadges?: string[];
+  totalPlacements?: number;
 }
 
 const ANIMAL_EMOJI: Record<string, string> = {
