@@ -450,7 +450,7 @@ export async function calculateTraits(
   const userId = character.userId;
 
   // 전체 배치 가져오기 (정산 완료된 것만)
-  const allPlacements = await Placement.find({ userId, status: 'settled' }).sort({ createdAt: -1 }).lean() as IPlacement[];
+const allPlacements = await Placement.find({ userId, status: 'settled' }).sort({ createdAt: -1 }).lean() as unknown as IPlacement[];
 
   if (allPlacements.length === 0) {
     return { activeTrait: null, earnedBadges: [], newBadges: [] };
