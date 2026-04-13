@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { shareResult } from '@/lib/kakaoShare';
 
 interface BatterRecord {
   order: string;
@@ -101,13 +102,28 @@ export default function MyPlacementsPage() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
-
+  const [characterName, setCharacterName] = useState('');
+  
   useEffect(() => {
-    if (authStatus === 'unauthenticated') router.push('/login');
-    if (!token) return;
-    fetchHistory();
-  }, [token, authStatus]);
+  if (authStatus === 'unauthenticated') router.push('/login');
+  if (!token) return;
+  fetchHistory();
+  fetchCharacterName();  // ← 추가
+}, [token, authStatus]);
 
+async function fetchCharacterName() {
+  try {
+    const res = await fetch(`${apiUrl}/api/characters/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setCharacterName(data.name);
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
   async function fetchHistory() {
     setLoading(true);
     try {
@@ -326,17 +342,42 @@ export default function MyPlacementsPage() {
                       <span className="text-gray-400 text-xs">· {p.predictedWinner} 승리 예측</span>
                     </div>
 
-                    {isSettled && (
+                                       {isSettled && (
                       <div className="mt-3 flex items-center justify-between">
                         <span className={`text-lg font-bold ${isPositive ? 'text-emerald-500' : 'text-red-400'}`}>
                           {isPositive ? '+' : ''}{totalXpItem} XP
                         </span>
-                        <button
-                          onClick={() => setExpandedId(isExpanded ? null : p._id)}
-                          className="text-xs text-gray-400 underline"
-                        >
-                          {isExpanded ? '접기' : '상세보기'}
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (p.game) {
+                                shareResult({
+                                  characterName,
+                                  team: p.team,
+                                  battingOrder: p.battingOrder,
+                                  totalXp: totalXpItem,
+                                  isCorrect: !!p.isCorrect,
+                                  predictedWinner: p.predictedWinner,
+                                  awayTeam: p.game.awayTeam,
+                                  homeTeam: p.game.homeTeam,
+                                  awayScore: p.game.awayScore ?? 0,
+                                  homeScore: p.game.homeScore ?? 0,
+                                  date: p.date,
+                                });
+                              }
+                            }}
+                            className="text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded-lg font-medium"
+                          >
+                            공유
+                          </button>
+                          <button
+                            onClick={() => setExpandedId(isExpanded ? null : p._id)}
+                            className="text-xs text-gray-400 underline"
+                          >
+                            {isExpanded ? '접기' : '상세보기'}
+                          </button>
+                        </div>
                       </div>
                     )}
 
