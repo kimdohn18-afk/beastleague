@@ -262,6 +262,23 @@ useEffect(() => {
       const data = await res.json();
       setCharacter(data);
 
+    if (!data.tutorialCompleted) {
+        router.push('/tutorial');
+        return;
+      }
+
+      const welcomeKey = `welcome-shown-${data._id}`;
+      if (!localStorage.getItem(welcomeKey)) {
+        setShowWelcome(true);
+        localStorage.setItem(welcomeKey, 'true');
+      }
+    } catch (error) {
+      console.error('Error fetching character:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
       const welcomeKey = `welcome-shown-${data._id}`;
       if (!localStorage.getItem(welcomeKey)) {
         setShowWelcome(true);
