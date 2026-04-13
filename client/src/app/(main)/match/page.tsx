@@ -108,15 +108,15 @@ export default function MatchPage() {
   }
 
   function handlePrediction(gameId: string, team: string) {
-    if (placementLocked) return;
-    setSelection((prev) => ({
-      gameId,
-      predictedWinner: team,
-      selectedTeam: prev?.selectedTeam || '',
-      selectedOrder: prev?.selectedOrder || 0,
-    }));
-  }
-
+  if (placementLocked) return;
+  setSelection((prev) => ({
+    gameId,
+    predictedWinner: team,
+    selectedTeam: prev?.gameId === gameId ? prev.selectedTeam : '',
+    selectedOrder: prev?.gameId === gameId ? prev.selectedOrder : 0,
+  }));
+}
+  
   function handleBattingOrder(gameId: string, team: string, order: number) {
     if (placementLocked) return;
     setSelection((prev) => ({
