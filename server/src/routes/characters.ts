@@ -76,23 +76,23 @@ charactersRouter.get('/me/history', authenticateUser, async (req: Request, res: 
   }
 });
 
-import { getAllBadges, getBadgeById } from '../services/TraitCalculator';
+import { getAllachievements, getBadgeById } from '../services/TraitCalculator';
 
 // 전체 뱃지 목록
-charactersRouter.get('/badges/all', (_req: Request, res: Response) => {
-  res.json(getAllBadges());
+charactersRouter.get('/achievements/all', (_req: Request, res: Response) => {
+  res.json(getAllachievements());
 });
 
 // 내 뱃지 정보
-charactersRouter.get('/me/badges', authenticateUser, async (req: Request, res: Response) => {
+charactersRouter.get('/me/achievements', authenticateUser, async (req: Request, res: Response) => {
   try {
     const character = await Character.findOne({ userId: req.user!.userId });
     if (!character) return res.status(404).json({ error: '캐릭터 없음' });
 
-    const allBadges = getAllBadges();
-    const earned = new Set(character.earnedBadges || []);
+    const allachievements = getAllachievements();
+    const earned = new Set(character.earnedachievements || []);
 
-    const badges = allBadges.map(b => ({
+    const achievements = allachievements.map(b => ({
       ...b,
       earned: earned.has(b.id),
     }));
@@ -109,8 +109,8 @@ charactersRouter.get('/me/badges', authenticateUser, async (req: Request, res: R
         description: activeBadge.description,
       } : null,
       earnedCount: earned.size,
-      totalCount: allBadges.length,
-      badges,
+      totalCount: allachievements.length,
+      achievements,
     });
   } catch (e) {
     res.status(500).json({ error: String(e) });
