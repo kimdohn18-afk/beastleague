@@ -85,34 +85,31 @@ charactersRouter.get('/achievements/all', (_req: Request, res: Response) => {
 
 // 내 뱃지 정보
 charactersRouter.get('/me/achievements', authenticateUser, async (req: Request, res: Response) => {
+  router.get('/me/achievements', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const character = await Character.findOne({ userId: req.user!.userId });
-    if (!character) return res.status(404).json({ error: '캐릭터 없음' });
+    const userId = req.user!.userId;
+    const character = await Character.findOne({ userId });
+    if (!character) return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
 
-    const allachievements = getAllachievements();
-    const earned = new Set(character.earnedachievements || []);
+    const { activeTrait, earned, teamAchievements, earnedCount } =
+      await calculateAchievements(userId, String(character._id));
 
-    const achievements = allachievements.map(b => ({
-      ...b,
-      earned: earned.has(b.id),
+    const allDefs = getAllAchievements();
+    const badges = allDefs.map(d => ({
+      ...d,
+      earned: earned.includes(d.id),
     }));
 
-    const activeBadge = character.activeTrait
-      ? getBadgeById(character.activeTrait)
-      : null;
+    const totalCount = allDefs.length + KBO_TEAMS.length; // 51 + 10 = 61
 
-    res.json({
-      activeTrait: activeBadge ? {
-        id: activeBadge.id,
-        emoji: activeBadge.emoji,
-        name: activeBadge.name,
-        description: activeBadge.description,
-      } : null,
-      earnedCount: earned.size,
-      totalCount: allachievements.length,
-      achievements,
+    return res.json({
+      activeTrait,
+      earnedCount,
+      totalCount,
+      achievements: badges,
+      teamAchievements,
     });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
   }
 });
