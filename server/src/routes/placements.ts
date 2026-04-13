@@ -111,6 +111,16 @@ placementsRouter.post('/', authenticateUser, async (req: Request, res: Response)
         return res.status(400).json({ error: '이미 시작된 경기입니다' });
       }
 
+      if (predictedWinner !== newGame.homeTeam && predictedWinner !== newGame.awayTeam) {
+        return res.status(400).json({ error: '승리 예측은 배치한 경기의 팀만 선택할 수 있습니다' });
+      }
+
+      existing.gameId = gameId;
+      existing.team = team;
+      existing.battingOrder = battingOrder;
+      existing.predictedWinner = predictedWinner;
+      await existing.save();
+
       existing.gameId = gameId;
       existing.team = team;
       existing.battingOrder = battingOrder;
@@ -128,6 +138,10 @@ placementsRouter.post('/', authenticateUser, async (req: Request, res: Response)
     if (!game) return res.status(400).json({ error: '존재하지 않는 경기입니다' });
     if (isGameStarted(game)) {
       return res.status(400).json({ error: '이미 시작된 경기입니다' });
+    }
+
+     if (predictedWinner !== game.homeTeam && predictedWinner !== game.awayTeam) {
+      return res.status(400).json({ error: '승리 예측은 배치한 경기의 팀만 선택할 수 있습니다' });
     }
 
     const placement = await Placement.create({
