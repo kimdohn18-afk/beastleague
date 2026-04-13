@@ -100,3 +100,39 @@ export function shareResult(params: {
     ],
   });
 }
+
+/** 캐릭터(메인 화면) 공유 */
+export function shareCharacter(params: {
+  characterName: string;
+  animalName: string;
+  animalEmoji: string;
+  xp: number;
+  traitName?: string;
+}) {
+  if (!ensureInit()) return;
+
+  const { characterName, animalName, animalEmoji, xp, traitName } = params;
+  const traitLine = traitName ? `\n칭호: ${traitName}` : '';
+
+  window.Kakao.Share.sendDefault({
+    objectType: 'feed',
+    content: {
+      title: `${animalEmoji} ${characterName}`,
+      description: `${animalName} · ${xp.toLocaleString()} XP${traitLine}\n\n비스트리그에서 내 캐릭터를 키우고 있어요!`,
+      imageUrl: 'https://beastleague.vercel.app/icon-512.png',
+      link: {
+        mobileWebUrl: 'https://beastleague.vercel.app',
+        webUrl: 'https://beastleague.vercel.app',
+      },
+    },
+    buttons: [
+      {
+        title: '나도 시작하기',
+        link: {
+          mobileWebUrl: 'https://beastleague.vercel.app',
+          webUrl: 'https://beastleague.vercel.app',
+        },
+      },
+    ],
+  });
+}
