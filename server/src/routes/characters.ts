@@ -3,6 +3,7 @@ import { authenticateUser } from '../middleware/auth';
 import { Character } from '../models/Character';
 import { StatLog } from '../models/StatLog';
 import { Placement } from '../models/Placement';
+import { calculateAchievements, getAllAchievements, KBO_TEAMS } from '../services/TraitCalculator';
 
 export const charactersRouter = Router();
 
