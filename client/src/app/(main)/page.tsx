@@ -14,7 +14,7 @@ interface Character {
   xp: number;
   userId: string;
   activeTrait?: string | null;
-  earnedBadges?: string[];
+  earnedachievements?: string[];
   totalPlacements?: number;
 }
 
@@ -487,7 +487,7 @@ useEffect(() => {
             <button onClick={() => { setShowHelp(true); setHelpPage(0); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
               ❓ 도움말
             </button>
-            <button onClick={() => { router.push('/badges'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
+            <button onClick={() => { router.push('/achievements'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
               🏆 내 업적
             </button>
             <button onClick={() => {
