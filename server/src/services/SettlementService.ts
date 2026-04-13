@@ -117,31 +117,44 @@ export async function settleGame(
       character.xp = (character.xp || 0) + totalXp;
       character.totalPlacements = (character.totalPlacements || 0) + 1;
 
-      // 10회 배수마다 칭호/뱃지 재계산
+      // 10회 배수마다 업적 재계산
       if (character.totalPlacements >= 10 && character.totalPlacements % 10 === 0) {
         try {
-          const { calculateTraits, getBadgeById } = await import('./TraitCalculator');
-          const traitResult = await calculateTraits(character);
-          character.activeTrait = traitResult.activeTrait;
-          character.earnedBadges = traitResult.earnedBadges;
+          const { calculateAchievements, getAchievementById } = await import('./TraitCalculator');
+          const achResult = await calculateAchievements(String(placement.userId), String(character._id));
 
-          if (traitResult.newBadges.length > 0) {
-            const badgeNames = traitResult.newBadges
-              .map(id => {
-                const b = getBadgeById(id);
-                return b ? `${b.emoji} ${b.name}` : id;
+          character.activeTrait = achResult.activeTrait
+            ? `${achResult.activeTrait.emoji} ${achResult.activeTrait.name}`
+            : null;
+
+          // 새 업적 알림 (이전 earned와 비교)
+          const prevEarned: string[] = (character as any).earnedAchievements || [];
+          const newAchievements = achResult.earned.filter((id: string) => !prevEarned.includes(id));
+
+          (character as any).earnedAchievements = achResult.earned;
+          (character as any).teamAchievements = achResult.teamAchievements.map((t: any) => ({
+            teamId: t.teamId,
+            tier: t.tier.tier,
+            count: t.count,
+          }));
+
+          if (newAchievements.length > 0) {
+            const achNames = newAchievements
+              .map((id: string) => {
+                const a = getAchievementById(id);
+                return a ? `${a.emoji} ${a.name}` : id;
               })
               .join(', ');
 
             sendPushToUser(
               String(placement.userId),
-              '🏆 새 뱃지 획득!',
-              `${badgeNames}을(를) 달성했어요!`,
-              { url: '/badges' }
-            ).catch((e) => console.error('[Push] Badge push error:', e));
+              '🏆 새 업적 달성!',
+              `${achNames}을(를) 달성했어요!`,
+              { url: '/achievements' }
+            ).catch((e) => console.error('[Push] Achievement push error:', e));
           }
         } catch (e) {
-          console.error('[Trait] Calculation error:', e);
+          console.error('[Achievement] Calculation error:', e);
         }
       }
 
