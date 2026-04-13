@@ -490,7 +490,7 @@ useEffect(() => {
         </div>
       </div>
 
-           <div className="fixed bottom-24 right-4 z-50">
+              <div className="fixed bottom-24 right-4 z-50">
         {menuOpen && (
           <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
             <button onClick={handlePushSetup} disabled={pushStatus === 'loading'} className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 border-b border-gray-50 ${pushStatus === 'denied' ? 'text-red-400' : 'text-gray-700'}`}>
@@ -514,13 +514,16 @@ useEffect(() => {
                 });
               }
               setMenuOpen(false);
-            }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50">
+            }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
               📢 공유하기
+            </button>
+            <button onClick={() => { setShowDelete(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50">
+              🗑️ 캐릭터 삭제
             </button>
           </div>
         )}
         <button
-          onClick={() => { setMenuOpen(!menuOpen); setShowHelp(false); }}
+          onClick={() => { setMenuOpen(!menuOpen); setShowDelete(false); setShowHelp(false); }}
           className={`w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg flex items-center justify-center text-2xl transition-transform duration-300 hover:bg-orange-600 active:scale-95 ${menuOpen ? 'rotate-45' : ''}`}
         >
           +
