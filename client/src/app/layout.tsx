@@ -22,6 +22,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ko">
       <head>
         <link rel="apple-touch-icon" href="/icon-192.png" />
+        {/* 카카오 SDK */}
+        <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" defer />
       </head>
       <body className="bg-gray-50 text-gray-900 min-h-screen">
         <Providers>{children}</Providers>
