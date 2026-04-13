@@ -1,451 +1,449 @@
-import { Placement, IPlacement } from '../models/Placement';
+import { Placement } from '../models/Placement';
+import { Character } from '../models/Character';
+import { League } from '../models/League';
 import { Game } from '../models/Game';
-import { Character, ICharacter } from '../models/Character';
+import mongoose from 'mongoose';
 
-export interface BadgeDefinition {
+// ━━━ 타입 정의 ━━━
+export interface AchievementDefinition {
   id: string;
   emoji: string;
   name: string;
-  category: 'achievement' | 'batting' | 'team' | 'streak' | 'special';
+  category: string;
   description: string;
-  condition: string; 
-  check: (ctx: TraitContext) => boolean;
+  condition: string;
+  check: (ctx: AchievementContext) => boolean;
 }
 
-export interface TraitContext {
-  recent10: IPlacement[];
-  prev10: IPlacement[];
-  allPlacements: IPlacement[];
-  character: ICharacter;
-  // 사전 계산된 통계
-  recent10Correct: number;
-  recent10Total: number;
-  recentTeams: Map<string, number>;
-  recentOrders: Map<number, number>;
-  recentHomeCount: number;
-  recentAwayCount: number;
-  allTeams: Set<string>;
-  allOrders: Set<number>;
-  // 누적 XP 항목별 발생 횟수
-  cumulativeHomeRuns: number;
-  cumulativeStolenBases: number;
-  cumulativeWalkOffs: number;
-  cumulativeCaughtStealing: number;
-  cumulativeNoHitPenalty: number;
-  // 최근 10회 XP 항목별 발생 횟수
-  recentHitsCount: number;
-  recentRbiCount: number;
-  recentRunsCount: number;
-  // 최근 10회 XP 합계
-  recentXpSum: number;
-  prevXpSum: number;
-  // 단일 배치 최대 XP
+export interface TeamAchievementTier {
+  tier: 'bronze' | 'silver' | 'gold' | 'diamond';
+  minCount: number;
+  emoji: string;
+  label: string;
+}
+
+export interface AchievementContext {
+  totalPlacements: number;
+  totalXp: number;
+  correctPredictions: number;
+  maxConsecutiveCorrect: number;
+  currentStreak: number;
+  maxStreak: number;
+  homerunGames: number;
+  extraBaseHitGames: number;
+  stolenBaseGames: number;
+  walkoffGames: number;
+  totalHits: number;
+  totalRbi: number;
+  totalRuns: number;
   maxSingleXp: number;
-  // 현재 획득 뱃지 수
-  currentBadgeCount: number;
+  minSingleXp: number;
+  hasNegativeXp: boolean;
+  hasZeroXp: boolean;
+  noHitGames: number;
+  failedPredictions: number;
+  maxTeamLoseStreak: number;
+  teamLossHighXpCount: number; // 팀 패배인데 XP 30+
+  uniqueOrders: Set<number>;
+  uniqueTeams: Set<string>;
+  leagueCount: number;
+  earnedCount: number; // 수집 업적용 (재귀 계산)
+  teamPlacementCounts: Record<string, number>;
 }
 
-export const BADGE_DEFINITIONS: BadgeDefinition[] = [
-  // ── 🏆 성과 ──
-  { id: 'prophet', emoji: '🔮', name: '예언자', category: 'achievement',
-    description: '경기의 흐름을 읽는 자',
-    condition: '최근 10경기 승리 예측 적중률 70% 이상',
-    check: (ctx) => ctx.recent10Total >= 10 && ctx.recent10Correct / ctx.recent10Total >= 0.7 },
-  { id: 'oracle', emoji: '🔮', name: '신탁', category: 'achievement',
-    description: '거의 틀리지 않는 경지',
-    condition: '최근 10경기 승리 예측 적중률 90% 이상',
-    check: (ctx) => ctx.recent10Total >= 10 && ctx.recent10Correct / ctx.recent10Total >= 0.9 },
-  { id: 'hr_hunter', emoji: '💣', name: '홈런 헌터', category: 'achievement',
-    description: '한두 번이 아니다, 대포 노선',
-    condition: '누적 홈런 배치 5회 이상',
-    check: (ctx) => ctx.cumulativeHomeRuns >= 5 },
-  { id: 'hr_master', emoji: '💥', name: '홈런 마스터', category: 'achievement',
-    description: '홈런 타순을 꿰뚫는 경지',
-    condition: '누적 홈런 배치 15회 이상',
-    check: (ctx) => ctx.cumulativeHomeRuns >= 15 },
-  { id: 'speedster', emoji: '🏃', name: '스피드스터', category: 'achievement',
-    description: '빠른 선수를 찾는 감각',
-    condition: '누적 도루 배치 5회 이상',
-    check: (ctx) => ctx.cumulativeStolenBases >= 5 },
-  { id: 'hit_machine', emoji: '🛡️', name: '안타 제조기', category: 'achievement',
-    description: '거의 매번 안타가 나온다',
-    condition: '최근 10경기 중 8경기 이상 안타 기록',
-    check: (ctx) => ctx.recentHitsCount >= 8 },
-  { id: 'rbi_collector', emoji: '🎯', name: '타점 수집가', category: 'achievement',
-    description: '타점이 꾸준히 따라오는 선구안',
-    condition: '최근 10경기 중 7경기 이상 타점 기록',
-    check: (ctx) => ctx.recentRbiCount >= 7 },
-  { id: 'reverse_prophet', emoji: '🎰', name: '역예측왕', category: 'achievement',
-    description: '예측은 빗나가도 배치는 계속된다',
-    condition: '최근 10경기 승리 예측 적중률 20% 이하',
-    check: (ctx) => ctx.recent10Total >= 10 && ctx.recent10Correct / ctx.recent10Total <= 0.2 },
-  { id: 'run_radar', emoji: '🏅', name: '득점 레이더', category: 'achievement',
-    description: '득점 냄새를 맡는 자',
-    condition: '최근 10경기 중 7경기 이상 득점 기록',
-    check: (ctx) => ctx.recentRunsCount >= 7 },
-  { id: 'walkoff_magnet', emoji: '🔗', name: '끝내기 체질', category: 'achievement',
-    description: '끝내기를 부르는 손',
-    condition: '누적 끝내기 안타 3회 이상',
-    check: (ctx) => ctx.cumulativeWalkOffs >= 3 },
-  { id: 'caught_stealing_king', emoji: '⚠️', name: '도루 실패왕', category: 'achievement',
-    description: '도전은 했지만 결과는...',
-    condition: '누적 도루 실패 3회 이상',
-    check: (ctx) => ctx.cumulativeCaughtStealing >= 3 },
-  { id: 'nohit_survivor', emoji: '📊', name: '무안타 서바이버', category: 'achievement',
-    description: '바닥을 찍고도 살아남았다',
-    condition: '누적 무안타 5회 이상 & XP가 0보다 높음',
-    check: (ctx) => ctx.cumulativeNoHitPenalty >= 5 && ctx.character.xp > 0 },
-
-  // ── ⚾ 타순 전략 ──
-  { id: 'leadoff_maniac', emoji: '⚡', name: '리드오프 마니아', category: 'batting',
-    description: '시작은 1번 타자부터',
-    condition: '최근 10경기 중 50% 이상 1번 타자 선택',
-    check: (ctx) => (ctx.recentOrders.get(1) || 0) / ctx.recent10Total >= 0.5 },
-  { id: 'cleanup_killer', emoji: '🔨', name: '클린업 킬러', category: 'batting',
-    description: '중심타선만 노린다',
-    condition: '최근 10경기 중 70% 이상 3·4·5번 타자 선택',
-    check: (ctx) => { const c = (ctx.recentOrders.get(3)||0)+(ctx.recentOrders.get(4)||0)+(ctx.recentOrders.get(5)||0); return c / ctx.recent10Total >= 0.7; } },
-  { id: 'lower_gambler', emoji: '🔧', name: '하위타선 도박사', category: 'batting',
-    description: '남들이 안 보는 곳에서 XP를 캔다',
-    condition: '최근 10경기 중 50% 이상 7·8·9번 타자 선택',
-    check: (ctx) => { const c = (ctx.recentOrders.get(7)||0)+(ctx.recentOrders.get(8)||0)+(ctx.recentOrders.get(9)||0); return c / ctx.recent10Total >= 0.5; } },
-  { id: 'order_nomad', emoji: '🎪', name: '타순 유목민', category: 'batting',
-    description: '매번 다른 타순에 도전',
-    condition: '최근 10경기에서 7가지 이상 타순 사용',
-    check: (ctx) => ctx.recentOrders.size >= 7 },
-  { id: 'four_obsession', emoji: '4️⃣', name: '4번 집착', category: 'batting',
-    description: '4번이 아니면 배치가 아니다',
-    condition: '최근 10경기 중 60% 이상 4번 타자 선택',
-    check: (ctx) => (ctx.recentOrders.get(4) || 0) / ctx.recent10Total >= 0.6 },
-  { id: 'full_count', emoji: '🔄', name: '풀카운트', category: 'batting',
-    description: '모든 타순을 경험한 탐험가',
-    condition: '누적으로 1~9번 모든 타순을 경험',
-    check: (ctx) => ctx.allOrders.size >= 9 },
-  { id: 'second_artisan', emoji: '2️⃣', name: '2번 장인', category: 'batting',
-    description: '연결 타순의 미학',
-    condition: '최근 10경기 중 50% 이상 2번 타자 선택',
-    check: (ctx) => (ctx.recentOrders.get(2) || 0) / ctx.recent10Total >= 0.5 },
-  { id: 'odd_even_master', emoji: '🎲', name: '홀짝 마스터', category: 'batting',
-    description: '본인만의 규칙이 있다',
-    condition: '최근 10경기 타순이 모두 홀수 또는 모두 짝수',
-    check: (ctx) => { const orders = ctx.recent10.map(p => p.battingOrder); return orders.length >= 10 && (orders.every(o => o % 2 === 1) || orders.every(o => o % 2 === 0)); } },
-
-  // ── ❤️ 팀 성향 ──
-  { id: 'one_team', emoji: '❤️', name: '원팀 충성파', category: 'team',
-    description: '한 팀만을 위한 배치',
-    condition: '최근 10경기 중 80% 이상 같은 팀 선택',
-    check: (ctx) => { const max = Math.max(...ctx.recentTeams.values()); return max / ctx.recent10Total >= 0.8; } },
-  { id: 'team_explorer', emoji: '🎲', name: '팀 탐험가', category: 'team',
-    description: '오늘은 어디에 배치할까',
-    condition: '최근 10경기에서 5개 이상 팀 선택',
-    check: (ctx) => ctx.recentTeams.size >= 5 },
-  { id: 'all_team_conqueror', emoji: '🗺️', name: '전팀 정복자', category: 'team',
-    description: 'KBO 전 구단을 경험한 자',
-    condition: '누적으로 10개 팀 모두 배치 경험',
-    check: (ctx) => ctx.allTeams.size >= 10 },
-  { id: 'home_maniac', emoji: '🏠', name: '홈 매니아', category: 'team',
-    description: '홈 어드밴티지를 믿는다',
-    condition: '최근 10경기 중 80% 이상 홈팀에 배치',
-    check: (ctx) => ctx.recent10Total >= 10 && ctx.recentHomeCount / ctx.recent10Total >= 0.8 },
-  { id: 'away_expert', emoji: '✈️', name: '원정 전문가', category: 'team',
-    description: '원정의 긴장감을 즐기는 자',
-    condition: '최근 10경기 중 80% 이상 원정팀에 배치',
-    check: (ctx) => ctx.recent10Total >= 10 && ctx.recentAwayCount / ctx.recent10Total >= 0.8 },
-  { id: 'drifter', emoji: '🔀', name: '승부사', category: 'team',
-    description: '한 곳에 정착하지 않는다',
-    condition: '최근 10경기에서 10개 팀 모두 선택',
-    check: (ctx) => ctx.recent10Total >= 10 && ctx.recentTeams.size >= 10 },
-  { id: 'tragic_fan', emoji: '💔', name: '비운의 팬', category: 'team',
-    description: '사랑하지만 승리가 따르지 않는다',
-    condition: '한 팀에 80% 이상 충성 + 예측 적중률 30% 이하',
-    check: (ctx) => { const max = Math.max(...ctx.recentTeams.values()); return max / ctx.recent10Total >= 0.8 && ctx.recent10Total >= 10 && ctx.recent10Correct / ctx.recent10Total <= 0.3; } },
-
-  // ── 🔥 연속성 ──
-  { id: 'sprout', emoji: '🌱', name: '새싹', category: 'streak',
-    description: '여정의 시작',
-    condition: '첫 번째 배치 완료',
-    check: (ctx) => ctx.allPlacements.length >= 1 },
-  { id: 'ten_milestone', emoji: '🐣', name: '10회 돌파', category: 'streak',
-    description: '이제 진짜 시작이다',
-    condition: '누적 배치 10회 이상',
-    check: (ctx) => ctx.character.totalPlacements >= 10 },
-  { id: 'streak_7', emoji: '🔥', name: '연속 배치왕', category: 'streak',
-    description: '일주일을 불태우다',
-    condition: '7일 연속 배치',
-    check: (ctx) => ctx.character.streak >= 7 },
-  { id: 'streak_14', emoji: '🔥', name: '불꽃 투혼', category: 'streak',
-    description: '2주 연속, 멈출 수 없다',
-    condition: '14일 연속 배치',
-    check: (ctx) => ctx.character.streak >= 14 },
-  { id: 'streak_30', emoji: '👑', name: '철인', category: 'streak',
-    description: '한 달을 관통하는 집념',
-    condition: '30일 연속 배치',
-    check: (ctx) => ctx.character.streak >= 30 },
-  { id: 'attendance_50', emoji: '📅', name: '개근상', category: 'streak',
-    description: '50번의 배치를 넘긴 베테랑',
-    condition: '누적 배치 50회 이상',
-    check: (ctx) => ctx.character.totalPlacements >= 50 },
-  { id: 'veteran_100', emoji: '🎖️', name: '백전노장', category: 'streak',
-    description: '100번의 전장을 거친 자',
-    condition: '누적 배치 100회 이상',
-    check: (ctx) => ctx.character.totalPlacements >= 100 },
-
-  // ── 💎 특수 ──
-  { id: 'allrounder', emoji: '💎', name: '올라운더', category: 'special',
-    description: '균형 잡힌 배치의 달인',
-    condition: '최근 10경기에서 안타·타점·득점 각 3회 이상',
-    check: (ctx) => { const counts = [ctx.recentHitsCount, ctx.recentRbiCount, ctx.recentRunsCount]; return counts.filter(c => c >= 3).length >= 3; } },
-  { id: 'path_of_pain', emoji: '💀', name: '수라의 길', category: 'special',
-    description: '고통 속에서 단련되는 자',
-    condition: '최근 10경기 XP 합계가 마이너스',
-    check: (ctx) => ctx.recentXpSum < 0 },
-  { id: 'xp_explosion', emoji: '🌟', name: 'XP 폭발', category: 'special',
-    description: '전설적인 한 판',
-    condition: '단일 경기에서 100 XP 이상 획득',
-    check: (ctx) => ctx.maxSingleXp >= 100 },
-  { id: 'growth_curve', emoji: '📈', name: '성장 곡선', category: 'special',
-    description: '눈에 띄게 성장하는 중',
-    condition: '최근 10경기 XP 합계가 이전 10경기의 1.5배 이상',
-    check: (ctx) => ctx.prevXpSum > 0 && ctx.recentXpSum > ctx.prevXpSum * 1.5 },
-  { id: 'collector', emoji: '🏆', name: '컬렉터', category: 'special',
-    description: '뱃지 수집가 그 자체',
-    condition: '뱃지 25개 이상 수집',
-    check: (ctx) => ctx.currentBadgeCount >= 25 },
-  { id: 'rollercoaster', emoji: '🎭', name: '반전왕', category: 'special',
-    description: '천국과 지옥을 오가는 자',
-    condition: '최근 10경기 XP 최대-최소 차이 100 이상',
-    check: (ctx) => { if (ctx.recent10.length < 10) return false; const xps = ctx.recent10.map(p => (p.xpFromPlayer||0)+(p.xpFromPrediction||0)); return Math.max(...xps) - Math.min(...xps) >= 100; } },
-  { id: 'consistency', emoji: '🧊', name: '꾸준함의 미학', category: 'special',
-    description: '극적이진 않지만 절대 무너지지 않는다',
-    condition: '최근 10경기 모든 XP가 20~60 사이',
-    check: (ctx) => { if (ctx.recent10.length < 10) return false; const xps = ctx.recent10.map(p => (p.xpFromPlayer||0)+(p.xpFromPrediction||0)); return xps.every(x => x >= 20 && x <= 60); } },
-  { id: 'grand_slam', emoji: '🎯', name: '만루 홈런급', category: 'special',
-    description: '역대급 한 판을 기록한 자',
-    condition: '단일 경기에서 150 XP 이상 획득',
-    check: (ctx) => ctx.maxSingleXp >= 150 },
+// ━━━ 팀 정의 ━━━
+export const KBO_TEAMS = [
+  { id: 'samsung', name: '삼성 라이온즈', emoji: '🦁' },
+  { id: 'kia', name: '기아 타이거즈', emoji: '🐯' },
+  { id: 'lg', name: 'LG 트윈스', emoji: '🤞' },
+  { id: 'doosan', name: '두산 베어스', emoji: '🐻' },
+  { id: 'kt', name: 'KT 위즈', emoji: '🧙' },
+  { id: 'ssg', name: 'SSG 랜더스', emoji: '🛬' },
+  { id: 'lotte', name: '롯데 자이언츠', emoji: '🦅' },
+  { id: 'hanwha', name: '한화 이글스', emoji: '🦅' },
+  { id: 'nc', name: 'NC 다이노스', emoji: '🦕' },
+  { id: 'kiwoom', name: '키움 히어로즈', emoji: '🦸' },
 ];
 
-// 희귀도 순서 (뒤에 있을수록 희귀 = 대표 칭호 우선순위 높음)
-const RARITY_ORDER: string[] = [
-  'sprout', 'ten_milestone',
-  'reverse_prophet', 'caught_stealing_king',
-  'hit_machine', 'rbi_collector', 'run_radar',
-  'leadoff_maniac', 'second_artisan', 'cleanup_killer', 'lower_gambler', 'four_obsession', 'odd_even_master',
-  'one_team', 'team_explorer', 'home_maniac', 'away_expert',
-  'order_nomad', 'full_count',
-  'hr_hunter', 'speedster',
-  'prophet', 'streak_7',
-  'allrounder', 'tragic_fan',
-  'nohit_survivor', 'walkoff_magnet',
-  'streak_14', 'attendance_50',
-  'drifter', 'all_team_conqueror',
-  'hr_master', 'growth_curve',
-  'path_of_pain', 'rollercoaster', 'consistency',
-  'xp_explosion', 'streak_30', 'veteran_100',
-  'oracle', 'grand_slam',
-  'collector',
+export const TEAM_TIERS: TeamAchievementTier[] = [
+  { tier: 'bronze', minCount: 1, emoji: '🥉', label: '동' },
+  { tier: 'silver', minCount: 5, emoji: '🥈', label: '은' },
+  { tier: 'gold', minCount: 15, emoji: '🥇', label: '금' },
+  { tier: 'diamond', minCount: 30, emoji: '💎', label: '다이아' },
 ];
 
-export async function calculateTraits(
-  character: ICharacter
-): Promise<{ activeTrait: string | null; earnedBadges: string[]; newBadges: string[] }> {
-  const userId = character.userId;
+// ━━━ 일반 업적 정의 (51개) ━━━
+export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
+  // 입문 (7)
+  { id: 'first_placement', emoji: '👣', name: '첫 발걸음', category: 'beginner', description: '모험의 시작!', condition: '첫 배치 완료', check: ctx => ctx.totalPlacements >= 1 },
+  { id: 'rookie', emoji: '🌱', name: '루키', category: 'beginner', description: '이제 좀 감이 온다', condition: '누적 배치 10회', check: ctx => ctx.totalPlacements >= 10 },
+  { id: 'regular', emoji: '🏠', name: '단골', category: 'beginner', description: '매일 찾아오는 단골손님', condition: '누적 배치 30회', check: ctx => ctx.totalPlacements >= 30 },
+  { id: 'veteran', emoji: '⭐', name: '베테랑', category: 'beginner', description: '노련한 베테랑', condition: '누적 배치 50회', check: ctx => ctx.totalPlacements >= 50 },
+  { id: 'ironman', emoji: '🦾', name: '철인', category: 'beginner', description: '쉬지 않는 철인', condition: '누적 배치 100회', check: ctx => ctx.totalPlacements >= 100 },
+  { id: 'legend', emoji: '👑', name: '레전드', category: 'beginner', description: '전설이 되다', condition: '누적 배치 200회', check: ctx => ctx.totalPlacements >= 200 },
+  { id: 'first_league', emoji: '🤝', name: '첫 리그 참가', category: 'beginner', description: '함께하면 더 재밌지', condition: '리그 1회 이상 가입', check: ctx => ctx.leagueCount >= 1 },
 
-  // 전체 배치 가져오기 (정산 완료된 것만)
-const allPlacements = await Placement.find({ userId, status: 'settled' }).sort({ createdAt: -1 }).lean() as unknown as IPlacement[];
+  // XP 성장 (6)
+  { id: 'xp_seed', emoji: '🫘', name: '씨앗', category: 'xp', description: '작은 씨앗이 심어졌다', condition: '누적 XP 100', check: ctx => ctx.totalXp >= 100 },
+  { id: 'xp_sprout', emoji: '🌿', name: '새싹', category: 'xp', description: '새싹이 돋아나다', condition: '누적 XP 500', check: ctx => ctx.totalXp >= 500 },
+  { id: 'xp_sapling', emoji: '🌳', name: '묘목', category: 'xp', description: '묘목으로 자라다', condition: '누적 XP 1,000', check: ctx => ctx.totalXp >= 1000 },
+  { id: 'xp_tree', emoji: '🌲', name: '나무', category: 'xp', description: '단단한 나무가 되다', condition: '누적 XP 3,000', check: ctx => ctx.totalXp >= 3000 },
+  { id: 'xp_great_tree', emoji: '🏔️', name: '거목', category: 'xp', description: '거대한 거목', condition: '누적 XP 5,000', check: ctx => ctx.totalXp >= 5000 },
+  { id: 'xp_world_tree', emoji: '🌍', name: '세계수', category: 'xp', description: '세계수에 도달하다', condition: '누적 XP 10,000', check: ctx => ctx.totalXp >= 10000 },
 
-  if (allPlacements.length === 0) {
-    return { activeTrait: null, earnedBadges: [], newBadges: [] };
-  }
+  // 예측 (6)
+  { id: 'first_correct', emoji: '🎯', name: '첫 적중', category: 'prediction', description: '감이 왔다!', condition: '승리 예측 첫 성공', check: ctx => ctx.correctPredictions >= 1 },
+  { id: 'getting_it', emoji: '🔮', name: '감잡았다', category: 'prediction', description: '점점 느낌이 온다', condition: '누적 적중 10회', check: ctx => ctx.correctPredictions >= 10 },
+  { id: 'prophet', emoji: '🧙‍♂️', name: '예언자', category: 'prediction', description: '예언자의 눈', condition: '누적 적중 30회', check: ctx => ctx.correctPredictions >= 30 },
+  { id: 'divine', emoji: '👁️', name: '신들린', category: 'prediction', description: '신이 내린 촉', condition: '누적 적중 50회', check: ctx => ctx.correctPredictions >= 50 },
+  { id: 'hot_streak', emoji: '🔥', name: '촉이 좋네', category: 'prediction', description: '연속으로 맞추다니', condition: '연속 적중 3회', check: ctx => ctx.maxConsecutiveCorrect >= 3 },
+  { id: 'fortune_teller', emoji: '🃏', name: '점쟁이', category: 'prediction', description: '점쟁이급 예측력', condition: '연속 적중 5회', check: ctx => ctx.maxConsecutiveCorrect >= 5 },
 
-  const recent10 = allPlacements.slice(0, 10);
-  const prev10 = allPlacements.slice(10, 20);
+  // 타격 이벤트 (8)
+  { id: 'first_hr', emoji: '💥', name: '첫 홈런', category: 'batting', description: '첫 홈런의 짜릿함', condition: '홈런 경기 1회', check: ctx => ctx.homerunGames >= 1 },
+  { id: 'hr_mania', emoji: '🔥', name: '홈런 매니아', category: 'batting', description: '홈런에 미치다', condition: '홈런 경기 10회', check: ctx => ctx.homerunGames >= 10 },
+  { id: 'hr_king', emoji: '🏆', name: '홈런왕', category: 'batting', description: '진정한 홈런왕', condition: '홈런 경기 30회', check: ctx => ctx.homerunGames >= 30 },
+  { id: 'extra_base', emoji: '💪', name: '장타력', category: 'batting', description: '장타의 달인', condition: '2루타 이상 경기 누적 10회', check: ctx => ctx.extraBaseHitGames >= 10 },
+  { id: 'first_steal', emoji: '💨', name: '도루 성공', category: 'batting', description: '바람처럼 빠르게', condition: '도루 경기 첫 경험', check: ctx => ctx.stolenBaseGames >= 1 },
+  { id: 'speedster', emoji: '⚡', name: '스피드스터', category: 'batting', description: '도루의 신', condition: '도루 경기 10회', check: ctx => ctx.stolenBaseGames >= 10 },
+  { id: 'first_walkoff', emoji: '🎬', name: '끝내기', category: 'batting', description: '극적인 끝내기!', condition: '워크오프 첫 경험', check: ctx => ctx.walkoffGames >= 1 },
+  { id: 'walkoff_king', emoji: '🎭', name: '끝장왕', category: 'batting', description: '끝내기 전문가', condition: '워크오프 5회', check: ctx => ctx.walkoffGames >= 5 },
 
-  // ── 통계 사전 계산 ──
+  // 누적 스탯 (3)
+  { id: 'hit_machine', emoji: '🏏', name: '안타 제조기', category: 'stats', description: '안타가 쏟아진다', condition: '누적 안타 50개', check: ctx => ctx.totalHits >= 50 },
+  { id: 'rbi_king', emoji: '📊', name: '타점왕', category: 'stats', description: '득점권에서 강하다', condition: '누적 타점 30', check: ctx => ctx.totalRbi >= 30 },
+  { id: 'run_king', emoji: '🏃', name: '득점왕', category: 'stats', description: '홈을 밟는 달인', condition: '누적 득점 30', check: ctx => ctx.totalRuns >= 30 },
 
-  // 최근 10회 적중률
-  const settledRecent = recent10.filter(p => p.isCorrect !== undefined);
-  const recent10Correct = settledRecent.filter(p => p.isCorrect).length;
-  const recent10Total = settledRecent.length;
+  // 스트릭 (6)
+  { id: 'streak_3', emoji: '🔥', name: '3일 연속', category: 'streak', description: '3일 연속 출석!', condition: '3일 연속 배치', check: ctx => ctx.maxStreak >= 3 },
+  { id: 'streak_7', emoji: '📅', name: '주간 개근', category: 'streak', description: '일주일 개근', condition: '7일 연속 배치', check: ctx => ctx.maxStreak >= 7 },
+  { id: 'streak_14', emoji: '🗓️', name: '2주 개근', category: 'streak', description: '2주 연속 개근', condition: '14일 연속 배치', check: ctx => ctx.maxStreak >= 14 },
+  { id: 'streak_30', emoji: '🏅', name: '한 달 개근', category: 'streak', description: '한 달 내내 함께', condition: '30일 연속 배치', check: ctx => ctx.maxStreak >= 30 },
+  { id: 'streak_60', emoji: '💪', name: '불꽃 의지', category: 'streak', description: '60일 연속의 의지', condition: '60일 연속 배치', check: ctx => ctx.maxStreak >= 60 },
+  { id: 'streak_100', emoji: '🐉', name: '전설의 근성', category: 'streak', description: '100일 연속 달성', condition: '100일 연속 배치', check: ctx => ctx.maxStreak >= 100 },
 
-  // 최근 10회 팀 분포
-  const recentTeams = new Map<string, number>();
-  for (const p of recent10) {
-    recentTeams.set(p.team, (recentTeams.get(p.team) || 0) + 1);
-  }
+  // 한방 (4)
+  { id: 'big_hit', emoji: '💰', name: '대박', category: 'singleGame', description: '한방에 대박!', condition: '한 경기 XP 50 이상', check: ctx => ctx.maxSingleXp >= 50 },
+  { id: 'jackpot', emoji: '🎰', name: '잭팟', category: 'singleGame', description: '잭팟 터졌다!', condition: '한 경기 XP 80 이상', check: ctx => ctx.maxSingleXp >= 80 },
+  { id: 'explosion', emoji: '💣', name: '폭발', category: 'singleGame', description: 'XP 폭발!', condition: '한 경기 XP 100 이상', check: ctx => ctx.maxSingleXp >= 100 },
+  { id: 'goat', emoji: '🐐', name: '역대급', category: 'singleGame', description: '역대급 한 경기', condition: '한 경기 XP 150 이상', check: ctx => ctx.maxSingleXp >= 150 },
 
-  // 최근 10회 타순 분포
-  const recentOrders = new Map<number, number>();
-  for (const p of recent10) {
-    recentOrders.set(p.battingOrder, (recentOrders.get(p.battingOrder) || 0) + 1);
-  }
+  // 탐험 (3)
+  { id: 'order_explorer', emoji: '🧭', name: '타순 탐험가', category: 'explore', description: '모든 타순을 경험하다', condition: '1~9번 타순 모두 배치', check: ctx => ctx.uniqueOrders.size >= 9 },
+  { id: 'all_rounder', emoji: '🗺️', name: '올라운더', category: 'explore', description: '여러 팀을 넘나드는', condition: '서로 다른 5개 팀 배치', check: ctx => ctx.uniqueTeams.size >= 5 },
+  { id: 'nationwide', emoji: '🇰🇷', name: '전국구', category: 'explore', description: '전국 10개 구단 정복', condition: '모든 10개 구단 배치', check: ctx => ctx.uniqueTeams.size >= 10 },
 
-  // 누적 팀 / 타순
-  const allTeams = new Set<string>();
-  const allOrders = new Set<number>();
-  for (const p of allPlacements) {
-    allTeams.add(p.team);
-    allOrders.add(p.battingOrder);
-  }
+  // 수집 (2)
+  { id: 'collector_15', emoji: '📦', name: '수집가', category: 'collection', description: '업적 수집가', condition: '업적 15개 이상 달성', check: ctx => ctx.earnedCount >= 15 },
+  { id: 'collector_30', emoji: '🏛️', name: '컬렉터', category: 'collection', description: '진정한 컬렉터', condition: '업적 30개 이상 달성', check: ctx => ctx.earnedCount >= 30 },
 
-  // 홈/원정 판별 (Game 조인)
-  let recentHomeCount = 0;
-  let recentAwayCount = 0;
-  const gameIds = [...new Set(recent10.map(p => p.gameId))];
-  const games = await Game.find({ gameId: { $in: gameIds } }).lean();
-  const gameMap = new Map(games.map(g => [g.gameId, g]));
-  for (const p of recent10) {
-    const game = gameMap.get(p.gameId);
-    if (game) {
-      if (p.team === game.homeTeam) recentHomeCount++;
-      else recentAwayCount++;
-    }
-  }
+  // 역경 (6)
+  { id: 'loss_hero', emoji: '😤', name: '역경의 승리자', category: 'adversity', description: '져도 빛나는 사나이', condition: '팀 패배인데 XP 30 이상', check: ctx => ctx.teamLossHighXpCount >= 1 },
+  { id: 'nohit_survivor', emoji: '😅', name: '노히트 생존자', category: 'adversity', description: '무안타에도 굴하지 않는', condition: '배치 선수 무안타 5회 경험', check: ctx => ctx.noHitGames >= 5 },
+  { id: 'wrong_a_lot', emoji: '🙈', name: '예측 실패왕', category: 'adversity', description: '틀려도 괜찮아', condition: '예측 틀린 횟수 20회', check: ctx => ctx.failedPredictions >= 20 },
+  { id: 'lose_streak', emoji: '😭', name: '연패 체험', category: 'adversity', description: '함께 아파하는 팬', condition: '배치 팀 3연패 경험', check: ctx => ctx.maxTeamLoseStreak >= 3 },
+  { id: 'zero_xp', emoji: '💀', name: 'XP 0', category: 'adversity', description: '바닥을 경험하다', condition: '한 경기 XP 0 획득', check: ctx => ctx.hasZeroXp },
+  { id: 'negative_xp', emoji: '🕳️', name: '바닥에서', category: 'adversity', description: '마이너스도 경험이다', condition: '한 경기 XP 마이너스 경험', check: ctx => ctx.hasNegativeXp },
+];
 
-  // 누적 XP 항목별 발생 횟수
-  let cumulativeHomeRuns = 0;
-  let cumulativeStolenBases = 0;
-  let cumulativeWalkOffs = 0;
-  let cumulativeCaughtStealing = 0;
-  let cumulativeNoHitPenalty = 0;
+// ━━━ 카테고리 라벨 ━━━
+export const CATEGORY_LABELS: Record<string, { emoji: string; name: string }> = {
+  beginner: { emoji: '👣', name: '입문' },
+  xp: { emoji: '🌱', name: 'XP 성장' },
+  prediction: { emoji: '🎯', name: '예측' },
+  batting: { emoji: '⚾', name: '타격 이벤트' },
+  stats: { emoji: '📊', name: '누적 스탯' },
+  streak: { emoji: '🔥', name: '스트릭' },
+  singleGame: { emoji: '💥', name: '한방' },
+  explore: { emoji: '🧭', name: '탐험' },
+  collection: { emoji: '📦', name: '수집' },
+  adversity: { emoji: '😤', name: '역경' },
+  team: { emoji: '❤️', name: '팀 충성도' },
+};
+
+// ━━━ 컨텍스트 빌드 ━━━
+async function buildContext(userId: string, characterXp: number): Promise<AchievementContext> {
+  const placements = await Placement.find({ userId, status: 'settled', date: { $not: /^tutorial-/ } })
+    .sort({ date: -1 })
+    .lean();
+
+  const games = await Game.find({
+    _id: { $in: placements.map(p => p.gameId) },
+  }).lean();
+  const gameMap: Record<string, any> = {};
+  for (const g of games) gameMap[String(g._id)] = g;
+
+  let correctPredictions = 0;
+  let failedPredictions = 0;
+  let maxConsecutiveCorrect = 0;
+  let currentConsecutiveCorrect = 0;
+  let homerunGames = 0;
+  let extraBaseHitGames = 0;
+  let stolenBaseGames = 0;
+  let walkoffGames = 0;
+  let totalHits = 0;
+  let totalRbi = 0;
+  let totalRuns = 0;
   let maxSingleXp = 0;
+  let minSingleXp = Infinity;
+  let hasNegativeXp = false;
+  let hasZeroXp = false;
+  let noHitGames = 0;
+  let teamLossHighXpCount = 0;
+  const uniqueOrders = new Set<number>();
+  const uniqueTeams = new Set<string>();
+  const teamPlacementCounts: Record<string, number> = {};
 
-  for (const p of allPlacements) {
-    const bd = p.xpBreakdown;
-    if (bd) {
-      if (bd.homeRun > 0) cumulativeHomeRuns++;
-      if (bd.stolenBase > 0) cumulativeStolenBases++;
-      if (bd.walkOff > 0) cumulativeWalkOffs++;
-      if (bd.caughtStealing < 0) cumulativeCaughtStealing++;
-      if (bd.noHitPenalty < 0) cumulativeNoHitPenalty++;
+  // 스트릭 계산
+  let maxStreak = 0;
+  let currentStreak = 0;
+  const dates = [...new Set(placements.map(p => p.date))].sort();
+  for (let i = 0; i < dates.length; i++) {
+    if (i === 0) {
+      currentStreak = 1;
+    } else {
+      const prev = new Date(dates[i - 1]);
+      const curr = new Date(dates[i]);
+      const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+      currentStreak = diff === 1 ? currentStreak + 1 : 1;
     }
-    const totalXp = (p.xpFromPlayer || 0) + (p.xpFromPrediction || 0);
-    if (totalXp > maxSingleXp) maxSingleXp = totalXp;
+    maxStreak = Math.max(maxStreak, currentStreak);
   }
 
-  // 최근 10회 항목별 발생 횟수
-  let recentHitsCount = 0;
-  let recentRbiCount = 0;
-  let recentRunsCount = 0;
-  let recentXpSum = 0;
+  // 연패 계산
+  let maxTeamLoseStreak = 0;
+  let currentTeamLoseStreak = 0;
 
-  for (const p of recent10) {
-    const bd = p.xpBreakdown;
-    if (bd) {
-      if (bd.hits > 0) recentHitsCount++;
-      if (bd.rbi > 0) recentRbiCount++;
-      if (bd.runs > 0) recentRunsCount++;
+  // 연속 적중 계산용 (날짜순 정렬)
+  const placementsByDate = [...placements].sort((a, b) => a.date.localeCompare(b.date));
+
+  for (const p of placementsByDate) {
+    const game = gameMap[String(p.gameId)];
+    if (!game) continue;
+
+    // 타순, 팀
+    if (p.battingOrder) uniqueOrders.add(p.battingOrder);
+    if (p.team) {
+      uniqueTeams.add(p.team);
+      teamPlacementCounts[p.team] = (teamPlacementCounts[p.team] || 0) + 1;
     }
-    recentXpSum += (p.xpFromPlayer || 0) + (p.xpFromPrediction || 0);
-  }
 
-  let prevXpSum = 0;
-  for (const p of prev10) {
-    prevXpSum += (p.xpFromPlayer || 0) + (p.xpFromPrediction || 0);
-  }
+    // 예측 적중
+    const homeScore = game.scores?.home?.final ?? game.scores?.home?.runs ?? 0;
+    const awayScore = game.scores?.away?.final ?? game.scores?.away?.runs ?? 0;
+    let actualWinner = 'draw';
+    if (homeScore > awayScore) actualWinner = 'home';
+    else if (awayScore > homeScore) actualWinner = 'away';
 
-  // 현재 뱃지 수 (이전 뱃지 + 이번에 새로 추가될 뱃지를 합산하기 위해 먼저 계산)
-  const previousBadges = new Set(character.earnedBadges || []);
+    if (p.predictedWinner && p.predictedWinner === actualWinner) {
+      correctPredictions++;
+      currentConsecutiveCorrect++;
+      maxConsecutiveCorrect = Math.max(maxConsecutiveCorrect, currentConsecutiveCorrect);
+    } else if (p.predictedWinner) {
+      failedPredictions++;
+      currentConsecutiveCorrect = 0;
+    }
 
-  const ctx: TraitContext = {
-    recent10,
-    prev10,
-    allPlacements,
-    character,
-    recent10Correct,
-    recent10Total,
-    recentTeams,
-    recentOrders,
-    recentHomeCount,
-    recentAwayCount,
-    allTeams,
-    allOrders,
-    cumulativeHomeRuns,
-    cumulativeStolenBases,
-    cumulativeWalkOffs,
-    cumulativeCaughtStealing,
-    cumulativeNoHitPenalty,
-    recentHitsCount,
-    recentRbiCount,
-    recentRunsCount,
-    recentXpSum,
-    prevXpSum,
-    maxSingleXp,
-    currentBadgeCount: previousBadges.size,
-  };
+    // XP
+    const xp = p.xpEarned ?? 0;
+    maxSingleXp = Math.max(maxSingleXp, xp);
+    minSingleXp = Math.min(minSingleXp, xp);
+    if (xp === 0) hasZeroXp = true;
+    if (xp < 0) hasNegativeXp = true;
 
-  // ── 뱃지 판별 ──
-  const earnedBadges = new Set<string>(previousBadges);
-  const newBadges: string[] = [];
+    // 팀 승패
+    const isHome = p.team === 'home';
+    const myTeamScore = isHome ? homeScore : awayScore;
+    const oppTeamScore = isHome ? awayScore : homeScore;
+    const teamLost = myTeamScore < oppTeamScore;
 
-  for (const badge of BADGE_DEFINITIONS) {
-    try {
-      if (badge.check(ctx)) {
-        if (!previousBadges.has(badge.id)) {
-          newBadges.push(badge.id);
-        }
-        earnedBadges.add(badge.id);
+    if (teamLost) {
+      currentTeamLoseStreak++;
+      maxTeamLoseStreak = Math.max(maxTeamLoseStreak, currentTeamLoseStreak);
+      if (xp >= 30) teamLossHighXpCount++;
+    } else {
+      currentTeamLoseStreak = 0;
+    }
+
+    // 이벤트 기반 통계
+    const events = game.events || [];
+    const batters = isHome ? (game.batters?.home || []) : (game.batters?.away || []);
+    const myBatter = batters.find((b: any) => b.order === p.battingOrder);
+    const playerNames: string[] = [];
+    if (myBatter) {
+      playerNames.push(myBatter.name);
+      if (myBatter.substitutes) {
+        myBatter.substitutes.forEach((s: any) => playerNames.push(s.name));
       }
-    } catch {
-      // 조건 체크 중 에러 무시
+      totalHits += myBatter.hits || 0;
+      totalRbi += myBatter.rbi || 0;
+      totalRuns += myBatter.runs || 0;
+      if ((myBatter.atBats || 0) >= 2 && (myBatter.hits || 0) === 0) noHitGames++;
     }
+
+    let hasHR = false;
+    let hasExtraBase = false;
+    let hasSB = false;
+    let hasWalkoff = false;
+
+    for (const ev of events) {
+      if (!playerNames.includes(ev.player)) continue;
+      if (ev.type === 'homerun') hasHR = true;
+      if (ev.type === 'double' || ev.type === 'triple' || ev.type === 'homerun') hasExtraBase = true;
+      if (ev.type === 'stolen_base') hasSB = true;
+      if (ev.type === 'walkoff') hasWalkoff = true;
+    }
+
+    if (hasHR) homerunGames++;
+    if (hasExtraBase) extraBaseHitGames++;
+    if (hasSB) stolenBaseGames++;
+    if (hasWalkoff) walkoffGames++;
   }
 
-  // collector 재체크 (새 뱃지 추가 후)
-  ctx.currentBadgeCount = earnedBadges.size;
-  const collectorBadge = BADGE_DEFINITIONS.find(b => b.id === 'collector');
-  if (collectorBadge && collectorBadge.check(ctx)) {
-    if (!previousBadges.has('collector')) {
-      newBadges.push('collector');
-    }
-    earnedBadges.add('collector');
-  }
-
-  // ── 대표 칭호 결정 (새 뱃지 우선, 없으면 희귀도 순) ──
-  let activeTrait: string | null = null;
-
-  if (newBadges.length > 0) {
-    // 새 뱃지 중 가장 희귀한 것
-    let highestRarity = -1;
-    for (const id of newBadges) {
-      const idx = RARITY_ORDER.indexOf(id);
-      if (idx > highestRarity) {
-        highestRarity = idx;
-        activeTrait = id;
-      }
-    }
-  } else {
-    // 보유 뱃지 중 가장 희귀한 것
-    let highestRarity = -1;
-    for (const id of earnedBadges) {
-      const idx = RARITY_ORDER.indexOf(id);
-      if (idx > highestRarity) {
-        highestRarity = idx;
-        activeTrait = id;
-      }
-    }
-  }
+  // 리그 참가 수
+  const leagueCount = await League.countDocuments({ members: new mongoose.Types.ObjectId(userId) });
 
   return {
-    activeTrait,
-    earnedBadges: [...earnedBadges],
-    newBadges,
+    totalPlacements: placements.length,
+    totalXp: characterXp,
+    correctPredictions,
+    maxConsecutiveCorrect,
+    currentStreak,
+    maxStreak,
+    homerunGames,
+    extraBaseHitGames,
+    stolenBaseGames,
+    walkoffGames,
+    totalHits,
+    totalRbi,
+    totalRuns,
+    maxSingleXp,
+    minSingleXp,
+    hasNegativeXp,
+    hasZeroXp,
+    noHitGames,
+    failedPredictions,
+    maxTeamLoseStreak,
+    teamLossHighXpCount,
+    uniqueOrders,
+    uniqueTeams,
+    leagueCount,
+    earnedCount: 0,
+    teamPlacementCounts,
   };
 }
 
-// 뱃지 ID로 정의 가져오기
-export function getBadgeById(id: string): BadgeDefinition | undefined {
-  return BADGE_DEFINITIONS.find(b => b.id === id);
+// ━━━ 팀 등급 계산 ━━━
+function getTeamTier(count: number): TeamAchievementTier | null {
+  let best: TeamAchievementTier | null = null;
+  for (const tier of TEAM_TIERS) {
+    if (count >= tier.minCount) best = tier;
+  }
+  return best;
 }
 
-// 전체 뱃지 목록 (프론트용)
-export function getAllBadges(): Array<{ id: string; emoji: string; name: string; category: string; description: string; condition: string }> {
-  return BADGE_DEFINITIONS.map(b => ({
-    id: b.id,
-    emoji: b.emoji,
-    name: b.name,
-    category: b.category,
-    description: b.description,
-    condition: b.condition,
+// ━━━ 업적 계산 메인 함수 ━━━
+export async function calculateAchievements(userId: string, characterId: string) {
+  const character = await Character.findById(characterId).lean();
+  if (!character) throw new Error('Character not found');
+
+  const ctx = await buildContext(userId, character.xp || 0);
+
+  // 1차: 수집 업적 제외하고 계산
+  const earned: string[] = [];
+  for (const def of ACHIEVEMENT_DEFINITIONS) {
+    if (def.category === 'collection') continue;
+    if (def.check(ctx)) earned.push(def.id);
+  }
+
+  // 팀 업적
+  const teamAchievements: Array<{
+    teamId: string;
+    teamName: string;
+    teamEmoji: string;
+    tier: TeamAchievementTier;
+    count: number;
+  }> = [];
+
+  for (const team of KBO_TEAMS) {
+    const count = ctx.teamPlacementCounts[team.id] || 0;
+    // team 이름으로도 매칭 시도
+    const countByName = ctx.teamPlacementCounts[team.name] || 0;
+    const totalCount = count + countByName;
+    const tier = getTeamTier(totalCount);
+    if (tier) {
+      teamAchievements.push({
+        teamId: team.id,
+        teamName: team.name,
+        teamEmoji: team.emoji,
+        tier,
+        count: totalCount,
+      });
+    }
+  }
+
+  // 팀 업적도 earned 카운트에 포함
+  ctx.earnedCount = earned.length + teamAchievements.length;
+
+  // 2차: 수집 업적 체크
+  for (const def of ACHIEVEMENT_DEFINITIONS) {
+    if (def.category !== 'collection') continue;
+    if (def.check(ctx)) earned.push(def.id);
+  }
+
+  // 최종 카운트
+  const finalEarnedCount = earned.length + teamAchievements.length;
+
+  // activeTrait: 가장 최근 달성한 희귀 업적
+  const RARITY_ORDER = [
+    'legend', 'streak_100', 'goat', 'xp_world_tree', 'nationwide',
+    'streak_60', 'explosion', 'divine', 'xp_great_tree', 'collector_30',
+    'ironman', 'hr_king', 'streak_30', 'prophet', 'xp_tree',
+    'veteran', 'walkoff_king', 'fortune_teller', 'speedster',
+    'collector_15', 'streak_14', 'jackpot', 'xp_sapling',
+    'regular', 'hr_mania', 'getting_it', 'hit_machine', 'rbi_king', 'run_king',
+    'streak_7', 'big_hit', 'extra_base', 'all_rounder', 'order_explorer',
+    'hot_streak', 'loss_hero', 'nohit_survivor', 'wrong_a_lot', 'lose_streak',
+    'rookie', 'xp_sprout', 'first_hr', 'first_steal', 'first_walkoff',
+    'first_correct', 'xp_seed', 'first_placement', 'first_league',
+    'zero_xp', 'negative_xp',
+  ];
+
+  let activeTrait = null;
+  for (const id of RARITY_ORDER) {
+    if (earned.includes(id)) {
+      const def = ACHIEVEMENT_DEFINITIONS.find(d => d.id === id)!;
+      activeTrait = { id: def.id, emoji: def.emoji, name: def.name, description: def.description };
+      break;
+    }
+  }
+
+  // 캐릭터 업데이트
+  await Character.findByIdAndUpdate(characterId, {
+    activeTrait: activeTrait ? `${activeTrait.emoji} ${activeTrait.name}` : null,
+    earnedAchievements: earned,
+    teamAchievements: teamAchievements.map(t => ({
+      teamId: t.teamId,
+      tier: t.tier.tier,
+      count: t.count,
+    })),
+  });
+
+  return { activeTrait, earned, teamAchievements, earnedCount: finalEarnedCount };
+}
+
+// ━━━ 프론트엔드용 헬퍼 ━━━
+export function getAllAchievements() {
+  return ACHIEVEMENT_DEFINITIONS.map(d => ({
+    id: d.id,
+    emoji: d.emoji,
+    name: d.name,
+    category: d.category,
+    description: d.description,
+    condition: d.condition,
   }));
+}
+
+export function getAchievementById(id: string) {
+  return ACHIEVEMENT_DEFINITIONS.find(d => d.id === id);
 }
