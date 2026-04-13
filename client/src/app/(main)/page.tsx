@@ -493,13 +493,14 @@ useEffect(() => {
             <button onClick={() => {
               if (character) {
                 const traitInfo = character.activeTrait ? TRAIT_DISPLAY[character.activeTrait] : null;
-                shareCharacter({
-                  characterName: character.name,
-                  animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
-                  animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
-                  xp: character.xp,
-                  traitName: traitInfo ? `${traitInfo.emoji} ${traitInfo.name}` : undefined,
-                });
+              shareCharacter({
+  characterName: character.name,
+  animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
+  animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
+  animalType: character.animalType,
+  xp: character.xp,
+  traitName: traitInfo ? `${traitInfo.emoji} ${traitInfo.name}` : undefined,
+});
               }
               setMenuOpen(false);
             }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
