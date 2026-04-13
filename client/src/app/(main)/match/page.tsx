@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import { requestFcmToken } from '@/lib/firebase';
 import { sharePlacement } from '@/lib/kakaoShare';
 
-
 interface Game {
   gameId: string;
   date: string;
@@ -52,6 +51,7 @@ export default function MatchPage() {
   const [placementLocked, setPlacementLocked] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
+  const [showSharePrompt, setShowSharePrompt] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken;
@@ -197,13 +197,14 @@ export default function MatchPage() {
           predictedWinner: selection.predictedWinner,
         }),
       });
-      if (res.ok) {
+            if (res.ok) {
         setToast('선택 완료!');
         setExpandedGame(null);
-        const shouldShow = await shouldShowPushPrompt();
-        if (shouldShow) {
-          setTimeout(() => setShowPushPrompt(true), 500);
-        }
+        // 공유 프롬프트 표시
+        setTimeout(() => {
+          setShowSharePrompt(true);
+        }, 500);
+              
       } else {
         const err = await res.json();
         setToast(err.error || '선택 실패');
