@@ -84,7 +84,7 @@ leaguesRouter.post('/join', authenticateUser, async (req: Request, res: Response
       return res.status(400).json({ error: '리그는 최대 5개까지 참가할 수 있습니다' });
     }
 
-    league.members.push(userId);
+    league.members.push(new mongoose.Types.ObjectId(userId));
     await league.save();
 
     return res.json(league);
@@ -97,7 +97,7 @@ leaguesRouter.post('/join', authenticateUser, async (req: Request, res: Response
 leaguesRouter.get('/', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const leagues = await League.find({ members: userId })
+    const leagues = await League.find({ members: new mongoose.Types.ObjectId(userId) })
       .select('name code members ownerId createdAt')
       .lean();
 
