@@ -319,12 +319,18 @@ placementsRouter.post('/tutorial', authenticateUser, async (req: Request, res: R
     character.tutorialCompleted = true;
     await character.save();
 
-    return res.status(201).json({
-      placement,
+      return res.status(201).json({
+      placement: {
+        ...placement.toObject(),
+        game: {
+          homeTeam: game.homeTeam,
+          awayTeam: game.awayTeam,
+          status: game.status,
+          homeScore: game.homeScore,
+          awayScore: game.awayScore,
+          batterRecords: game.batterRecords,
+        },
+      },
       tutorialXp: TUTORIAL_XP,
       actualXp: breakdown.total + xpFromPrediction,
     });
-  } catch (err) {
-    return res.status(500).json({ error: String(err) });
-  }
-});
