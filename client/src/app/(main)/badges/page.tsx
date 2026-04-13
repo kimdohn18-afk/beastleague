@@ -10,6 +10,7 @@ interface Badge {
   name: string;
   category: string;
   description: string;
+  condition: string;
   earned: boolean;
 }
 
@@ -139,33 +140,32 @@ export default function BadgesPage() {
         ))}
       </div>
 
-      {selectedBadge && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setSelectedBadge(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[85%] max-w-sm p-6 text-center" onClick={e => e.stopPropagation()}>
-            <div className={`text-5xl mb-3 ${selectedBadge.earned ? '' : 'grayscale opacity-40'}`}>
-              {selectedBadge.earned ? selectedBadge.emoji : '🔒'}
-            </div>
-            <h3 className="text-lg font-bold text-gray-800 mb-1">
-              {selectedBadge.earned ? selectedBadge.name : '???'}
-            </h3>
-            {selectedBadge.earned ? (
-              <p className="text-sm text-gray-500">"{selectedBadge.description}"</p>
-            ) : (
-              <p className="text-sm text-gray-400">아직 달성하지 못한 뱃지입니다</p>
-            )}
-            <div className="mt-2 mb-4">
-              <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                selectedBadge.earned ? 'bg-orange-50 text-orange-500' : 'bg-gray-100 text-gray-400'
-              }`}>
-                {selectedBadge.earned ? '✅ 획득 완료' : '🔒 미획득'}
-              </span>
-            </div>
-            <button onClick={() => setSelectedBadge(null)} className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">
-              닫기
-            </button>
-          </div>
-        </div>
+     {selectedBadge && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setSelectedBadge(null)}>
+    <div className="bg-white rounded-2xl shadow-xl w-[85%] max-w-sm p-6 text-center" onClick={e => e.stopPropagation()}>
+      <div className={`text-5xl mb-3 ${selectedBadge.earned ? '' : 'grayscale opacity-40'}`}>
+        {selectedBadge.earned ? selectedBadge.emoji : '🔒'}
+      </div>
+      <h3 className="text-lg font-bold text-gray-800 mb-1">
+        {selectedBadge.earned ? selectedBadge.name : '???'}
+      </h3>
+      {selectedBadge.earned && (
+        <p className="text-sm text-gray-500 mb-3">"{selectedBadge.description}"</p>
       )}
+      <div className="bg-gray-50 rounded-xl p-3 mb-3">
+        <p className="text-xs text-gray-400 mb-1">해금 조건</p>
+        <p className="text-sm text-gray-700 font-medium">{selectedBadge.condition}</p>
+      </div>
+      <div className="mb-4">
+        <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
+          selectedBadge.earned ? 'bg-orange-50 text-orange-500' : 'bg-gray-100 text-gray-400'
+        }`}>
+          {selectedBadge.earned ? '✅ 획득 완료' : '🔒 미획득'}
+        </span>
+      </div>
+      <button onClick={() => setSelectedBadge(null)} className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">
+        닫기
+      </button>
     </div>
-  );
-}
+  </div>
+)}
