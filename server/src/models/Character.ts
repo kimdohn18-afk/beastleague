@@ -10,6 +10,7 @@ export interface ICharacter extends Document {
   totalPlacements: number;
   activeTrait: string | null;
   earnedBadges: string[];
+  tutorialCompleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,6 +26,7 @@ const characterSchema = new Schema<ICharacter>(
     totalPlacements:    { type: Number, default: 0 },
     activeTrait:        { type: String, default: null },
     earnedBadges:       [{ type: String }],
+    tutorialCompleted:  { type: Boolean, default: false },
   },
   { timestamps: true }
 );
