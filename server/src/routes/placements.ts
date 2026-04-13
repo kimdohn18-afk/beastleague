@@ -195,3 +195,122 @@ placementsRouter.get('/history', authenticateUser, async (req: Request, res: Res
     return res.status(500).json({ error: String(err) });
   }
 });
+
+// ── 튜토리얼 ──
+
+// GET /api/placements/tutorial/games — 최근 finished 경기 목록 반환
+placementsRouter.get('/tutorial/games', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const character = await Character.findOne({ userId });
+    if (!character) return res.status(400).json({ error: '캐릭터가 없습니다' });
+    if (character.tutorialCompleted) {
+      return res.status(400).json({ error: '이미 튜토리얼을 완료했습니다' });
+    }
+
+    // 가장 최근 finished 경기가 있는 날짜 찾기
+    const latestGame = await Game.findOne({ status: 'finished' })
+      .sort({ date: -1, gameId: -1 })
+      .lean();
+
+    if (!latestGame) {
+      return res.status(404).json({ error: '완료된 경기가 없습니다' });
+    }
+
+    // 그 날짜의 모든 finished 경기
+    const games = await Game.find({ date: latestGame.date, status: 'finished' }).lean();
+    return res.json(games);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// POST /api/placements/tutorial — 튜토리얼 배치 (즉시 정산, 고정 15 XP)
+placementsRouter.post('/tutorial', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { gameId, team, battingOrder, predictedWinner } = req.body as {
+      gameId: string;
+      team: string;
+      battingOrder: number;
+      predictedWinner: string;
+    };
+
+    if (!gameId || !team || !battingOrder || !predictedWinner) {
+      return res.status(400).json({ error: '모든 항목을 선택해주세요' });
+    }
+    if (battingOrder < 1 || battingOrder > 9) {
+      return res.status(400).json({ error: '타순은 1~9번입니다' });
+    }
+
+    const character = await Character.findOne({ userId });
+    if (!character) return res.status(400).json({ error: '캐릭터가 없습니다' });
+    if (character.tutorialCompleted) {
+      return res.status(400).json({ error: '이미 튜토리얼을 완료했습니다' });
+    }
+
+    const game = await Game.findOne({ gameId });
+    if (!game) return res.status(400).json({ error: '존재하지 않는 경기입니다' });
+    if (game.status !== 'finished') {
+      return res.status(400).json({ error: '완료된 경기만 튜토리얼에 사용할 수 있습니다' });
+    }
+
+    // 실제 XP 계산 (breakdown은 실제 값으로 기록)
+    const { calculatePlacementXp } = await import('../services/XpCalculator');
+    const breakdown = calculatePlacementXp(game, team, battingOrder);
+
+    // 승리 예측 적중 여부
+    const homeScore = game.homeScore ?? 0;
+    const awayScore = game.awayScore ?? 0;
+    let winner = '';
+    if (homeScore > awayScore) winner = game.homeTeam;
+    else if (awayScore > homeScore) winner = game.awayTeam;
+    const isCorrect = winner !== '' && predictedWinner === winner;
+
+    const xpFromPrediction = isCorrect ? 30 : 0;
+
+    // Placement 레코드 생성 — 실제 정산과 동일한 구조
+    const placement = await Placement.create({
+      userId,
+      characterId: character._id,
+      gameId,
+      team,
+      battingOrder,
+      predictedWinner,
+      date: game.date,
+      status: 'settled',
+      isCorrect,
+      xpFromPlayer: breakdown.total,
+      xpFromPrediction,
+      xpBreakdown: {
+        hits: breakdown.hits,
+        rbi: breakdown.rbi,
+        runs: breakdown.runs,
+        noHitPenalty: breakdown.noHitPenalty,
+        homeRun: breakdown.homeRun,
+        double: breakdown.double,
+        triple: breakdown.triple,
+        stolenBase: breakdown.stolenBase,
+        caughtStealing: breakdown.caughtStealing,
+        walkOff: breakdown.walkOff,
+        teamResult: breakdown.teamResult,
+        total: breakdown.total,
+      },
+    });
+
+    // 캐릭터에는 고정 15 XP만 지급
+    const TUTORIAL_XP = 15;
+    character.xp = (character.xp || 0) + TUTORIAL_XP;
+    character.totalPlacements = (character.totalPlacements || 0) + 1;
+    character.tutorialCompleted = true;
+    await character.save();
+
+    return res.status(201).json({
+      placement,
+      tutorialXp: TUTORIAL_XP,
+      actualXp: breakdown.total + xpFromPrediction,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
