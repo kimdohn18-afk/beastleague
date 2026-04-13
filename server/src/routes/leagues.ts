@@ -106,6 +106,17 @@ leaguesRouter.get('/', authenticateUser, async (req: Request, res: Response) => 
   }
 });
 
+// GET /api/leagues/global/ranking — 그룹 대항전 (전체 리그 합산 XP 순위)
+leaguesRouter.get('/global/ranking', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const allLeagues = await League.find()
+      .select('name code members')
+      .lean();
+
+    if (allLeagues.length === 0) {
+      return res.json([]);
+    }
+
 // GET /api/leagues/:code/ranking — 리그 랭킹
 leaguesRouter.get('/:code/ranking', authenticateUser, async (req: Request, res: Response) => {
   try {
@@ -170,16 +181,6 @@ leaguesRouter.delete('/:code', authenticateUser, async (req: Request, res: Respo
   }
 });
 
-// GET /api/leagues/global/ranking — 그룹 대항전 (전체 리그 합산 XP 순위)
-leaguesRouter.get('/global/ranking', authenticateUser, async (req: Request, res: Response) => {
-  try {
-    const allLeagues = await League.find()
-      .select('name code members')
-      .lean();
-
-    if (allLeagues.length === 0) {
-      return res.json([]);
-    }
 
     // 모든 리그 멤버의 캐릭터 XP 조회
     const allMemberIds = [...new Set(allLeagues.flatMap((l) => l.members.map(String)))];
