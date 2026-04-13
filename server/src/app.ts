@@ -26,6 +26,11 @@ export function createApp(): express.Application {
   app.use(express.json());
   app.use(generalLimiter);
 
+  // 서버 헬스체크 (인증 불필요 - 크론잡 서버 깨우기용)
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
   app.use('/api/auth', authRouter);
   app.use('/api/games', gamesRouter);
   app.use('/api/characters', charactersRouter);
