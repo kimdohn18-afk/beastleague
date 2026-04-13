@@ -125,12 +125,12 @@ internalRouter.get('/push-stats', async (req: Request, res: Response) => {
   }
 });
 
-// 기존 유저 칭호 일괄 계산
+// 기존 유저 업적 일괄 계산
 internalRouter.post('/recalculate-traits', async (req, res) => {
   try {
     const { Character } = await import('../models/Character');
     const { Placement } = await import('../models/Placement');
-    const { calculateTraits } = await import('../services/TraitCalculator');
+    const { calculateAchievements } = await import('../services/TraitCalculator');
 
     const characters = await Character.find({});
     let updated = 0;
@@ -141,9 +141,10 @@ internalRouter.post('/recalculate-traits', async (req, res) => {
       character.tutorialCompleted = true;
 
       if (count >= 1) {
-        const result = await calculateTraits(character);
-        character.activeTrait = result.activeTrait;
-        character.earnedBadges = result.earnedBadges;
+        const result = await calculateAchievements(String(character.userId), String(character._id));
+        character.activeTrait = result.activeTrait
+          ? `${result.activeTrait.emoji} ${result.activeTrait.name}`
+          : null;
       }
 
       await character.save();
