@@ -4,6 +4,7 @@ import { League } from '../models/League';
 import { Character } from '../models/Character';
 import { Placement } from '../models/Placement';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 
 export const leaguesRouter = Router();
 
@@ -49,7 +50,7 @@ leaguesRouter.post('/', authenticateUser, async (req: Request, res: Response) =>
       name: name.trim(),
       code,
       ownerId: userId,
-      members: [userId],
+      members: [new mongoose.Types.ObjectId(userId)],
     });
 
     return res.status(201).json(league);
