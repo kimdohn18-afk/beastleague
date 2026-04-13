@@ -63,7 +63,7 @@ charactersRouter.delete('/me', authenticateUser, async (req: Request, res: Respo
   }
 });
 
-// GET /api/characters/me/history?skip=0&limit=50
+// GET /api/characters/me/history
 charactersRouter.get('/me/history', authenticateUser, async (req: Request, res: Response) => {
   try {
     const skip = parseInt(String(req.query.skip ?? '0'), 10);
@@ -76,16 +76,13 @@ charactersRouter.get('/me/history', authenticateUser, async (req: Request, res: 
   }
 });
 
-import { getAllachievements, getBadgeById } from '../services/TraitCalculator';
-
-// 전체 뱃지 목록
+// GET /api/characters/achievements/all — 전체 업적 목록
 charactersRouter.get('/achievements/all', (_req: Request, res: Response) => {
-  res.json(getAllachievements());
+  res.json(getAllAchievements());
 });
 
-// 내 뱃지 정보
+// GET /api/characters/me/achievements — 내 업적 정보
 charactersRouter.get('/me/achievements', authenticateUser, async (req: Request, res: Response) => {
-  router.get('/me/achievements', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const character = await Character.findOne({ userId });
@@ -95,18 +92,18 @@ charactersRouter.get('/me/achievements', authenticateUser, async (req: Request, 
       await calculateAchievements(userId, String(character._id));
 
     const allDefs = getAllAchievements();
-    const badges = allDefs.map(d => ({
+    const achievements = allDefs.map(d => ({
       ...d,
       earned: earned.includes(d.id),
     }));
 
-    const totalCount = allDefs.length + KBO_TEAMS.length; // 51 + 10 = 61
+    const totalCount = allDefs.length + KBO_TEAMS.length;
 
     return res.json({
       activeTrait,
       earnedCount,
       totalCount,
-      achievements: badges,
+      achievements,
       teamAchievements,
     });
   } catch (err) {
