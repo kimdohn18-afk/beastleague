@@ -3,6 +3,8 @@
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { requestFcmToken } from '@/lib/firebase';
+import { sharePlacement } from '@/lib/kakaoShare';
+
 
 interface Game {
   gameId: string;
