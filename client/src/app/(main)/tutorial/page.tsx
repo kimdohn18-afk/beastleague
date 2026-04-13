@@ -37,6 +37,84 @@ interface Selection {
   selectedOrder: number;
 }
 
+interface XpBreakdown {
+  hits: number;
+  rbi: number;
+  runs: number;
+  noHitPenalty: number;
+  homeRun: number;
+  double: number;
+  triple: number;
+  stolenBase: number;
+  caughtStealing: number;
+  walkOff: number;
+  teamResult: number;
+  total: number;
+}
+
+interface TutorialPlacement {
+  _id: string;
+  gameId: string;
+  team: string;
+  battingOrder: number;
+  predictedWinner: string;
+  date: string;
+  status: string;
+  isCorrect?: boolean;
+  xpFromPlayer: number;
+  xpFromPrediction: number;
+  xpBreakdown?: XpBreakdown;
+  game?: {
+    homeTeam: string;
+    awayTeam: string;
+    status: string;
+    homeScore?: number;
+    awayScore?: number;
+    batterRecords?: {
+      away: BatterRecord[];
+      home: BatterRecord[];
+    };
+  };
+}
+
+const XP_LABELS: Record<string, string> = {
+  hits: '안타',
+  rbi: '타점',
+  runs: '득점',
+  homeRun: '홈런',
+  double: '2루타',
+  triple: '3루타',
+  stolenBase: '도루',
+  caughtStealing: '도루실패',
+  noHitPenalty: '무안타',
+  walkOff: '끝내기',
+};
+
+function getMyBatters(p: TutorialPlacement): BatterRecord[] {
+  if (!p.game?.batterRecords) return [];
+  const isHome = p.team === p.game.homeTeam;
+  const batters = isHome ? p.game.batterRecords.home : p.game.batterRecords.away;
+  if (!batters) return [];
+
+  const orderStr = String(p.battingOrder);
+  const result: BatterRecord[] = [];
+
+  for (let i = 0; i < batters.length; i++) {
+    if (batters[i].order === orderStr) {
+      result.push(batters[i]);
+      for (let j = i + 1; j < batters.length; j++) {
+        if (batters[j].order === '') {
+          result.push(batters[j]);
+        } else {
+          break;
+        }
+      }
+      break;
+    }
+  }
+  return result;
+}
+
 type TutorialStep = 'intro' | 'pick' | 'result';
 
 export default function TutorialPage() {
@@ -52,7 +130,7 @@ export default function TutorialPage() {
   const [result, setResult] = useState<{
     tutorialXp: number;
     actualXp: number;
-    placement: any;
+    placement: TutorialPlacement;
   } | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -176,32 +254,129 @@ export default function TutorialPage() {
 
   // ── 결과 화면 ──
   if (step === 'result' && result) {
+    const p = result.placement;
+    const myBatters = getMyBatters(p);
+    const totalXpItem = p.xpFromPlayer + p.xpFromPrediction;
+    const isPositive = totalXpItem >= 0;
+    const predictionXp = (p.xpBreakdown?.teamResult ?? 0) + p.xpFromPrediction;
+    const matchLabel = p.game
+      ? `${p.game.awayTeam} ${p.game.awayScore} : ${p.game.homeScore} ${p.game.homeTeam}`
+      : p.gameId;
+
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
-        <div className="text-5xl mb-4">🎉</div>
-        <h1 className="text-xl font-bold text-gray-800 mb-2">튜토리얼 완료!</h1>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 w-full max-w-sm p-6 mb-4">
-          <div className="text-center mb-4">
-            <p className="text-gray-400 text-xs mb-1">실제 정산이었다면</p>
-            <p className="text-2xl font-bold text-gray-300 line-through">
-              {result.actualXp > 0 ? '+' : ''}{result.actualXp} XP
-            </p>
+      <div className="min-h-screen bg-gray-50 p-4 pb-24">
+        <div className="text-center mb-4">
+          <div className="text-4xl mb-2">🎉</div>
+          <h1 className="text-xl font-bold text-gray-800">튜토리얼 완료!</h1>
+        </div>
+
+        {/* 경기 결과 카드 — 내 배치와 동일한 구조 */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
+          <div className="p-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-gray-400 text-xs">{p.date}</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                정산완료
+              </span>
+            </div>
+            <p className="font-semibold text-gray-900 mb-1">{matchLabel}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="bg-gray-100 text-gray-700 text-sm font-medium px-3 py-1 rounded-full">
+                {p.team}
+              </span>
+              <span className="text-gray-600 text-sm">{p.battingOrder}번 타자</span>
+              <span className="text-gray-400 text-xs">· {p.predictedWinner} 승리 예측</span>
+            </div>
+            <div className="mt-3 flex items-center justify-between">
+              <span className={`text-lg font-bold ${isPositive ? 'text-emerald-500' : 'text-red-400'}`}>
+                {isPositive ? '+' : ''}{totalXpItem} XP
+              </span>
+            </div>
           </div>
-          <div className="text-center mb-4">
-            <p className="text-gray-400 text-xs mb-1">튜토리얼 보상</p>
-            <p className="text-3xl font-bold text-orange-500">+{result.tutorialXp} XP</p>
-          </div>
-          <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-xs text-gray-500 text-center leading-relaxed">
-              매일 실제 경기에 배치하면<br />
-              이렇게 XP를 획득할 수 있어요!<br />
-              내 배치에서 상세 기록을 확인해보세요.
-            </p>
+
+          {/* 상세 내역 — 처음부터 펼쳐진 상태 */}
+          <div className="border-t border-gray-100 px-4 py-3 bg-gray-50">
+            {myBatters.length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs text-gray-400 mb-2">선수 성적</p>
+                {myBatters.map((b, i) => (
+                  <div key={i} className="bg-white rounded-xl p-3 mb-1 border border-gray-100">
+                    <p className="text-sm font-bold text-gray-900 mb-1">
+                      {i === 0 ? `${p.battingOrder}번 타자` : '교체 선수'}
+                      <span className="text-xs text-gray-400 font-normal ml-2">{b.position}</span>
+                    </p>
+                    <div className="flex gap-3 text-xs text-gray-600">
+                      <span>{b.atBats}타수</span>
+                      <span className="font-semibold text-gray-900">{b.hits}안타</span>
+                      <span>{b.rbi}타점</span>
+                      <span>{b.runs}득점</span>
+                      <span>타율 {b.avg}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {p.xpBreakdown && (
+              <div>
+                <p className="text-xs text-gray-400 mb-2">XP 상세</p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                  {Object.entries(XP_LABELS).map(([key, label]) => {
+                    const val = (p.xpBreakdown as any)[key];
+                    if (!val || val === 0) return null;
+                    const isNeg = val < 0;
+                    return (
+                      <div key={key} className="flex justify-between">
+                        <span className="text-gray-500">{label}</span>
+                        <span className={`font-medium ${isNeg ? 'text-red-400' : 'text-gray-700'}`}>
+                          {isNeg ? '' : '+'}{val}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {predictionXp !== 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">승리 예측</span>
+                      <span className="font-medium text-gray-700">+{predictionXp}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between font-bold">
+                  <span className="text-gray-700">합계</span>
+                  <span className={isPositive ? 'text-emerald-500' : 'text-red-400'}>
+                    {isPositive ? '+' : ''}{totalXpItem} XP
+                  </span>
+                </div>
+                {p.isCorrect !== undefined && (
+                  <div className="mt-1 flex items-center gap-1">
+                    <span className={p.isCorrect ? 'text-emerald-500' : 'text-red-400'}>
+                      {p.isCorrect ? '✓' : '✗'}
+                    </span>
+                    <span className="text-gray-400 text-xs">
+                      예측: {p.predictedWinner} {p.isCorrect ? '적중!' : '실패'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
+
+        {/* 튜토리얼 XP 안내 */}
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-orange-600 text-sm font-bold">튜토리얼 보상</span>
+            <span className="text-orange-500 text-lg font-bold">+{result.tutorialXp} XP</span>
+          </div>
+          <p className="text-orange-400 text-xs leading-relaxed">
+            실제 배치였다면 {result.actualXp > 0 ? '+' : ''}{result.actualXp} XP를 받았을 거예요.
+            매일 경기에 배치해서 캐릭터를 키워보세요!
+          </p>
+        </div>
+
         <button
           onClick={() => router.push('/')}
-          className="w-full max-w-sm bg-orange-400 text-white py-3.5 rounded-2xl font-bold shadow-md transition active:scale-[0.98]"
+          className="w-full bg-orange-400 text-white py-3.5 rounded-2xl font-bold shadow-md transition active:scale-[0.98]"
         >
           시작하기
         </button>
