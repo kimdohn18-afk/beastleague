@@ -53,7 +53,7 @@ export default function CharacterCreatePage() {
         body: JSON.stringify({ name: name.trim(), animalType: selected }),
       });
       if (res.ok) {
-        router.push('/');
+        router.push('/tutorial');
       } else {
         const data = await res.json();
         setError(data.error || '생성 실패');
