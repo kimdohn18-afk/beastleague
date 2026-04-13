@@ -245,8 +245,7 @@ async function buildContext(userId: string, characterXp: number): Promise<Achiev
     }
 
     // XP
-    const xp = p.xpEarned ?? 0;
-    maxSingleXp = Math.max(maxSingleXp, xp);
+    const xp = (p.xpFromPlayer ?? 0) + (p.xpFromPrediction ?? 0);    maxSingleXp = Math.max(maxSingleXp, xp);
     minSingleXp = Math.min(minSingleXp, xp);
     if (xp === 0) hasZeroXp = true;
     if (xp < 0) hasNegativeXp = true;
