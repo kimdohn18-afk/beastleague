@@ -12,6 +12,7 @@ import { battlesRouter } from './routes/battles';
 import { rankingsRouter } from './routes/rankings';
 import { internalRouter } from './routes/internal';
 import { pushRouter } from './routes/push';
+import { leaguesRouter } from './routes/leagues';
 
 export function createApp(): express.Application {
   const app = express();
@@ -40,6 +41,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
   app.use('/api/rankings', rankingsRouter);
   app.use('/api/internal', internalRouter);
   app.use('/api/push', pushRouter);
+  app.use('/api/leagues', leaguesRouter);
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not Found' });
