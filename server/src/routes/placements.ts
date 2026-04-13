@@ -328,3 +328,10 @@ placementsRouter.post('/tutorial', authenticateUser, async (req: Request, res: R
       tutorialXp: TUTORIAL_XP,
       actualXp: breakdown.total + xpFromPrediction,
     });
+
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+  
