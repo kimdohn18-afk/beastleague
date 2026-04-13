@@ -169,3 +169,6 @@ export default function BadgesPage() {
     </div>
   </div>
 )}
+    </div>
+  );
+}
