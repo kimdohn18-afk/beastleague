@@ -169,3 +169,60 @@ leaguesRouter.delete('/:code', authenticateUser, async (req: Request, res: Respo
     return res.status(500).json({ error: String(err) });
   }
 });
+
+// GET /api/leagues/global/ranking — 그룹 대항전 (전체 리그 합산 XP 순위)
+leaguesRouter.get('/global/ranking', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const allLeagues = await League.find()
+      .select('name code members')
+      .lean();
+
+    if (allLeagues.length === 0) {
+      return res.json([]);
+    }
+
+    // 모든 리그 멤버의 캐릭터 XP 조회
+    const allMemberIds = [...new Set(allLeagues.flatMap((l) => l.members.map(String)))];
+    const characters = await Character.find({ userId: { $in: allMemberIds } })
+      .select('userId xp')
+      .lean();
+
+    const xpMap: Record<string, number> = {};
+    for (const c of characters) {
+      xpMap[String(c.userId)] = c.xp || 0;
+    }
+
+    // 리그별 합산
+    const leagueRanking = allLeagues.map((l) => {
+      const memberXps = l.members.map((m) => xpMap[String(m)] || 0);
+      const totalXp = memberXps.reduce((a, b) => a + b, 0);
+      const avgXp = l.members.length > 0 ? Math.round(totalXp / l.members.length) : 0;
+
+      return {
+        name: l.name,
+        code: l.code,
+        memberCount: l.members.length,
+        totalXp,
+        avgXp,
+      };
+    });
+
+    leagueRanking.sort((a, b) => b.totalXp - a.totalXp);
+
+    // 순위 부여
+    const userId = req.user!.userId;
+    const myLeagueCodes = allLeagues
+      .filter((l) => l.members.some((m) => String(m) === String(userId)))
+      .map((l) => l.code);
+
+    const result = leagueRanking.map((l, i) => ({
+      ...l,
+      rank: i + 1,
+      isMine: myLeagueCodes.includes(l.code),
+    }));
+
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
