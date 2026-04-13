@@ -285,7 +285,7 @@ placementsRouter.post('/tutorial', authenticateUser, async (req: Request, res: R
       team,
       battingOrder,
       predictedWinner,
-      date: game.date,
+      date: `tutorial-${game.date}`,
       status: 'settled',
       isCorrect,
       xpFromPlayer: breakdown.total,
