@@ -106,31 +106,40 @@ export function shareCharacter(params: {
   characterName: string;
   animalName: string;
   animalEmoji: string;
+  animalType: string;
   xp: number;
   traitName?: string;
 }) {
   if (!ensureInit()) return;
 
-  const { characterName, animalName, animalEmoji, xp, traitName } = params;
-  const traitLine = traitName ? `\n칭호: ${traitName}` : '';
+  const { characterName, animalName, animalEmoji, xp, traitName, animalType } = params;
+  const traitLine = traitName ? `칭호: ${traitName}\n` : '';
+
+  const ogUrl = new URL('https://beastleague-client.vercel.app/api/og');
+  ogUrl.searchParams.set('name', characterName);
+  ogUrl.searchParams.set('animal', animalType);
+  ogUrl.searchParams.set('xp', String(xp));
+  if (traitName) ogUrl.searchParams.set('trait', traitName);
 
   window.Kakao.Share.sendDefault({
     objectType: 'feed',
     content: {
-      title: `${animalEmoji} ${characterName}`,
-      description: `${animalName} · ${xp.toLocaleString()} XP${traitLine}\n\n비스트리그에서 내 캐릭터를 키우고 있어요!`,
-      imageUrl: 'https://beastleague.vercel.app/icon-512.png',
+      title: `${animalEmoji} ${characterName} — ${xp.toLocaleString()} XP`,
+      description: `${traitLine}KBO 경기로 키우는 내 ${animalName}\n매일 배치하고 캐릭터를 성장시켜보세요!`,
+      imageUrl: ogUrl.toString(),
+      imageWidth: 600,
+      imageHeight: 400,
       link: {
-        mobileWebUrl: 'https://beastleague.vercel.app',
-        webUrl: 'https://beastleague.vercel.app',
+        mobileWebUrl: 'https://beastleague-client.vercel.app',
+        webUrl: 'https://beastleague-client.vercel.app',
       },
     },
     buttons: [
       {
         title: '나도 시작하기',
         link: {
-          mobileWebUrl: 'https://beastleague.vercel.app',
-          webUrl: 'https://beastleague.vercel.app',
+          mobileWebUrl: 'https://beastleague-client.vercel.app',
+          webUrl: 'https://beastleague-client.vercel.app',
         },
       },
     ],
