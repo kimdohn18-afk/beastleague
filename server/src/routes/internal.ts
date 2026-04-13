@@ -138,6 +138,7 @@ internalRouter.post('/recalculate-traits', async (req, res) => {
     for (const character of characters) {
       const count = await Placement.countDocuments({ userId: character.userId, status: 'settled' });
       character.totalPlacements = count;
+      character.tutorialCompleted = true;
 
       if (count >= 1) {
         const result = await calculateTraits(character);
