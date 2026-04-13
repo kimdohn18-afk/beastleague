@@ -168,10 +168,10 @@ async function buildContext(userId: string, characterXp: number): Promise<Achiev
     .lean();
 
   const games = await Game.find({
-    _id: { $in: placements.map(p => p.gameId) },
+    gameId: { $in: placements.map(p => p.gameId) },
   }).lean();
   const gameMap: Record<string, any> = {};
-  for (const g of games) gameMap[String(g._id)] = g;
+  for (const g of games) gameMap[g.gameId] = g;
 
   let correctPredictions = 0;
   let failedPredictions = 0;
@@ -214,38 +214,52 @@ async function buildContext(userId: string, characterXp: number): Promise<Achiev
   let maxTeamLoseStreak = 0;
   let currentTeamLoseStreak = 0;
 
-  // 연속 적중 계산용 (날짜순 정렬)
+  // 날짜순 정렬
   const placementsByDate = [...placements].sort((a, b) => a.date.localeCompare(b.date));
 
   for (const p of placementsByDate) {
-    const game = gameMap[String(p.gameId)];
+    const game = gameMap[p.gameId];
     if (!game) continue;
 
-    // 타순, 팀
-    if (p.battingOrder) uniqueOrders.add(p.battingOrder);
+    // 타순 (string → number)
+    if (p.battingOrder) uniqueOrders.add(Number(p.battingOrder));
+
+    // 팀
     if (p.team) {
-      uniqueTeams.add(p.team);
-      teamPlacementCounts[p.team] = (teamPlacementCounts[p.team] || 0) + 1;
+      // team이 'home'/'away'면 실제 팀명으로 변환
+      const teamName = p.team === 'home' ? game.homeTeam
+                      : p.team === 'away' ? game.awayTeam
+                      : p.team;
+      uniqueTeams.add(teamName);
+      teamPlacementCounts[teamName] = (teamPlacementCounts[teamName] || 0) + 1;
     }
 
-    // 예측 적중
-    const homeScore = game.scores?.home?.final ?? game.scores?.home?.runs ?? 0;
-    const awayScore = game.scores?.away?.final ?? game.scores?.away?.runs ?? 0;
-    let actualWinner = 'draw';
-    if (homeScore > awayScore) actualWinner = 'home';
-    else if (awayScore > homeScore) actualWinner = 'away';
+    // 점수 (homeScore / awayScore)
+    const homeScore = game.homeScore ?? 0;
+    const awayScore = game.awayScore ?? 0;
 
-    if (p.predictedWinner && p.predictedWinner === actualWinner) {
-      correctPredictions++;
-      currentConsecutiveCorrect++;
-      maxConsecutiveCorrect = Math.max(maxConsecutiveCorrect, currentConsecutiveCorrect);
-    } else if (p.predictedWinner) {
-      failedPredictions++;
+    // 예측 적중
+    let actualWinner = '';
+    if (homeScore > awayScore) actualWinner = game.homeTeam;
+    else if (awayScore > homeScore) actualWinner = game.awayTeam;
+
+    if (p.predictedWinner && actualWinner) {
+      if (p.predictedWinner === actualWinner) {
+        correctPredictions++;
+        currentConsecutiveCorrect++;
+        maxConsecutiveCorrect = Math.max(maxConsecutiveCorrect, currentConsecutiveCorrect);
+      } else {
+        failedPredictions++;
+        currentConsecutiveCorrect = 0;
+      }
+    } else if (p.predictedWinner && !actualWinner) {
+      // 무승부 → 적중 아님
       currentConsecutiveCorrect = 0;
     }
 
-    // XP
-    const xp = (p.xpFromPlayer ?? 0) + (p.xpFromPrediction ?? 0);    maxSingleXp = Math.max(maxSingleXp, xp);
+    // XP (xpFromPlayer + xpFromPrediction)
+    const xp = (p.xpFromPlayer ?? 0) + (p.xpFromPrediction ?? 0);
+    maxSingleXp = Math.max(maxSingleXp, xp);
     minSingleXp = Math.min(minSingleXp, xp);
     if (xp === 0) hasZeroXp = true;
     if (xp < 0) hasNegativeXp = true;
@@ -264,33 +278,44 @@ async function buildContext(userId: string, characterXp: number): Promise<Achiev
       currentTeamLoseStreak = 0;
     }
 
-    // 이벤트 기반 통계
-    const events = game.events || [];
-    const batters = isHome ? (game.batters?.home || []) : (game.batters?.away || []);
-    const myBatter = batters.find((b: any) => b.order === p.battingOrder);
-    const playerNames: string[] = [];
+    // 타자 기록 (batterRecords, 필드가 전부 string)
+    const batters = isHome
+      ? (game.batterRecords?.home || [])
+      : (game.batterRecords?.away || []);
+
+    const myBatter = batters.find((b: any) => Number(b.order) === Number(p.battingOrder));
+    const playerName = myBatter?.name || '';
+
     if (myBatter) {
-      playerNames.push(myBatter.name);
-      if (myBatter.substitutes) {
-        myBatter.substitutes.forEach((s: any) => playerNames.push(s.name));
-      }
-      totalHits += myBatter.hits || 0;
-      totalRbi += myBatter.rbi || 0;
-      totalRuns += myBatter.runs || 0;
-      if ((myBatter.atBats || 0) >= 2 && (myBatter.hits || 0) === 0) noHitGames++;
+      const hits = parseInt(myBatter.hits, 10) || 0;
+      const rbi = parseInt(myBatter.rbi, 10) || 0;
+      const runs = parseInt(myBatter.runs, 10) || 0;
+      const atBats = parseInt(myBatter.atBats, 10) || 0;
+
+      totalHits += hits;
+      totalRbi += rbi;
+      totalRuns += runs;
+
+      if (atBats >= 2 && hits === 0) noHitGames++;
     }
 
+    // 이벤트 (events: { type, detail })
+    const events = game.events || [];
     let hasHR = false;
     let hasExtraBase = false;
     let hasSB = false;
     let hasWalkoff = false;
 
     for (const ev of events) {
-      if (!playerNames.includes(ev.player)) continue;
-      if (ev.type === 'homerun') hasHR = true;
-      if (ev.type === 'double' || ev.type === 'triple' || ev.type === 'homerun') hasExtraBase = true;
-      if (ev.type === 'stolen_base') hasSB = true;
-      if (ev.type === 'walkoff') hasWalkoff = true;
+      // detail에 선수 이름이 포함되어 있는지 확인
+      const matchesPlayer = playerName && ev.detail && ev.detail.includes(playerName);
+      if (!matchesPlayer) continue;
+
+      const t = (ev.type || '').toLowerCase();
+      if (t === 'homerun' || t === 'home_run') hasHR = true;
+      if (t === 'double' || t === 'triple' || t === 'homerun' || t === 'home_run') hasExtraBase = true;
+      if (t === 'stolen_base' || t === 'stolenbase') hasSB = true;
+      if (t === 'walkoff' || t === 'walk_off') hasWalkoff = true;
     }
 
     if (hasHR) homerunGames++;
@@ -317,7 +342,7 @@ async function buildContext(userId: string, characterXp: number): Promise<Achiev
     totalRbi,
     totalRuns,
     maxSingleXp,
-    minSingleXp,
+    minSingleXp: minSingleXp === Infinity ? 0 : minSingleXp,
     hasNegativeXp,
     hasZeroXp,
     noHitGames,
