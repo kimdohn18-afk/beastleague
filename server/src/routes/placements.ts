@@ -121,12 +121,6 @@ placementsRouter.post('/', authenticateUser, async (req: Request, res: Response)
       existing.predictedWinner = predictedWinner;
       await existing.save();
 
-      existing.gameId = gameId;
-      existing.team = team;
-      existing.battingOrder = battingOrder;
-      existing.predictedWinner = predictedWinner;
-      await existing.save();
-
       // 배치 수정이지만 streak은 이미 업데이트됨 (같은 날이므로 스킵)
       await updateStreak(character, today);
 
