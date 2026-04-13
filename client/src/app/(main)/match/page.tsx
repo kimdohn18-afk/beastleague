@@ -110,26 +110,44 @@ export default function MatchPage() {
   }
 
   function handlePrediction(gameId: string, team: string) {
-  if (placementLocked) return;
-  setSelection((prev) => ({
-    gameId,
-    predictedWinner: team,
-    selectedTeam: prev?.gameId === gameId ? prev.selectedTeam : '',
-    selectedOrder: prev?.gameId === gameId ? prev.selectedOrder : 0,
-  }));
-}
-  
+    if (placementLocked) return;
+    setSelection((prev) => ({
+      gameId,
+      predictedWinner: team,
+      selectedTeam: prev?.gameId === gameId ? prev.selectedTeam : '',
+      selectedOrder: prev?.gameId === gameId ? prev.selectedOrder : 0,
+    }));
+  }
+
   function handleBattingOrder(gameId: string, team: string, order: number) {
     if (placementLocked) return;
     setSelection((prev) => ({
       gameId,
-      predictedWinner: prev?.predictedWinner || '',
+      predictedWinner: prev?.gameId === gameId ? prev.predictedWinner : '',
       selectedTeam: team,
       selectedOrder: order,
     }));
   }
 
-    async function handleShareAccept() {
+  async function shouldShowPushPrompt(): Promise<boolean> {
+    if (typeof window === 'undefined' || !('Notification' in window)) return false;
+    if (Notification.permission === 'denied') return false;
+    const dismissedDate = localStorage.getItem('push-prompt-dismissed');
+    if (dismissedDate === todayKST()) return false;
+    if (Notification.permission === 'default') return true;
+    try {
+      const res = await fetch(`${apiUrl}/api/push/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return !data.subscribed;
+      }
+    } catch {}
+    return false;
+  }
+
+  async function handleShareAccept() {
     if (selection) {
       const game = games.find(g => g.gameId === selection.gameId);
       if (game) {
@@ -144,7 +162,6 @@ export default function MatchPage() {
       }
     }
     setShowSharePrompt(false);
-    // 공유 후 푸시 프롬프트
     const shouldShow = await shouldShowPushPrompt();
     if (shouldShow) {
       setTimeout(() => setShowPushPrompt(true), 500);
@@ -209,14 +226,12 @@ export default function MatchPage() {
           predictedWinner: selection.predictedWinner,
         }),
       });
-            if (res.ok) {
+      if (res.ok) {
         setToast('선택 완료!');
         setExpandedGame(null);
-        // 공유 프롬프트 표시
         setTimeout(() => {
           setShowSharePrompt(true);
         }, 500);
-              
       } else {
         const err = await res.json();
         setToast(err.error || '선택 실패');
@@ -226,7 +241,6 @@ export default function MatchPage() {
     setTimeout(() => setToast(null), 2000);
   }
 
-  // 취소되지 않은 경기가 있는지 확인
   const activeGames = games.filter(g => g.status !== 'cancelled');
   const cancelledGames = games.filter(g => g.status === 'cancelled');
   const allCancelled = games.length > 0 && activeGames.length === 0;
@@ -408,7 +422,6 @@ export default function MatchPage() {
         </div>
       )}
 
-      
       {showPushPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={handlePushDismiss}>
           <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
