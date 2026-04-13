@@ -279,18 +279,6 @@ useEffect(() => {
       setLoading(false);
     }
   };
-  
-      const welcomeKey = `welcome-shown-${data._id}`;
-      if (!localStorage.getItem(welcomeKey)) {
-        setShowWelcome(true);
-        localStorage.setItem(welcomeKey, 'true');
-      }
-    } catch (error) {
-      console.error('Error fetching character:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleDelete = async () => {
     setDeleting(true);
