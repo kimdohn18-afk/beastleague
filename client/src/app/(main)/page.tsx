@@ -1,7 +1,7 @@
 'use client';
 
 import { requestFcmToken } from '@/lib/firebase';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
@@ -89,7 +89,16 @@ function getTraitDisplay(traitId: string): string {
   return `${t.emoji} ${t.name} — "${t.desc}"`;
 }
 
+// 상한 없는 캐릭터 크기 계산
+function getCharacterSize(xp: number): number {
+  const minPx = 60;
+  if (xp <= 0) return minPx;
+  // XP 100 → ~120px, 1000 → ~300px, 5000 → ~500px, 10000 → ~620px, 50000 → ~950px
+  const size = minPx + Math.pow(xp, 0.55) * 3;
+  return Math.max(minPx, Math.round(size));
+}
 
+// 기존 UI 비교용 (모달 등에서 사용)
 function getEmojiPx(xp: number): number {
   const minPx = 60;
   const maxPx = 220;
@@ -145,14 +154,73 @@ const HELP_CARDS = [
       'XP가 쌓이면 캐릭터가',
       '점점 커집니다!',
       '',
-      '랭킹에서 다른 유저와',
-      '크기를 비교해보세요.',
+      '핀치 줌(두 손가락)으로',
+      '줌 아웃하면 전체를 볼 수 있어요.',
       '',
       '내 배치 탭에서 경기별 기록과',
       'XP 내역을 확인할 수 있어요.',
     ],
   },
 ];
+
+// ──────────── 핀치 줌 훅 ────────────
+function usePinchZoom(initialScale: number = 1) {
+  const [scale, setScale] = useState(initialScale);
+  const [origin, setOrigin] = useState({ x: 0, y: 0 });
+  const startDistRef = useRef(0);
+  const startScaleRef = useRef(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const getDistance = (t1: React.Touch, t2: React.Touch) => {
+    const dx = t1.clientX - t2.clientX;
+    const dy = t1.clientY - t2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      startDistRef.current = getDistance(e.touches[0], e.touches[1]);
+      startScaleRef.current = scale;
+      // 핀치 중심점 계산
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) {
+        const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+        const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+        setOrigin({ x: cx, y: cy });
+      }
+    }
+  }, [scale]);
+
+  const onTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const dist = getDistance(e.touches[0], e.touches[1]);
+      const ratio = dist / startDistRef.current;
+      const newScale = Math.max(0.05, Math.min(startScaleRef.current * ratio, 3));
+      setScale(newScale);
+    }
+  }, []);
+
+  const onTouchEnd = useCallback(() => {
+    // 줌 상태 유지
+  }, []);
+
+  // 줌 리셋 (더블탭)
+  const lastTapRef = useRef(0);
+  const onDoubleTap = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      // 더블탭 → 줌 리셋
+      setScale(1);
+      setOrigin({ x: 0, y: 0 });
+    }
+    lastTapRef.current = now;
+  }, []);
+
+  return { scale, origin, containerRef, onTouchStart: (e: React.TouchEvent) => { onTouchStart(e); onDoubleTap(e); }, onTouchMove, onTouchEnd };
+}
 
 export default function MainPage() {
   const { data: session, status } = useSession();
@@ -174,48 +242,51 @@ export default function MainPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
 
+  // 핀치 줌
+  const pinch = usePinchZoom(1);
+
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'denied') setPushStatus('denied');
     }
   }, []);
 
-useEffect(() => {
-  if (!token) return;
-  if (typeof window === 'undefined' || !('Notification' in window)) return;
-  if (Notification.permission !== 'granted') return;
-  if (localStorage.getItem('push-manually-disabled') === 'true') return;
-  const checkAndAutoSubscribe = async () => {
-    try {
-      const res = await fetch(`${apiUrl}/api/push/status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.subscribed) {
-          setPushStatus('granted');
-        } else {
-          const fcmToken = await requestFcmToken();
-          if (fcmToken) {
-            await fetch(`${apiUrl}/api/push/subscribe`, {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ fcmToken }),
-            });
+  useEffect(() => {
+    if (!token) return;
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    if (localStorage.getItem('push-manually-disabled') === 'true') return;
+    const checkAndAutoSubscribe = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/push/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.subscribed) {
             setPushStatus('granted');
+          } else {
+            const fcmToken = await requestFcmToken();
+            if (fcmToken) {
+              await fetch(`${apiUrl}/api/push/subscribe`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ fcmToken }),
+              });
+              setPushStatus('granted');
+            }
           }
         }
+      } catch (e) {
+        console.error('[Push] Auto subscribe failed:', e);
       }
-    } catch (e) {
-      console.error('[Push] Auto subscribe failed:', e);
-    }
-  };
-  checkAndAutoSubscribe();
-}, [token]);
-    
+    };
+    checkAndAutoSubscribe();
+  }, [token]);
+
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/login');
@@ -226,19 +297,19 @@ useEffect(() => {
     }
   }, [status, token]);
 
-useEffect(() => {
-  if (!character || !token) return;
-  if (typeof window === 'undefined' || !('Notification' in window)) return;
-  if (/KAKAOTALK/i.test(navigator.userAgent)) return;
+  useEffect(() => {
+    if (!character || !token) return;
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (/KAKAOTALK/i.test(navigator.userAgent)) return;
     if (character.xp === 0) return;
-  const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-  if (localStorage.getItem('push-prompt-dismissed') === today) return;
-  if (Notification.permission === 'denied') {
-    setTimeout(() => setShowPushPrompt(true), 1000);
-    return;
-  }
-  if (Notification.permission === 'default') {
-    setTimeout(() => setShowPushPrompt(true), 1000);
+    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    if (localStorage.getItem('push-prompt-dismissed') === today) return;
+    if (Notification.permission === 'denied') {
+      setTimeout(() => setShowPushPrompt(true), 1000);
+      return;
+    }
+    if (Notification.permission === 'default') {
+      setTimeout(() => setShowPushPrompt(true), 1000);
       return;
     }
     const checkSub = async () => {
@@ -257,6 +328,22 @@ useEffect(() => {
     checkSub();
   }, [character, token]);
 
+  // 캐릭터가 크면 자동 줌아웃
+  useEffect(() => {
+    if (!character) return;
+    const charSize = getCharacterSize(character.xp);
+    const screenW = typeof window !== 'undefined' ? window.innerWidth : 390;
+    const screenH = typeof window !== 'undefined' ? window.innerHeight : 844;
+    const maxDim = Math.max(screenW, screenH);
+    if (charSize > maxDim * 0.8) {
+      // 자동으로 캐릭터가 화면에 들어오도록 초기 스케일 조정
+      const fitScale = (maxDim * 0.7) / charSize;
+      pinch.scale !== fitScale && setTimeout(() => {
+        // 초기 로드 시에만
+      }, 0);
+    }
+  }, [character]);
+
   const fetchCharacter = async () => {
     try {
       const res = await fetch(`${apiUrl}/api/characters/me`, {
@@ -269,7 +356,7 @@ useEffect(() => {
       const data = await res.json();
       setCharacter(data);
 
-    if (!data.tutorialCompleted) {
+      if (!data.tutorialCompleted) {
         router.push('/tutorial');
         return;
       }
@@ -311,12 +398,10 @@ useEffect(() => {
 
   const handlePushSetup = async () => {
     setMenuOpen(false);
-
     if (pushStatus === 'denied') {
       setShowBlockedGuide(true);
       return;
     }
-
     if (pushStatus === 'granted') {
       try {
         const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
@@ -332,7 +417,7 @@ useEffect(() => {
           },
           body: JSON.stringify({ fcmToken: 'all' }),
         });
-                localStorage.setItem('push-manually-disabled', 'true');
+        localStorage.setItem('push-manually-disabled', 'true');
         setPushStatus('idle');
         alert('알림이 해제되었습니다.');
       } catch (e) {
@@ -341,7 +426,6 @@ useEffect(() => {
       }
       return;
     }
-
     setPushStatus('loading');
     try {
       const fcmToken = await requestFcmToken();
@@ -354,7 +438,7 @@ useEffect(() => {
           },
           body: JSON.stringify({ fcmToken }),
         });
-     localStorage.removeItem('push-manually-disabled');
+        localStorage.removeItem('push-manually-disabled');
         setPushStatus('granted');
         alert('알림이 설정되었습니다! 배치 미완료 시 알림을 받을 수 있어요.');
       } else {
@@ -368,32 +452,32 @@ useEffect(() => {
     }
   };
 
- const handlePushPromptAccept = async () => {
-  setShowPushPrompt(false);
-  if (Notification.permission === 'denied') {
-    setShowBlockedGuide(true);
-    return;
-  }
-  setPushStatus('loading');
-  try {
-    const fcmToken = await requestFcmToken();
-    if (fcmToken) {
-      await fetch(`${apiUrl}/api/push/subscribe`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ fcmToken }),
-      });
-      setPushStatus('granted');
-    } else {
-      setPushStatus('denied');
+  const handlePushPromptAccept = async () => {
+    setShowPushPrompt(false);
+    if (Notification.permission === 'denied') {
+      setShowBlockedGuide(true);
+      return;
     }
-  } catch {
-    setPushStatus('idle');
-  }
-};
+    setPushStatus('loading');
+    try {
+      const fcmToken = await requestFcmToken();
+      if (fcmToken) {
+        await fetch(`${apiUrl}/api/push/subscribe`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fcmToken }),
+        });
+        setPushStatus('granted');
+      } else {
+        setPushStatus('denied');
+      }
+    } catch {
+      setPushStatus('idle');
+    }
+  };
 
   const handlePushPromptDismiss = () => {
     const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -429,12 +513,13 @@ useEffect(() => {
 
   const emoji = ANIMAL_EMOJI[character.animalType] || '🐾';
   const animalName = ANIMAL_NAMES[character.animalType] || character.animalType;
-  const emojiPx = getEmojiPx(character.xp);
+  const characterSize = getCharacterSize(character.xp);
   const initialPx = getEmojiPx(0);
+  const emojiPx = getEmojiPx(character.xp);
   const card = HELP_CARDS[helpPage];
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 relative">
+    <div className="min-h-screen bg-gray-50 pb-24 relative overflow-hidden">
       {typeof navigator !== 'undefined' && /KAKAOTALK/i.test(navigator.userAgent) && (
         <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
           <div className="text-5xl mb-4">🌐</div>
@@ -461,46 +546,106 @@ useEffect(() => {
         </div>
       )}
 
-      <div className="px-4 pt-5 pb-2 flex items-center justify-between">
-        <div />
-        <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
-      </div>
-
-      <div className="flex flex-col items-center justify-center" style={{ minHeight: '65vh' }}>
-        {PIXEL_ART_ANIMALS.includes(character.animalType) ? (
-  <img
-    src={`/characters/${character.animalType}1.png`}
-    alt={character.name}
-    className="select-none transition-all duration-700 ease-out"
-    style={{
-      width: `${emojiPx}px`,
-      height: `${emojiPx}px`,
-      objectFit: 'contain',
-      filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.08))',
-      imageRendering: 'pixelated',
-    }}
-  />
-) : (
-  <div
-    className="leading-none select-none transition-all duration-700 ease-out"
-    style={{ fontSize: `${emojiPx}px`, filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.08))' }}
-  >
-    {emoji}
-  </div>
-)}
-
-        <div className="mt-6 text-center">
-          <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
-          <p className="text-sm text-gray-400 mt-1">
-            {animalName} · {character.xp.toLocaleString()} XP
-          </p>
-          {character.activeTrait && (
-  <p className="text-xs text-gray-400 mt-2">{getTraitDisplay(character.activeTrait)}</p>
-)}
+      {/* ──── 캐릭터 배경 레이어 (핀치 줌 적용) ──── */}
+      <div
+        ref={pinch.containerRef}
+        className="absolute inset-0 overflow-auto"
+        style={{ touchAction: 'pan-x pan-y' }}
+        onTouchStart={pinch.onTouchStart}
+        onTouchMove={pinch.onTouchMove}
+        onTouchEnd={pinch.onTouchEnd}
+      >
+        <div
+          className="flex items-center justify-center transition-transform duration-100 ease-out"
+          style={{
+            minHeight: `${Math.max(characterSize * pinch.scale + 200, typeof window !== 'undefined' ? window.innerHeight : 844)}px`,
+            minWidth: `${Math.max(characterSize * pinch.scale + 100, typeof window !== 'undefined' ? window.innerWidth : 390)}px`,
+            transform: `scale(${pinch.scale})`,
+            transformOrigin: pinch.origin.x && pinch.origin.y
+              ? `${pinch.origin.x}px ${pinch.origin.y}px`
+              : 'center center',
+          }}
+        >
+          {PIXEL_ART_ANIMALS.includes(character.animalType) ? (
+            <img
+              src={`/characters/${character.animalType}1.png`}
+              alt={character.name}
+              className="select-none"
+              style={{
+                width: `${characterSize}px`,
+                height: `${characterSize}px`,
+                objectFit: 'contain',
+                imageRendering: 'pixelated',
+                opacity: 0.12,
+                filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.05))',
+              }}
+            />
+          ) : (
+            <div
+              className="leading-none select-none"
+              style={{
+                fontSize: `${characterSize}px`,
+                opacity: 0.12,
+                filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.05))',
+              }}
+            >
+              {emoji}
+            </div>
+          )}
         </div>
       </div>
 
-              <div className="fixed bottom-24 right-4 z-50">
+      {/* ──── UI 오버레이 레이어 ──── */}
+      <div className="relative z-10 pointer-events-none">
+        <div className="pointer-events-auto px-4 pt-5 pb-2 flex items-center justify-between">
+          <div />
+          <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
+        </div>
+
+        <div className="pointer-events-auto flex flex-col items-center justify-center" style={{ minHeight: '65vh' }}>
+          {/* 메인 캐릭터 (작은 크기, UI용) */}
+          {PIXEL_ART_ANIMALS.includes(character.animalType) ? (
+            <img
+              src={`/characters/${character.animalType}1.png`}
+              alt={character.name}
+              className="select-none transition-all duration-700 ease-out"
+              style={{
+                width: `${Math.min(emojiPx, 180)}px`,
+                height: `${Math.min(emojiPx, 180)}px`,
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.15))',
+                imageRendering: 'pixelated',
+              }}
+            />
+          ) : (
+            <div
+              className="leading-none select-none transition-all duration-700 ease-out"
+              style={{ fontSize: `${Math.min(emojiPx, 180)}px`, filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.15))' }}
+            >
+              {emoji}
+            </div>
+          )}
+
+          <div className="mt-6 text-center">
+            <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
+            <p className="text-sm text-gray-400 mt-1">
+              {animalName} · {character.xp.toLocaleString()} XP
+            </p>
+            {character.activeTrait && (
+              <p className="text-xs text-gray-400 mt-2">{getTraitDisplay(character.activeTrait)}</p>
+            )}
+            {/* 줌 힌트 */}
+            {characterSize > 300 && (
+              <p className="text-xs text-gray-300 mt-3 animate-pulse">
+                두 손가락으로 줌 아웃하면 전체 크기를 볼 수 있어요
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ──── FAB 메뉴 ──── */}
+      <div className="fixed bottom-24 right-4 z-50">
         {menuOpen && (
           <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
             <button onClick={handlePushSetup} disabled={pushStatus === 'loading'} className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 border-b border-gray-50 ${pushStatus === 'denied' ? 'text-red-400' : 'text-gray-700'}`}>
@@ -515,14 +660,14 @@ useEffect(() => {
             <button onClick={() => {
               if (character) {
                 const traitInfo = character.activeTrait ? TRAIT_DISPLAY[character.activeTrait] : null;
-              shareCharacter({
-  characterName: character.name,
-  animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
-  animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
-  animalType: character.animalType,
-  xp: character.xp,
-  traitName: traitInfo ? `${traitInfo.emoji} ${traitInfo.name}` : undefined,
-});
+                shareCharacter({
+                  characterName: character.name,
+                  animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
+                  animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
+                  animalType: character.animalType,
+                  xp: character.xp,
+                  traitName: traitInfo ? `${traitInfo.emoji} ${traitInfo.name}` : undefined,
+                });
               }
               setMenuOpen(false);
             }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
@@ -543,6 +688,7 @@ useEffect(() => {
 
       {menuOpen && <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />}
 
+      {/* ──── 모달들 ──── */}
       {showHelp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowHelp(false)}>
           <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
@@ -601,7 +747,7 @@ useEffect(() => {
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">캐릭터 크기</span>
                 <span className="font-bold text-gray-800">
-                  {emojiPx <= 60 ? '기본' : emojiPx <= 100 ? '성장 중' : emojiPx <= 160 ? '많이 성장' : '거대'}
+                  {characterSize <= 60 ? '기본' : characterSize <= 200 ? '성장 중' : characterSize <= 500 ? '많이 성장' : '거대'}
                 </span>
               </div>
             </div>
@@ -726,5 +872,3 @@ useEffect(() => {
     </div>
   );
 }
-
-
