@@ -72,11 +72,16 @@ export default function CharacterCreatePage() {
       {/* 선택된 동물 미리보기 */}
       <div className="mb-8 h-28 flex items-center justify-center">
         {selectedAnimal ? (
-          <div className="text-center">
-            <div className="text-7xl leading-none">{selectedAnimal.emoji}</div>
-            <p className="text-sm text-gray-500 mt-2">{selectedAnimal.name}</p>
-          </div>
-        ) : (
+  <div className="text-center">
+    <img
+      src={`/characters/${selectedAnimal.type}_1.png`}
+      alt={selectedAnimal.name}
+      className="mx-auto"
+      style={{ width: '100px', height: '100px', objectFit: 'contain', imageRendering: 'pixelated' }}
+    />
+    <p className="text-sm text-gray-500 mt-2">{selectedAnimal.name}</p>
+  </div>
+) : (
           <div className="text-center">
             <div className="text-5xl leading-none opacity-30">🐾</div>
             <p className="text-xs text-gray-300 mt-2">동물을 선택하세요</p>
@@ -106,8 +111,12 @@ export default function CharacterCreatePage() {
                 : 'bg-white border border-gray-200 shadow-sm'
             }`}
           >
-            <span className="text-2xl">{a.emoji}</span>
-            <span
+            <img
+  src={`/characters/${a.type}_1.png`}
+  alt={a.name}
+  style={{ width: '32px', height: '32px', objectFit: 'contain', imageRendering: 'pixelated' }}
+/>
+<span
               className={`text-[10px] mt-1 ${
                 selected === a.type ? 'text-white font-medium' : 'text-gray-500'
               }`}
