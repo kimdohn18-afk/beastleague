@@ -32,6 +32,12 @@ const ANIMAL_NAMES: Record<string, string> = {
   gorilla: '고릴라', elephant: '코끼리',
 };
 
+const PIXEL_ART_ANIMALS = [
+  'turtle1', 'eagle1', 'lion1', 'dinosaur1', 'dog1',
+  'fox1', 'penguin1', 'shark1', 'bear1', 'tiger1',
+  'seagull1', 'dragon1', 'cat1', 'rabbit1', 'gorilla1', 'elephant1',
+];
+
 const TRAIT_DISPLAY: Record<string, { emoji: string; name: string; desc: string }> = {
   prophet:              { emoji: '🔮', name: '예언자', desc: '경기의 흐름을 읽는 자' },
   oracle:               { emoji: '🔮', name: '신탁', desc: '거의 틀리지 않는 경지' },
@@ -461,12 +467,28 @@ useEffect(() => {
       </div>
 
       <div className="flex flex-col items-center justify-center" style={{ minHeight: '65vh' }}>
-        <div
-          className="leading-none select-none transition-all duration-700 ease-out"
-          style={{ fontSize: `${emojiPx}px`, filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.08))' }}
-        >
-          {emoji}
-        </div>
+        {PIXEL_ART_ANIMALS.includes(character.animalType) ? (
+  <img
+    src={`/characters/${character.animalType}_1.png`}
+    alt={character.name}
+    className="select-none transition-all duration-700 ease-out"
+    style={{
+      width: `${emojiPx}px`,
+      height: `${emojiPx}px`,
+      objectFit: 'contain',
+      filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.08))',
+      imageRendering: 'pixelated',
+    }}
+  />
+) : (
+  <div
+    className="leading-none select-none transition-all duration-700 ease-out"
+    style={{ fontSize: `${emojiPx}px`, filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.08))' }}
+  >
+    {emoji}
+  </div>
+)}
+
         <div className="mt-6 text-center">
           <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
           <p className="text-sm text-gray-400 mt-1">
