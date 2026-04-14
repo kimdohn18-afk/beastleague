@@ -469,7 +469,7 @@ useEffect(() => {
       <div className="flex flex-col items-center justify-center" style={{ minHeight: '65vh' }}>
         {PIXEL_ART_ANIMALS.includes(character.animalType) ? (
   <img
-    src={`/characters/${character.animalType}_1.png`}
+    src={`/characters/${character.animalType}1.png`}
     alt={character.name}
     className="select-none transition-all duration-700 ease-out"
     style={{
