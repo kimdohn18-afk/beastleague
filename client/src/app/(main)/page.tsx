@@ -33,9 +33,9 @@ const ANIMAL_NAMES: Record<string, string> = {
 };
 
 const PIXEL_ART_ANIMALS = [
-  'turtle1', 'eagle1', 'lion1', 'dinosaur1', 'dog1',
-  'fox1', 'penguin1', 'shark1', 'bear1', 'tiger1',
-  'seagull1', 'dragon1', 'cat1', 'rabbit1', 'gorilla1', 'elephant1',
+  'turtle', 'eagle', 'lion', 'dinosaur', 'dog',
+  'fox', 'penguin', 'shark', 'bear', 'tiger',
+  'seagull', 'dragon', 'cat', 'rabbit', 'gorilla', 'elephant',
 ];
 
 const TRAIT_DISPLAY: Record<string, { emoji: string; name: string; desc: string }> = {
