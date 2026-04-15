@@ -340,18 +340,22 @@ const [showShareMenu, setShowShareMenu] = useState(false);
     if (!character) return;
 
     let shareSuccess = false;
-
-    if (target === 'kakao') {
-      const { shareCharacter } = await import('@/lib/kakaoShare');
-      const traitInfo = character.activeTrait ? TRAIT_DISPLAY[character.activeTrait] : null;
-      shareCharacter({
-        characterName: character.name,
-        animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
-        animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
-        animalType: character.animalType,
-        xp: character.xp,
-        traitName: traitInfo ? `${traitInfo.emoji} ${traitInfo.name}` : undefined,
-      });
+if (target === 'kakao') {
+  const { shareCharacter } = await import('@/lib/kakaoShare');
+  shareCharacter({
+    characterName: character.name,
+    animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
+    animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
+    animalType: character.animalType,
+    xp: character.xp,
+    traitName: character.activeTrait
+      ? getTraitDisplay(character.activeTrait) || undefined
+      : undefined,
+  });
+  shareSuccess = true;
+  setShowShareMenu(false);
+}
+);
       shareSuccess = true;
       setShowShareMenu(false);
     } else {
