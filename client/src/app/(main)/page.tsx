@@ -398,31 +398,6 @@ const [showShareMenu, setShowShareMenu] = useState(false);
     }
   };
 
-      }
-    }
-  };
-
-    // 공유 성공 시 하루 1회 보상 요청
-    if (shareSuccess && token) {
-      try {
-        const res = await fetch(`${apiUrl}/api/characters/me/share-reward`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.rewarded) {
-            alert(`🎉 공유 보상 +${data.added} XP! (${data.xpBefore} → ${data.xpAfter})`);
-            // 캐릭터 정보 새로고침
-            setCharacter((prev) => prev ? { ...prev, xp: data.xpAfter } : prev);
-          }
-        }
-      } catch (e) {
-        console.error('Share reward failed:', e);
-      }
-    }
-  };
-  
   const handleHelpTouchStart = (e: React.TouchEvent) => setTouchStartX(e.touches[0].clientX);
   const handleHelpTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX === null) return;
