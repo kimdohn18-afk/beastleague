@@ -4,6 +4,9 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { shareResult } from '@/lib/kakaoShare';
+import { TRAIT_DISPLAY } from '@/lib/constants';
+
+// ──────────── 인터페이스 ────────────
 
 interface BatterRecord {
   order: string;
@@ -54,6 +57,15 @@ interface Placement {
   };
 }
 
+interface CharacterInfo {
+  name: string;
+  animalType: string;
+  xp: number;
+  activeTrait?: string | null;
+}
+
+// ──────────── 상수 ────────────
+
 const XP_LABELS: Record<string, string> = {
   hits: '안타',
   rbi: '타점',
@@ -66,6 +78,8 @@ const XP_LABELS: Record<string, string> = {
   noHitPenalty: '무안타',
   walkOff: '끝내기',
 };
+
+// ──────────── 유틸 ────────────
 
 function getMyBatters(p: Placement): BatterRecord[] {
   if (!p.game?.batterRecords) return [];
@@ -92,6 +106,8 @@ function getMyBatters(p: Placement): BatterRecord[] {
   return result;
 }
 
+// ──────────── 컴포넌트 ────────────
+
 export default function MyPlacementsPage() {
   const { data: session, status: authStatus } = useSession();
   const router = useRouter();
@@ -99,31 +115,39 @@ export default function MyPlacementsPage() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [tab, setTab] = useState<'history' | 'season'>('history');
+  const [characterInfo, setCharacterInfo] = useState<CharacterInfo | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
-  const [characterName, setCharacterName] = useState('');
-  
-  useEffect(() => {
-  if (authStatus === 'unauthenticated') router.push('/login');
-  if (!token) return;
-  fetchHistory();
-  fetchCharacterName();  // ← 추가
-}, [token, authStatus]);
 
-async function fetchCharacterName() {
-  try {
-    const res = await fetch(`${apiUrl}/api/characters/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setCharacterName(data.name);
+  // ──────────── 데이터 로드 ────────────
+
+  useEffect(() => {
+    if (authStatus === 'unauthenticated') router.push('/login');
+    if (!token) return;
+    fetchHistory();
+    fetchCharacterInfo();
+  }, [token, authStatus]);
+
+  async function fetchCharacterInfo() {
+    try {
+      const res = await fetch(`${apiUrl}/api/characters/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCharacterInfo({
+          name: data.name,
+          animalType: data.animalType,
+          xp: data.xp,
+          activeTrait: data.activeTrait,
+        });
+      }
+    } catch (e) {
+      console.error(e);
     }
-  } catch (e) {
-    console.error(e);
   }
-}
+
   async function fetchHistory() {
     setLoading(true);
     try {
@@ -136,6 +160,35 @@ async function fetchCharacterName() {
     }
     setLoading(false);
   }
+
+  // ──────────── 공유 핸들러 ────────────
+
+  function handleShareResult(p: Placement) {
+    if (!p.game || !characterInfo) return;
+    const totalXpItem = p.xpFromPlayer + p.xpFromPrediction;
+    const traitInfo = characterInfo.activeTrait
+      ? TRAIT_DISPLAY[characterInfo.activeTrait]
+      : null;
+
+    shareResult({
+      characterName: characterInfo.name,
+      animalType: characterInfo.animalType,
+      xp: characterInfo.xp,
+      traitName: traitInfo ? `${traitInfo.emoji} ${traitInfo.name}` : undefined,
+      team: p.team,
+      battingOrder: p.battingOrder,
+      totalXp: totalXpItem,
+      isCorrect: !!p.isCorrect,
+      predictedWinner: p.predictedWinner,
+      awayTeam: p.game.awayTeam,
+      homeTeam: p.game.homeTeam,
+      awayScore: p.game.awayScore ?? 0,
+      homeScore: p.game.homeScore ?? 0,
+      date: p.date,
+    });
+  }
+
+  // ──────────── 렌더링 ────────────
 
   if (authStatus === 'loading' || loading) {
     return (
@@ -183,6 +236,8 @@ async function fetchCharacterName() {
     ? (seasonStats.hits / seasonStats.atBats).toFixed(3)
     : '.000';
 
+  const characterName = characterInfo?.name || '';
+
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
       <div className="bg-white border-b border-gray-100 px-4 pt-6 pb-5">
@@ -222,6 +277,7 @@ async function fetchCharacterName() {
         </button>
       </div>
 
+      {/* ──── 시즌 성적 탭 ──── */}
       {tab === 'season' && (
         <div className="p-4">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -296,6 +352,7 @@ async function fetchCharacterName() {
         </div>
       )}
 
+      {/* ──── 경기별 기록 탭 ──── */}
       {tab === 'history' && (
         <div className="p-4 space-y-3">
           {placements.length === 0 ? (
@@ -342,7 +399,7 @@ async function fetchCharacterName() {
                       <span className="text-gray-400 text-xs">· {p.predictedWinner} 승리 예측</span>
                     </div>
 
-                                       {isSettled && (
+                    {isSettled && (
                       <div className="mt-3 flex items-center justify-between">
                         <span className={`text-lg font-bold ${isPositive ? 'text-emerald-500' : 'text-red-400'}`}>
                           {isPositive ? '+' : ''}{totalXpItem} XP
@@ -351,21 +408,7 @@ async function fetchCharacterName() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (p.game) {
-                                shareResult({
-                                  characterName,
-                                  team: p.team,
-                                  battingOrder: p.battingOrder,
-                                  totalXp: totalXpItem,
-                                  isCorrect: !!p.isCorrect,
-                                  predictedWinner: p.predictedWinner,
-                                  awayTeam: p.game.awayTeam,
-                                  homeTeam: p.game.homeTeam,
-                                  awayScore: p.game.awayScore ?? 0,
-                                  homeScore: p.game.homeScore ?? 0,
-                                  date: p.date,
-                                });
-                              }
+                              handleShareResult(p);
                             }}
                             className="text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded-lg font-medium"
                           >
@@ -421,12 +464,11 @@ async function fetchCharacterName() {
                             {Object.entries(XP_LABELS).map(([key, label]) => {
                               const val = (p.xpBreakdown as any)[key];
                               if (!val || val === 0) return null;
-                              const isNeg = val < 0;
                               return (
                                 <div key={key} className="flex justify-between">
                                   <span className="text-gray-500">{label}</span>
-                                  <span className={`font-medium ${isNeg ? 'text-red-400' : 'text-gray-700'}`}>
-                                    {isNeg ? '' : '+'}{val}
+                                  <span className={`font-medium ${val < 0 ? 'text-red-400' : 'text-gray-700'}`}>
+                                    {val < 0 ? '' : '+'}{val}
                                   </span>
                                 </div>
                               );
