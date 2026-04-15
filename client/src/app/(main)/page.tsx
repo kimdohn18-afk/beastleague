@@ -5,7 +5,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
-import { shareCharacter } from '@/lib/kakaoShare';
+import ShareCard from '@/components/ShareCard';
+import { captureCardAsBlob, shareToInstagramStory, shareToKakao } from '@/lib/shareUtils';
 
 interface Character {
   _id: string;
@@ -235,6 +236,10 @@ export default function MainPage() {
 
   const pinch = usePinchZoom();
 
+  const shareCardRef = useRef<HTMLDivElement>(null);
+const [shareLoading, setShareLoading] = useState(false);
+const [showShareMenu, setShowShareMenu] = useState(false);
+
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'denied') setPushStatus('denied');
@@ -392,6 +397,45 @@ export default function MainPage() {
     setShowPushPrompt(false);
   };
 
+  const handleShare = async (target: 'kakao' | 'instagram' | 'download') => {
+    if (!character || !shareCardRef.current) return;
+    setShareLoading(true);
+    setShowShareMenu(false);
+
+    try {
+      const blob = await captureCardAsBlob(shareCardRef.current);
+      if (!blob) { alert('이미지 생성에 실패했습니다.'); setShareLoading(false); return; }
+
+      const traitInfo = character.activeTrait ? TRAIT_DISPLAY[character.activeTrait] : null;
+
+      if (target === 'instagram') {
+        await shareToInstagramStory(blob);
+      } else if (target === 'kakao') {
+        await shareToKakao(blob, {
+          characterName: character.name,
+          animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
+          animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
+          xp: character.xp,
+          characterSize,
+          traitName: traitInfo ? `${traitInfo.emoji} ${traitInfo.name}` : undefined,
+        });
+      } else {
+        // 이미지 다운로드
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'beastleague.png';
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      console.error('Share failed:', e);
+      alert('공유 중 오류가 발생했습니다.');
+    } finally {
+      setShareLoading(false);
+    }
+  };
+  
   const handleHelpTouchStart = (e: React.TouchEvent) => setTouchStartX(e.touches[0].clientX);
   const handleHelpTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX === null) return;
@@ -529,20 +573,8 @@ export default function MainPage() {
             <button onClick={() => { router.push('/achievements'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
               🏆 내 업적
             </button>
-            <button onClick={() => {
-              if (character) {
-                const traitInfo = character.activeTrait ? TRAIT_DISPLAY[character.activeTrait] : null;
-                shareCharacter({
-                  characterName: character.name,
-                  animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
-                  animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
-                  animalType: character.animalType,
-                  xp: character.xp,
-                  traitName: traitInfo ? `${traitInfo.emoji} ${traitInfo.name}` : undefined,
-                });
-              }
-              setMenuOpen(false);
-            }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
+                      <button onClick={() => { setShowShareMenu(true); setMenuOpen(false); }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
               📢 공유하기
             </button>
             <button onClick={() => { setShowDelete(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50">
@@ -718,6 +750,66 @@ export default function MainPage() {
           </div>
         </div>
       )}
+            {/* 공유용 카드 (화면 밖에 렌더링) */}
+      <div style={{ position: 'fixed', top: '-9999px', left: '-9999px' }}>
+        <ShareCard
+          ref={shareCardRef}
+          characterName={character.name}
+          animalType={character.animalType}
+          animalName={animalName}
+          xp={character.xp}
+          characterSize={characterSize}
+          traitName={
+            character.activeTrait && TRAIT_DISPLAY[character.activeTrait]
+              ? `${TRAIT_DISPLAY[character.activeTrait].emoji} ${TRAIT_DISPLAY[character.activeTrait].name}`
+              : undefined
+          }
+        />
+      </div>
+
+      {/* 공유 메뉴 모달 */}
+      {showShareMenu && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center pb-28 bg-black/30"
+          onClick={() => setShowShareMenu(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-5"
+            onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-gray-800 mb-4 text-center">공유하기</h3>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleShare('kakao')}
+                disabled={shareLoading}
+                className="flex-1 flex flex-col items-center gap-2 py-4 bg-yellow-50 rounded-xl
+                           hover:bg-yellow-100 active:scale-95 transition-all disabled:opacity-50"
+              >
+                <span className="text-2xl">💬</span>
+                <span className="text-xs font-medium text-gray-700">카카오톡</span>
+              </button>
+              <button
+                onClick={() => handleShare('instagram')}
+                disabled={shareLoading}
+                className="flex-1 flex flex-col items-center gap-2 py-4 bg-purple-50 rounded-xl
+                           hover:bg-purple-100 active:scale-95 transition-all disabled:opacity-50"
+              >
+                <span className="text-2xl">📸</span>
+                <span className="text-xs font-medium text-gray-700">인스타 스토리</span>
+              </button>
+              <button
+                onClick={() => handleShare('download')}
+                disabled={shareLoading}
+                className="flex-1 flex flex-col items-center gap-2 py-4 bg-gray-50 rounded-xl
+                           hover:bg-gray-100 active:scale-95 transition-all disabled:opacity-50"
+              >
+                <span className="text-2xl">📋</span>
+                <span className="text-xs font-medium text-gray-700">이미지 저장</span>
+              </button>
+            </div>
+            {shareLoading && (
+              <p className="text-xs text-gray-400 text-center mt-3 animate-pulse">카드 생성 중...</p>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
