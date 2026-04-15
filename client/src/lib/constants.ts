@@ -68,8 +68,83 @@ export const TRAIT_DISPLAY: Record<string, { emoji: string; name: string; desc: 
 };
 
 /** 칭호 ID → "🔮 예언자 — "경기의 흐름을 읽는 자"" 형태 문자열 */
+// 업적 ID → 표시 매핑 (TraitCalculator의 ACHIEVEMENT_DEFINITIONS와 동기화)
+export const ACHIEVEMENT_DISPLAY: Record<string, { emoji: string; name: string; desc: string }> = {
+  first_placement: { emoji: '👣', name: '첫 발걸음', desc: '모험의 시작!' },
+  rookie:          { emoji: '🌱', name: '루키', desc: '이제 좀 감이 온다' },
+  regular:         { emoji: '🏠', name: '단골', desc: '매일 찾아오는 단골손님' },
+  veteran:         { emoji: '⭐', name: '베테랑', desc: '노련한 베테랑' },
+  ironman:         { emoji: '🦾', name: '철인', desc: '쉬지 않는 철인' },
+  legend:          { emoji: '👑', name: '레전드', desc: '전설이 되다' },
+  first_league:    { emoji: '🤝', name: '첫 리그 참가', desc: '함께하면 더 재밌지' },
+  xp_seed:         { emoji: '🫘', name: '씨앗', desc: '작은 씨앗이 심어졌다' },
+  xp_sprout:       { emoji: '🌿', name: '새싹', desc: '새싹이 돋아나다' },
+  xp_sapling:      { emoji: '🌳', name: '묘목', desc: '묘목으로 자라다' },
+  xp_tree:         { emoji: '🌲', name: '나무', desc: '단단한 나무가 되다' },
+  xp_great_tree:   { emoji: '🏔️', name: '거목', desc: '거대한 거목' },
+  xp_world_tree:   { emoji: '🌍', name: '세계수', desc: '세계수에 도달하다' },
+  first_correct:   { emoji: '🎯', name: '첫 적중', desc: '감이 왔다!' },
+  getting_it:      { emoji: '🔮', name: '감잡았다', desc: '점점 느낌이 온다' },
+  prophet:         { emoji: '🧙‍♂️', name: '예언자', desc: '예언자의 눈' },
+  divine:          { emoji: '👁️', name: '신들린', desc: '신이 내린 촉' },
+  hot_streak:      { emoji: '🔥', name: '촉이 좋네', desc: '연속으로 맞추다니' },
+  fortune_teller:  { emoji: '🃏', name: '점쟁이', desc: '점쟁이급 예측력' },
+  first_hr:        { emoji: '💥', name: '첫 홈런', desc: '첫 홈런의 짜릿함' },
+  hr_mania:        { emoji: '🔥', name: '홈런 매니아', desc: '홈런에 미치다' },
+  hr_king:         { emoji: '🏆', name: '홈런왕', desc: '진정한 홈런왕' },
+  extra_base:      { emoji: '💪', name: '장타력', desc: '장타의 달인' },
+  first_steal:     { emoji: '💨', name: '도루 성공', desc: '바람처럼 빠르게' },
+  speedster:       { emoji: '⚡', name: '스피드스터', desc: '도루의 신' },
+  first_walkoff:   { emoji: '🎬', name: '끝내기', desc: '극적인 끝내기!' },
+  walkoff_king:    { emoji: '🎭', name: '끝장왕', desc: '끝내기 전문가' },
+  hit_machine:     { emoji: '🏏', name: '안타 제조기', desc: '안타가 쏟아진다' },
+  rbi_king:        { emoji: '📊', name: '타점왕', desc: '득점권에서 강하다' },
+  run_king:        { emoji: '🏃', name: '득점왕', desc: '홈을 밟는 달인' },
+  streak_3:        { emoji: '🔥', name: '3일 연속', desc: '3일 연속 출석!' },
+  streak_7:        { emoji: '📅', name: '주간 개근', desc: '일주일 개근' },
+  streak_14:       { emoji: '🗓️', name: '2주 개근', desc: '2주 연속 개근' },
+  streak_30:       { emoji: '🏅', name: '한 달 개근', desc: '한 달 내내 함께' },
+  streak_60:       { emoji: '💪', name: '불꽃 의지', desc: '60일 연속의 의지' },
+  streak_100:      { emoji: '🐉', name: '전설의 근성', desc: '100일 연속 달성' },
+  big_hit:         { emoji: '💰', name: '대박', desc: '한방에 대박!' },
+  jackpot:         { emoji: '🎰', name: '잭팟', desc: '잭팟 터졌다!' },
+  explosion:       { emoji: '💣', name: '폭발', desc: 'XP 폭발!' },
+  goat:            { emoji: '🐐', name: '역대급', desc: '역대급 한 경기' },
+  order_explorer:  { emoji: '🧭', name: '타순 탐험가', desc: '모든 타순을 경험하다' },
+  all_rounder:     { emoji: '🗺️', name: '올라운더', desc: '여러 팀을 넘나드는' },
+  nationwide:      { emoji: '🇰🇷', name: '전국구', desc: '전국 10개 구단 정복' },
+  collector_15:    { emoji: '📦', name: '수집가', desc: '업적 수집가' },
+  collector_30:    { emoji: '🏛️', name: '컬렉터', desc: '진정한 컬렉터' },
+  loss_hero:       { emoji: '😤', name: '역경의 승리자', desc: '져도 빛나는 사나이' },
+  nohit_survivor:  { emoji: '😅', name: '노히트 생존자', desc: '무안타에도 굴하지 않는' },
+  wrong_a_lot:     { emoji: '🙈', name: '예측 실패왕', desc: '틀려도 괜찮아' },
+  lose_streak:     { emoji: '😭', name: '연패 체험', desc: '함께 아파하는 팬' },
+  zero_xp:         { emoji: '💀', name: 'XP 0', desc: '바닥을 경험하다' },
+  negative_xp:     { emoji: '🕳️', name: '바닥에서', desc: '마이너스도 경험이다' },
+  // 팀 충성도 (teamId로 저장될 경우)
+  samsung: { emoji: '🦁', name: '삼성 라이온즈', desc: '삼성 충성파' },
+  kia:     { emoji: '🐯', name: '기아 타이거즈', desc: '기아 충성파' },
+  lg:      { emoji: '🤞', name: 'LG 트윈스', desc: 'LG 충성파' },
+  doosan:  { emoji: '🐻', name: '두산 베어스', desc: '두산 충성파' },
+  kt:      { emoji: '🧙', name: 'KT 위즈', desc: 'KT 충성파' },
+  ssg:     { emoji: '🛬', name: 'SSG 랜더스', desc: 'SSG 충성파' },
+  lotte:   { emoji: '🦅', name: '롯데 자이언츠', desc: '롯데 충성파' },
+  hanwha:  { emoji: '🦅', name: '한화 이글스', desc: '한화 충성파' },
+  nc:      { emoji: '🦕', name: 'NC 다이노스', desc: 'NC 충성파' },
+  kiwoom:  { emoji: '🦸', name: '키움 히어로즈', desc: '키움 충성파' },
+};
+
 export function getTraitDisplay(traitId: string): string {
+  // 1) 기존 TRAIT_DISPLAY에서 찾기
   const t = TRAIT_DISPLAY[traitId];
-  if (!t) return '';
-  return `${t.emoji} ${t.name} — "${t.desc}"`;
+  if (t) return `${t.emoji} ${t.name}`;
+  
+  // 2) 업적 ID에서 찾기
+  const a = ACHIEVEMENT_DISPLAY[traitId];
+  if (a) return `${a.emoji} ${a.name}`;
+  
+  // 3) 이미 "🦾 철인" 형식이면 그대로 반환 (하위 호환)
+  if (traitId.includes(' ')) return traitId;
+  
+  return '';
 }
