@@ -676,22 +676,22 @@ const [showShareMenu, setShowShareMenu] = useState(false);
           </div>
         </div>
       )}
-            {/* 공유용 카드 (화면 밖에 렌더링) */}
-      <div style={{ position: 'fixed', top: '-9999px', left: '-9999px' }}>
-        <ShareCard
-          ref={shareCardRef}
-          characterName={character.name}
-          animalType={character.animalType}
-          animalName={animalName}
-          xp={character.xp}
-          characterSize={characterSize}
-          traitName={
-            character.activeTrait && TRAIT_DISPLAY[character.activeTrait]
-              ? `${TRAIT_DISPLAY[character.activeTrait].emoji} ${TRAIT_DISPLAY[character.activeTrait].name}`
-              : undefined
-          }
-        />
-      </div>
+     {/* 공유용 카드 — TRAIT_DISPLAY 뿐 아니라 ACHIEVEMENT_DISPLAY도 확인 */}
+<div style={{ position: 'fixed', top: '-9999px', left: '-9999px' }}>
+  <ShareCard
+    ref={shareCardRef}
+    characterName={character.name}
+    animalType={character.animalType}
+    animalName={animalName}
+    xp={character.xp}
+    characterSize={characterSize}
+    traitName={
+      character.activeTrait
+        ? getTraitDisplay(character.activeTrait) || undefined
+        : undefined
+    }
+  />
+</div>
 
       {/* 공유 메뉴 모달 */}
       {showShareMenu && (
