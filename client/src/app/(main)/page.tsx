@@ -336,26 +336,23 @@ const [showShareMenu, setShowShareMenu] = useState(false);
     setShowPushPrompt(false);
   };
 
-    const handleShare = async (target: 'kakao' | 'instagram' | 'download') => {
+      const handleShare = async (target: 'kakao' | 'instagram' | 'download') => {
     if (!character) return;
 
     let shareSuccess = false;
-if (target === 'kakao') {
-  const { shareCharacter } = await import('@/lib/kakaoShare');
-  shareCharacter({
-    characterName: character.name,
-    animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
-    animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
-    animalType: character.animalType,
-    xp: character.xp,
-    traitName: character.activeTrait
-      ? getTraitDisplay(character.activeTrait) || undefined
-      : undefined,
-  });
-  shareSuccess = true;
-  setShowShareMenu(false);
-}
-);
+
+    if (target === 'kakao') {
+      const { shareCharacter } = await import('@/lib/kakaoShare');
+      shareCharacter({
+        characterName: character.name,
+        animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
+        animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
+        animalType: character.animalType,
+        xp: character.xp,
+        traitName: character.activeTrait
+          ? getTraitDisplay(character.activeTrait) || undefined
+          : undefined,
+      });
       shareSuccess = true;
       setShowShareMenu(false);
     } else {
@@ -382,6 +379,26 @@ if (target === 'kakao') {
         setShareLoading(false);
       }
     }
+
+    // 공유 성공 시 하루 1회 보상 요청
+    if (shareSuccess && token) {
+      try {
+        const res = await fetch(`${apiUrl}/api/characters/me/share-reward`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.rewarded) {
+            alert(`🎉 공유 보상 +${data.added} XP! (${data.xpBefore} → ${data.xpAfter})`);
+            setCharacter((prev) => prev ? { ...prev, xp: data.xpAfter } : prev);
+          }
+        }
+      } catch (e) {
+        console.error('Share reward failed:', e);
+      }
+    }
+  };
 
     // 공유 성공 시 하루 1회 보상 요청
     if (shareSuccess && token) {
