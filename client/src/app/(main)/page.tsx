@@ -336,7 +336,7 @@ const [showShareMenu, setShowShareMenu] = useState(false);
     setShowPushPrompt(false);
   };
 
-      const handleShare = async (target: 'kakao' | 'instagram' | 'download') => {
+  const handleShare = async (target: 'kakao' | 'instagram' | 'download') => {
     if (!character) return;
 
     let shareSuccess = false;
@@ -356,7 +356,6 @@ const [showShareMenu, setShowShareMenu] = useState(false);
       shareSuccess = true;
       setShowShareMenu(false);
     } else {
-      // 인스타/다운로드는 카드 캡처
       if (!shareCardRef.current) return;
       setShareLoading(true);
       setShowShareMenu(false);
@@ -380,7 +379,6 @@ const [showShareMenu, setShowShareMenu] = useState(false);
       }
     }
 
-    // 공유 성공 시 하루 1회 보상 요청
     if (shareSuccess && token) {
       try {
         const res = await fetch(`${apiUrl}/api/characters/me/share-reward`, {
@@ -396,6 +394,10 @@ const [showShareMenu, setShowShareMenu] = useState(false);
         }
       } catch (e) {
         console.error('Share reward failed:', e);
+      }
+    }
+  };
+
       }
     }
   };
