@@ -184,20 +184,24 @@ charactersRouter.put('/me/active-trait', authenticateUser, async (req: Request, 
       return res.json({ activeTrait: null });
     }
 
-    // 달성한 업적인지 검증
-    const { earned, teamAchievements } = await calculateAchievements(userId, String(character._id));
+    // 달성한 업적인지 검증 — skipTraitUpdate로 activeTrait 덮어쓰기 방지
+    const { earned, teamAchievements } = await calculateAchievements(
+      userId, 
+      String(character._id),
+      { skipTraitUpdate: true }
+    );
     
     // 일반 업적에서 찾기
-    const allDefs = getAllAchievements();
     const isGeneralEarned = earned.includes(traitId);
     
-    // 팀 업적에서 찾기 (teamId로)
+    // 팀 업적에서 찾기
     const isTeamEarned = teamAchievements.some(ta => ta.teamId === traitId);
     
     if (!isGeneralEarned && !isTeamEarned) {
       return res.status(400).json({ error: '아직 달성하지 않은 업적입니다' });
     }
 
+    // 검증 통과 후 저장
     character.activeTrait = traitId;
     await character.save();
 
