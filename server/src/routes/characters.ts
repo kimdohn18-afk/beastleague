@@ -167,3 +167,42 @@ charactersRouter.post('/me/share-reward', authenticateUser, async (req: Request,
     return res.status(500).json({ error: String(err) });
   }
 });
+
+// PUT /api/characters/me/active-trait — 대표 업적 선택
+charactersRouter.put('/me/active-trait', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { traitId } = req.body as { traitId: string | null };
+
+    const character = await Character.findOne({ userId });
+    if (!character) return res.status(404).json({ error: '캐릭터가 없습니다' });
+
+    // null이면 해제
+    if (!traitId) {
+      character.activeTrait = null;
+      await character.save();
+      return res.json({ activeTrait: null });
+    }
+
+    // 달성한 업적인지 검증
+    const { earned, teamAchievements } = await calculateAchievements(userId, String(character._id));
+    
+    // 일반 업적에서 찾기
+    const allDefs = getAllAchievements();
+    const isGeneralEarned = earned.includes(traitId);
+    
+    // 팀 업적에서 찾기 (teamId로)
+    const isTeamEarned = teamAchievements.some(ta => ta.teamId === traitId);
+    
+    if (!isGeneralEarned && !isTeamEarned) {
+      return res.status(400).json({ error: '아직 달성하지 않은 업적입니다' });
+    }
+
+    character.activeTrait = traitId;
+    await character.save();
+
+    return res.json({ activeTrait: traitId });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
