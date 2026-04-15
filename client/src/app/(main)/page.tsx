@@ -480,11 +480,10 @@ const [showShareMenu, setShowShareMenu] = useState(false);
           {animalName} · {character.xp.toLocaleString()} XP
         </p>
         {character.activeTrait && (
-          <p className="text-xs text-gray-400 mt-2">{getTraitDisplay(character.activeTrait)}</p>
-        )}
-        <p className="text-xs text-gray-300 mt-3">
-          캐릭터 크기: {characterSize}px
-        </p>
+  <div className="mt-3 bg-white/80 backdrop-blur rounded-xl px-4 py-2 border border-orange-100 shadow-sm">
+    <p className="text-sm text-gray-700 font-medium">{getTraitDisplay(character.activeTrait)}</p>
+  </div>
+)}
       </div>
 
       {/* ──── FAB 메뉴 ──── */}
