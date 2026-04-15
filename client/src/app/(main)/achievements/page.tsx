@@ -77,12 +77,12 @@ export default function AchievementsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedAchievement, setSelectedAchievement] = useState<Achievement | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<{ team: typeof ALL_TEAMS[0]; achievement?: TeamAchievement } | null>(null);
+  const [settingTrait, setSettingTrait] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
-  const [settingTrait, setSettingTrait] = useState(false);
 
-  
   useEffect(() => {
     if (!token) return;
     fetchData();
@@ -98,6 +98,44 @@ export default function AchievementsPage() {
       console.error(e);
     }
     setLoading(false);
+  }
+
+  // ──────────── 대표 업적 설정 ────────────
+  async function setActiveTrait(traitId: string | null) {
+    if (!token) return;
+    setSettingTrait(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/characters/me/active-trait`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ traitId }),
+      });
+      if (res.ok) {
+        await fetchData();
+        setSelectedAchievement(null);
+        setSelectedTeam(null);
+        setToast(traitId ? '대표 업적이 설정되었습니다!' : '대표 업적이 해제되었습니다');
+        setTimeout(() => setToast(null), 2000);
+      } else {
+        const err = await res.json();
+        setToast(err.error || '설정 실패');
+        setTimeout(() => setToast(null), 2000);
+      }
+    } catch (e) {
+      console.error(e);
+      setToast('설정 중 오류가 발생했습니다');
+      setTimeout(() => setToast(null), 2000);
+    }
+    setSettingTrait(false);
+  }
+
+  // ──────────── 현재 대표 업적과 일치하는지 확인 ────────────
+  function isCurrentTrait(id: string): boolean {
+    if (!data?.activeTrait) return false;
+    return data.activeTrait.id === id;
   }
 
   if (loading) {
@@ -125,7 +163,6 @@ export default function AchievementsPage() {
 
   const progressPercent = Math.round((data.earnedCount / data.totalCount) * 100);
 
-  // 팀 업적 맵
   const teamAchMap: Record<string, TeamAchievement> = {};
   for (const ta of data.teamAchievements) {
     teamAchMap[ta.teamId] = ta;
@@ -133,6 +170,13 @@ export default function AchievementsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
+      {/* 토스트 */}
+      {toast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] bg-gray-800 text-white px-4 py-2 rounded-2xl text-sm shadow-lg">
+          {toast}
+        </div>
+      )}
+
       <div className="px-4 pt-5 pb-3">
         <button onClick={() => router.back()} className="text-gray-400 text-sm mb-3">← 돌아가기</button>
         <h1 className="text-xl font-bold text-gray-800">업적</h1>
@@ -149,7 +193,15 @@ export default function AchievementsPage() {
 
         {data.activeTrait && (
           <div className="mt-4 bg-white rounded-2xl p-4 border border-orange-200 shadow-sm">
-            <p className="text-xs text-orange-400 font-bold mb-1">대표 칭호</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-orange-400 font-bold mb-1">대표 칭호</p>
+              <button
+                onClick={() => setActiveTrait(null)}
+                className="text-[10px] text-gray-400 hover:text-red-400 transition"
+              >
+                해제
+              </button>
+            </div>
             <p className="text-lg">
               {data.activeTrait.emoji} <span className="font-bold text-gray-800">{data.activeTrait.name}</span>
             </p>
@@ -172,7 +224,9 @@ export default function AchievementsPage() {
                   onClick={() => setSelectedAchievement(ach)}
                   className={`flex flex-col items-center p-3 rounded-xl border transition-all ${
                     ach.earned
-                      ? 'bg-white border-gray-200 shadow-sm active:scale-95'
+                      ? isCurrentTrait(ach.id)
+                        ? 'bg-orange-50 border-orange-300 shadow-sm active:scale-95 ring-2 ring-orange-300'
+                        : 'bg-white border-gray-200 shadow-sm active:scale-95'
                       : 'bg-gray-100 border-gray-100 opacity-40'
                   }`}
                 >
@@ -184,6 +238,9 @@ export default function AchievementsPage() {
                   }`}>
                     {ach.earned ? ach.name : '???'}
                   </span>
+                  {ach.earned && isCurrentTrait(ach.id) && (
+                    <span className="text-[8px] text-orange-500 font-bold mt-0.5">대표</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -196,7 +253,12 @@ export default function AchievementsPage() {
           <div className="grid grid-cols-5 gap-2">
             {ALL_TEAMS.map(team => {
               const ta = teamAchMap[team.id];
-              const tierClass = ta ? TIER_COLORS[ta.tier.tier] : 'border-gray-200 bg-gray-100';
+              const isCurrent = isCurrentTrait(team.id);
+              const tierClass = ta
+                ? isCurrent
+                  ? 'border-orange-400 bg-orange-50'
+                  : TIER_COLORS[ta.tier.tier]
+                : 'border-gray-200 bg-gray-100';
               return (
                 <button
                   key={team.id}
@@ -207,8 +269,11 @@ export default function AchievementsPage() {
                   <span className="text-[9px] mt-1 text-center leading-tight text-gray-600 font-medium">
                     {team.name.split(' ')[0]}
                   </span>
-                  {ta && (
+                  {ta && !isCurrent && (
                     <span className="text-[9px] mt-0.5">{TIER_LABELS[ta.tier.tier]}</span>
+                  )}
+                  {isCurrent && (
+                    <span className="text-[8px] text-orange-500 font-bold mt-0.5">대표</span>
                   )}
                 </button>
               );
@@ -241,6 +306,28 @@ export default function AchievementsPage() {
                 {selectedAchievement.earned ? '✅ 달성 완료' : '🔒 미달성'}
               </span>
             </div>
+
+            {/* 대표 업적 설정 버튼 */}
+            {selectedAchievement.earned && (
+              <button
+                onClick={() => setActiveTrait(
+                  isCurrentTrait(selectedAchievement.id) ? null : selectedAchievement.id
+                )}
+                disabled={settingTrait}
+                className={`w-full mb-2 py-2.5 rounded-xl text-sm font-bold transition ${
+                  isCurrentTrait(selectedAchievement.id)
+                    ? 'bg-orange-100 text-orange-500 hover:bg-red-50 hover:text-red-400'
+                    : 'bg-orange-400 text-white hover:bg-orange-500'
+                } disabled:opacity-50`}
+              >
+                {settingTrait
+                  ? '설정 중...'
+                  : isCurrentTrait(selectedAchievement.id)
+                    ? '대표 업적 해제'
+                    : '🏅 대표 업적으로 설정'}
+              </button>
+            )}
+
             <button onClick={() => setSelectedAchievement(null)} className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">
               닫기
             </button>
@@ -288,6 +375,27 @@ export default function AchievementsPage() {
                 })}
               </div>
             </div>
+
+            {/* 팀 대표 업적 설정 버튼 */}
+            {selectedTeam.achievement && (
+              <button
+                onClick={() => setActiveTrait(
+                  isCurrentTrait(selectedTeam.team.id) ? null : selectedTeam.team.id
+                )}
+                disabled={settingTrait}
+                className={`w-full mb-2 py-2.5 rounded-xl text-sm font-bold transition ${
+                  isCurrentTrait(selectedTeam.team.id)
+                    ? 'bg-orange-100 text-orange-500 hover:bg-red-50 hover:text-red-400'
+                    : 'bg-orange-400 text-white hover:bg-orange-500'
+                } disabled:opacity-50`}
+              >
+                {settingTrait
+                  ? '설정 중...'
+                  : isCurrentTrait(selectedTeam.team.id)
+                    ? '대표 업적 해제'
+                    : '🏅 대표 업적으로 설정'}
+              </button>
+            )}
 
             <button onClick={() => setSelectedTeam(null)} className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">
               닫기
