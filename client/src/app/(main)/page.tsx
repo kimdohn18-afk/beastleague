@@ -15,6 +15,18 @@ import {
   getTraitDisplay,
 } from '@/lib/constants';
 
+interface Character {
+  _id: string;
+  name: string;
+  animalType: string;
+  xp: number;
+  userId: string;
+  activeTrait?: string | null;
+  earnedachievements?: string[];
+  totalPlacements?: number;
+  tutorialCompleted?: boolean;
+}
+
 // 상한 없는 캐릭터 크기: 1000 XP ≈ 390px (모바일 화면 꽉 참)
 function getCharacterSize(xp: number): number {
   const minPx = 60;
