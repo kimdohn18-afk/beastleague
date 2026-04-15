@@ -110,3 +110,60 @@ charactersRouter.get('/me/achievements', authenticateUser, async (req: Request, 
     return res.status(500).json({ error: String(err) });
   }
 });
+
+// POST /api/characters/me/share-reward — 하루 1회 공유 보상 (10 XP)
+charactersRouter.post('/me/share-reward', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const character = await Character.findOne({ userId });
+    if (!character) return res.status(404).json({ error: '캐릭터가 없습니다' });
+
+    // 오늘 날짜 (KST)
+    const todayKST = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+
+    // 이미 오늘 보상 받았는지 체크
+    const existing = await StatLog.findOne({
+      userId: character.userId,
+      source: 'training',
+      sourceId: `share-${todayKST}`,
+    });
+
+    if (existing) {
+      return res.json({
+        rewarded: false,
+        message: '오늘은 이미 공유 보상을 받았습니다',
+        xp: character.xp,
+      });
+    }
+
+    // 10 XP 부여
+    const SHARE_XP = 10;
+    const xpBefore = character.xp;
+    character.xp += SHARE_XP;
+    await character.save();
+
+    // 로그 기록
+    await StatLog.create({
+      userId: character.userId,
+      characterId: character._id,
+      source: 'training',
+      sourceId: `share-${todayKST}`,
+      before: { power: 0, agility: 0, skill: 0, stamina: 0, mind: 0 },
+      after: { power: 0, agility: 0, skill: 0, stamina: 0, mind: 0 },
+      xpBefore,
+      xpAfter: character.xp,
+      levelBefore: 0,
+      levelAfter: 0,
+    });
+
+    return res.json({
+      rewarded: true,
+      message: '공유 보상 +10 XP!',
+      xpBefore,
+      xpAfter: character.xp,
+      added: SHARE_XP,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
