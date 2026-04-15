@@ -465,63 +465,26 @@ const [showShareMenu, setShowShareMenu] = useState(false);
         <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
       </div>
 
-      {/* ──── 메인 캐릭터 영역 (핀치 줌 + 무한 성장) ──── */}
-      <div
-        ref={pinch.containerRef}
-        className="overflow-auto"
-        style={{ touchAction: 'pan-x pan-y' }}
-        onTouchStart={pinch.onTouchStart}
-        onTouchMove={pinch.onTouchMove}
-        onTouchEnd={pinch.onTouchEnd}
-      >
-        <div
-          className="flex flex-col items-center justify-center transition-transform duration-100 ease-out"
-          style={{
-            minHeight: `${Math.max(characterSize * pinch.scale + 200, 500)}px`,
-            transform: `scale(${pinch.scale})`,
-            transformOrigin: 'center top',
-          }}
-        >
-          {PIXEL_ART_ANIMALS.includes(character.animalType) ? (
-            <img
-              src={`/characters/${character.animalType}1.png`}
-              alt={character.name}
-              className="select-none transition-all duration-700 ease-out"
-              style={{
-                width: `${characterSize}px`,
-                height: `${characterSize}px`,
-                objectFit: 'contain',
-                imageRendering: 'pixelated',
-                filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.08))',
-              }}
-            />
-          ) : (
-            <div
-              className="leading-none select-none transition-all duration-700 ease-out"
-              style={{
-                fontSize: `${characterSize}px`,
-                filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.08))',
-              }}
-            >
-              {emoji}
-            </div>
-          )}
+            {/* ──── 돌아다니는 캐릭터 ──── */}
+      <WalkingCharacter
+        animalType={character.animalType}
+        characterSize={characterSize}
+        isPixelArt={PIXEL_ART_ANIMALS.includes(character.animalType)}
+        emoji={emoji}
+      />
 
-          <div className="mt-6 text-center">
-            <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
-            <p className="text-sm text-gray-400 mt-1">
-              {animalName} · {character.xp.toLocaleString()} XP
-            </p>
-            {character.activeTrait && (
-              <p className="text-xs text-gray-400 mt-2">{getTraitDisplay(character.activeTrait)}</p>
-            )}
-            {characterSize > 300 && (
-              <p className="text-xs text-gray-300 mt-3 animate-pulse">
-                두 손가락으로 줌 아웃해보세요
-              </p>
-            )}
-          </div>
-        </div>
+      {/* ──── 캐릭터 정보 ──── */}
+      <div className="flex flex-col items-center justify-center pt-8 pb-4 relative z-10">
+        <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
+        <p className="text-sm text-gray-400 mt-1">
+          {animalName} · {character.xp.toLocaleString()} XP
+        </p>
+        {character.activeTrait && (
+          <p className="text-xs text-gray-400 mt-2">{getTraitDisplay(character.activeTrait)}</p>
+        )}
+        <p className="text-xs text-gray-300 mt-3">
+          캐릭터 크기: {characterSize}px
+        </p>
       </div>
 
       {/* ──── FAB 메뉴 ──── */}
