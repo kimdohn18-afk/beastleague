@@ -229,4 +229,278 @@ export default function MatchPage() {
     try {
       const fcmToken = await requestFcmToken();
       if (fcmToken) {
-        await<span class="cursor">█</span>
+        await fetch(`${apiUrl}/api/push/subscribe`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ fcmToken }),
+        });
+        setToast('알림이 설정되었습니다!');
+      } else {
+        setToast('알림 권한이 필요합니다');
+      }
+    } catch {
+      setToast('알림 설정 중 오류가 발생했습니다');
+    }
+    setPushLoading(false);
+    setShowPushPrompt(false);
+    setTimeout(() => setToast(null), 2000);
+  }
+
+  function handlePushDismiss() {
+    localStorage.setItem('push-prompt-dismissed', todayKST());
+    setShowPushPrompt(false);
+  }
+
+  // ──────────── 배치 제출 ────────────
+
+  async function handleSubmit() {
+    if (placementLocked) {
+      setToast('이미 경기가 시작되어 수정할 수 없습니다');
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
+    if (!selection || !selection.predictedWinner || !selection.selectedOrder) {
+      setToast('모든 항목을 선택해주세요');
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/placements`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          gameId: selection.gameId,
+          team: selection.selectedTeam,
+          battingOrder: selection.selectedOrder,
+          predictedWinner: selection.predictedWinner,
+        }),
+      });
+      if (res.ok) {
+        setToast('배치 완료!');
+        setExpandedGame(null);
+        setTimeout(() => {
+          setShowSharePrompt(true);
+        }, 500);
+      } else {
+        const err = await res.json();
+        setToast(err.error || '배치 실패');
+      }
+    } catch (e) { setToast('배치 중 오류 발생'); }
+    setSubmitting(false);
+    setTimeout(() => setToast(null), 2000);
+  }
+
+  // ──────────── 렌더링 ────────────
+
+  const activeGames = games.filter(g => g.status !== 'cancelled');
+  const cancelledGames = games.filter(g => g.status === 'cancelled');
+  const allCancelled = games.length > 0 && activeGames.length === 0;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 pb-24">
+      {toast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white px-4 py-2 rounded-2xl text-sm shadow-lg">
+          {toast}
+        </div>
+      )}
+
+      <h1 className="text-gray-900 text-lg font-bold mb-1">{todayKST()}</h1>
+      <p className="text-gray-400 text-sm mb-4">
+        {games.length}경기
+        {cancelledGames.length > 0 && (
+          <span className="text-red-400 ml-1">
+            (취소 {cancelledGames.length})
+          </span>
+        )}
+      </p>
+
+      {allCancelled && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4 text-center">
+          <p className="text-2xl mb-2">🌧️</p>
+          <p className="text-red-500 text-sm font-bold">오늘 경기가 모두 취소되었습니다</p>
+          <p className="text-red-400 text-xs mt-1">내일 다시 배치해주세요!</p>
+        </div>
+      )}
+
+      {placementLocked && selection && (
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
+          <p className="text-orange-600 text-sm font-bold">배치 완료</p>
+          <p className="text-orange-400 text-xs mt-1">
+            {selection.selectedTeam} {selection.selectedOrder}번 타자 · {selection.predictedWinner} 승리 예측
+          </p>
+        </div>
+      )}
+
+      {games.length === 0 ? (
+        <p className="text-gray-400 text-center mt-20">오늘 경기가 없습니다</p>
+      ) : (
+        <div className="space-y-3">
+          {games.map((game) => {
+            const isCancelled = game.status === 'cancelled';
+            const isExpanded = expandedGame === game.gameId;
+            const isSelected = selection?.gameId === game.gameId;
+            const isGameLocked = isGameStartedByTime(game);
+            const cannotModify = placementLocked || isGameLocked || isCancelled;
+
+            return (
+              <div
+                key={game.gameId}
+                className={`rounded-2xl overflow-hidden transition-all shadow-sm ${
+                  isCancelled ? 'opacity-50' : isSelected ? 'ring-2 ring-orange-400' : ''
+                }`}
+              >
+                <div
+                  onClick={() => !cannotModify && handleExpand(game.gameId)}
+                  className={`bg-white p-4 border border-gray-100 ${
+                    cannotModify ? 'opacity-60' : 'cursor-pointer active:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={`font-medium flex-1 text-center ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                      {game.awayTeam}
+                    </span>
+                    <span className="text-gray-300 text-sm mx-3">
+                      {isCancelled
+                        ? '취소'
+                        : game.status === 'finished'
+                          ? `${game.awayScore} : ${game.homeScore}`
+                          : isGameLocked
+                            ? '진행 중'
+                            : game.startTime
+                              ? `${game.startTime}`
+                              : 'vs'}
+                    </span>
+                    <span className={`font-medium flex-1 text-center ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                      {game.homeTeam}
+                    </span>
+                  </div>
+                  {isSelected && !isExpanded && selection && !isCancelled && (
+                    <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between">
+                      <span className="text-orange-500 text-xs">{selection.predictedWinner} 승리 예측</span>
+                      <span className="text-orange-500 text-xs">{selection.selectedTeam} {selection.selectedOrder}번</span>
+                    </div>
+                  )}
+                  {isCancelled && (
+                    <p className="text-red-400 text-xs text-center mt-1">경기 취소</p>
+                  )}
+                  {!isCancelled && isGameLocked && game.status !== 'finished' && (
+                    <p className="text-gray-400 text-xs text-center mt-1">경기 진행 중</p>
+                  )}
+                  {game.status === 'finished' && (
+                    <p className="text-gray-400 text-xs text-center mt-1">경기 종료</p>
+                  )}
+                </div>
+
+                {isExpanded && !cannotModify && (
+                  <div className="bg-white border-t border-gray-100 p-4 space-y-4">
+                    <div>
+                      <p className="text-gray-400 text-xs mb-2">승리 예측</p>
+                      <div className="flex gap-3">
+                        {[game.awayTeam, game.homeTeam].map((t) => (
+                          <button
+                            key={t}
+                            onClick={() => handlePrediction(game.gameId, t)}
+                            className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
+                              selection?.predictedWinner === t ? 'bg-orange-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'
+                            }`}
+                          >{t}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {[{ label: game.awayTeam, team: game.awayTeam }, { label: game.homeTeam, team: game.homeTeam }].map(({ label, team }) => (
+                      <div key={team}>
+                        <p className="text-gray-400 text-xs mb-2">{label} 타순</p>
+                        <div className="grid grid-cols-9 gap-1">
+                          {[1,2,3,4,5,6,7,8,9].map((n) => (
+                            <button
+                              key={`${team}-${n}`}
+                              onClick={() => handleBattingOrder(game.gameId, team, n)}
+                              className={`py-2 rounded-xl text-xs font-medium transition ${
+                                selection?.selectedTeam === team && selection?.selectedOrder === n
+                                  ? 'bg-orange-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'
+                              }`}
+                            >{n}</button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    <button
+                      onClick={handleSubmit}
+                      disabled={submitting || !selection?.predictedWinner || !selection?.selectedOrder}
+                      className="w-full bg-orange-400 text-white py-3 rounded-2xl font-bold text-sm disabled:opacity-40 transition shadow-md"
+                    >
+                      {submitting ? '배치 중...' : '배치하기'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 공유 프롬프트 */}
+      {showSharePrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={handleShareDismiss}>
+          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="text-4xl mb-3">📢</div>
+            <h2 className="text-lg font-bold text-gray-800 mb-2">배치 완료!</h2>
+            <p className="text-sm text-gray-500 mb-6">친구에게 공유할까요?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleShareDismiss}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-sm font-medium hover:bg-gray-200"
+              >
+                다음에
+              </button>
+              <button
+                onClick={handleShareAccept}
+                className="flex-1 py-2.5 bg-yellow-400 text-yellow-900 rounded-xl text-sm font-bold hover:bg-yellow-500"
+              >
+                💬 카카오 공유
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 푸시 프롬프트 */}
+      {showPushPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={handlePushDismiss}>
+          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="text-4xl mb-3">🔔</div>
+            <h2 className="text-lg font-bold text-gray-800 mb-2">알림 설정!</h2>
+            <p className="text-sm text-gray-500 mb-1">정산 결과를 알림으로 받아볼까요?</p>
+            <p className="text-xs text-gray-400 mb-6">경기 끝나면 XP 변동을 바로 확인할 수 있어요</p>
+            <div className="flex gap-3">
+              <button
+                onClick={handlePushDismiss}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-sm font-medium hover:bg-gray-200"
+              >
+                다음에
+              </button>
+              <button
+                onClick={handlePushAccept}
+                disabled={pushLoading}
+                className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500 disabled:opacity-50"
+              >
+                {pushLoading ? '설정 중...' : '알림 받기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
