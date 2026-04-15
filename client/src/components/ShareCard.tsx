@@ -114,16 +114,6 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
           </div>
         )}
 
-        {/* 크기 표시 */}
-        <div style={{
-          fontSize: '12px',
-          color: '#D1D5DB',
-          marginTop: '16px',
-        }}>
-          캐릭터 크기: {characterSize}px
-          {characterSize > 390 ? ' 🔥 화면 초과!' : characterSize > 200 ? ' ✨ 많이 성장!' : ''}
-        </div>
-
         {/* 하단 CTA */}
         <div style={{
           position: 'absolute',
