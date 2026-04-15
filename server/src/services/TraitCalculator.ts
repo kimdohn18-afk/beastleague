@@ -53,16 +53,16 @@ export interface AchievementContext {
 
 // ━━━ 팀 정의 ━━━
 export const KBO_TEAMS = [
-  { id: 'samsung', name: '삼성 라이온즈', emoji: '🦁' },
-  { id: 'kia', name: '기아 타이거즈', emoji: '🐯' },
-  { id: 'lg', name: 'LG 트윈스', emoji: '🤞' },
-  { id: 'doosan', name: '두산 베어스', emoji: '🐻' },
-  { id: 'kt', name: 'KT 위즈', emoji: '🧙' },
-  { id: 'ssg', name: 'SSG 랜더스', emoji: '🛬' },
-  { id: 'lotte', name: '롯데 자이언츠', emoji: '🦅' },
-  { id: 'hanwha', name: '한화 이글스', emoji: '🦅' },
-  { id: 'nc', name: 'NC 다이노스', emoji: '🦕' },
-  { id: 'kiwoom', name: '키움 히어로즈', emoji: '🦸' },
+   { id: 'samsung', name: '삼성 라이온즈', shortName: '삼성', emoji: '🦁' },
+  { id: 'kia',     name: '기아 타이거즈', shortName: 'KIA',  emoji: '🐯' },
+  { id: 'lg',      name: 'LG 트윈스',    shortName: 'LG',   emoji: '🤞' },
+  { id: 'doosan',  name: '두산 베어스',   shortName: '두산',  emoji: '🐻' },
+  { id: 'kt',      name: 'KT 위즈',      shortName: 'KT',   emoji: '🧙' },
+  { id: 'ssg',     name: 'SSG 랜더스',   shortName: 'SSG',  emoji: '🛬' },
+  { id: 'lotte',   name: '롯데 자이언츠', shortName: '롯데',  emoji: '🦅' },
+  { id: 'hanwha',  name: '한화 이글스',   shortName: '한화',  emoji: '🦅' },
+  { id: 'nc',      name: 'NC 다이노스',  shortName: 'NC',   emoji: '🦕' },
+  { id: 'kiwoom',  name: '키움 히어로즈', shortName: '키움',  emoji: '🦸' },
 ];
 
 export const TEAM_TIERS: TeamAchievementTier[] = [
@@ -389,22 +389,22 @@ export async function calculateAchievements(userId: string, characterId: string)
     count: number;
   }> = [];
 
-  for (const team of KBO_TEAMS) {
-    const count = ctx.teamPlacementCounts[team.id] || 0;
-    // team 이름으로도 매칭 시도
-    const countByName = ctx.teamPlacementCounts[team.name] || 0;
-    const totalCount = count + countByName;
-    const tier = getTeamTier(totalCount);
-    if (tier) {
-      teamAchievements.push({
-        teamId: team.id,
-        teamName: team.name,
-        teamEmoji: team.emoji,
-        tier,
-        count: totalCount,
-      });
-    }
+ for (const team of KBO_TEAMS) {
+  const countById    = ctx.teamPlacementCounts[team.id] || 0;
+  const countByName  = ctx.teamPlacementCounts[team.name] || 0;
+  const countByShort = ctx.teamPlacementCounts[team.shortName] || 0;
+  const totalCount = countById + countByName + countByShort;
+  const tier = getTeamTier(totalCount);
+  if (tier) {
+    teamAchievements.push({
+      teamId: team.id,
+      teamName: team.name,
+      teamEmoji: team.emoji,
+      tier,
+      count: totalCount,
+    });
   }
+}
 
   // 팀 업적도 earned 카운트에 포함
   ctx.earnedCount = earned.length + teamAchievements.length;
