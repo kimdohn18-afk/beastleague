@@ -444,7 +444,7 @@ export async function calculateAchievements(userId: string, characterId: string)
 
   // 캐릭터 업데이트
   await Character.findByIdAndUpdate(characterId, {
-    activeTrait: activeTrait ? `${activeTrait.emoji} ${activeTrait.name}` : null,
+  activeTrait: activeTrait ? activeTrait.id : null,  // "ironman" 같은 ID로 저장
     earnedAchievements: earned,
     teamAchievements: teamAchievements.map(t => ({
       teamId: t.teamId,
