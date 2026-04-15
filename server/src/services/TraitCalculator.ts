@@ -367,7 +367,11 @@ function getTeamTier(count: number): TeamAchievementTier | null {
 }
 
 // ━━━ 업적 계산 메인 함수 ━━━
-export async function calculateAchievements(userId: string, characterId: string) {
+export async function calculateAchievements(
+  userId: string, 
+  characterId: string,
+  options?: { skipTraitUpdate?: boolean }
+) {
   const character = await Character.findById(characterId).lean();
   if (!character) throw new Error('Character not found');
 
@@ -418,12 +422,9 @@ export async function calculateAchievements(userId: string, characterId: string)
   // 최종 카운트
   const finalEarnedCount = earned.length + teamAchievements.length;
 
-  // ──── activeTrait: 사용자 설정값 존중 ────
-  // 현재 DB에 저장된 activeTrait 가져오기
-  const currentTrait = character.activeTrait;
-  
-  // 사용자가 설정한 값이 여전히 유효한지 확인
+  // ──── activeTrait 결정 ────
   let resolvedTrait: { id: string; emoji: string; name: string; description: string } | null = null;
+  const currentTrait = character.activeTrait;
 
   if (currentTrait) {
     // 일반 업적에서 찾기
@@ -440,7 +441,7 @@ export async function calculateAchievements(userId: string, characterId: string)
       }
     }
 
-    // 하위 호환: "🦾 철인" 같은 이전 형식이면 매칭 시도
+    // 하위 호환
     if (!resolvedTrait && currentTrait.includes(' ')) {
       for (const def of ACHIEVEMENT_DEFINITIONS) {
         if (currentTrait.includes(def.name) && earned.includes(def.id)) {
@@ -451,7 +452,7 @@ export async function calculateAchievements(userId: string, characterId: string)
     }
   }
 
-  // 사용자 설정값이 없거나 유효하지 않으면 자동 선택 (가장 희귀한 업적)
+  // 사용자 설정값이 없거나 유효하지 않으면 자동 선택
   if (!resolvedTrait) {
     const RARITY_ORDER = [
       'legend', 'streak_100', 'goat', 'xp_world_tree', 'nationwide',
@@ -476,16 +477,22 @@ export async function calculateAchievements(userId: string, characterId: string)
     }
   }
 
-  // 캐릭터 업데이트 — activeTrait는 resolvedTrait의 ID로 저장
-  await Character.findByIdAndUpdate(characterId, {
-    activeTrait: resolvedTrait ? resolvedTrait.id : null,
+  // ──── DB 업데이트 ────
+  // skipTraitUpdate가 true이면 activeTrait는 건드리지 않음
+  const updatePayload: any = {
     earnedAchievements: earned,
     teamAchievements: teamAchievements.map(t => ({
       teamId: t.teamId,
       tier: t.tier.tier,
       count: t.count,
     })),
-  });
+  };
+
+  if (!options?.skipTraitUpdate) {
+    updatePayload.activeTrait = resolvedTrait ? resolvedTrait.id : null;
+  }
+
+  await Character.findByIdAndUpdate(characterId, updatePayload);
 
   return { activeTrait: resolvedTrait, earned, teamAchievements, earnedCount: finalEarnedCount };
 }
