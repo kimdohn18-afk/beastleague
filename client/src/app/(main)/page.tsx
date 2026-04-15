@@ -89,16 +89,15 @@ function getTraitDisplay(traitId: string): string {
   return `${t.emoji} ${t.name} — "${t.desc}"`;
 }
 
-// 상한 없는 캐릭터 크기 계산
+// 상한 없는 캐릭터 크기: 1000 XP ≈ 390px (모바일 화면 꽉 참)
 function getCharacterSize(xp: number): number {
   const minPx = 60;
   if (xp <= 0) return minPx;
-  // XP 100 → ~120px, 1000 → ~300px, 5000 → ~500px, 10000 → ~620px, 50000 → ~950px
-  const size = minPx + Math.pow(xp, 0.55) * 3;
+  const size = minPx + Math.pow(xp, 0.55) * 7.5;
   return Math.max(minPx, Math.round(size));
 }
 
-// 기존 UI 비교용 (모달 등에서 사용)
+// 모달 비교용 (상한 있는 버전)
 function getEmojiPx(xp: number): number {
   const minPx = 60;
   const maxPx = 220;
@@ -154,8 +153,8 @@ const HELP_CARDS = [
       'XP가 쌓이면 캐릭터가',
       '점점 커집니다!',
       '',
-      '핀치 줌(두 손가락)으로',
-      '줌 아웃하면 전체를 볼 수 있어요.',
+      '두 손가락으로 줌 아웃하면',
+      '전체 크기를 볼 수 있어요.',
       '',
       '내 배치 탭에서 경기별 기록과',
       'XP 내역을 확인할 수 있어요.',
@@ -164,9 +163,8 @@ const HELP_CARDS = [
 ];
 
 // ──────────── 핀치 줌 훅 ────────────
-function usePinchZoom(initialScale: number = 1) {
-  const [scale, setScale] = useState(initialScale);
-  const [origin, setOrigin] = useState({ x: 0, y: 0 });
+function usePinchZoom() {
+  const [scale, setScale] = useState(1);
   const startDistRef = useRef(0);
   const startScaleRef = useRef(1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -182,13 +180,6 @@ function usePinchZoom(initialScale: number = 1) {
       e.preventDefault();
       startDistRef.current = getDistance(e.touches[0], e.touches[1]);
       startScaleRef.current = scale;
-      // 핀치 중심점 계산
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (rect) {
-        const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
-        const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
-        setOrigin({ x: cx, y: cy });
-      }
     }
   }, [scale]);
 
@@ -197,29 +188,29 @@ function usePinchZoom(initialScale: number = 1) {
       e.preventDefault();
       const dist = getDistance(e.touches[0], e.touches[1]);
       const ratio = dist / startDistRef.current;
-      const newScale = Math.max(0.05, Math.min(startScaleRef.current * ratio, 3));
+      const newScale = Math.max(0.02, Math.min(startScaleRef.current * ratio, 3));
       setScale(newScale);
     }
   }, []);
 
-  const onTouchEnd = useCallback(() => {
-    // 줌 상태 유지
-  }, []);
+  const onTouchEnd = useCallback(() => {}, []);
 
-  // 줌 리셋 (더블탭)
+  // 더블탭으로 리셋
   const lastTapRef = useRef(0);
-  const onDoubleTap = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length !== 1) return;
-    const now = Date.now();
-    if (now - lastTapRef.current < 300) {
-      // 더블탭 → 줌 리셋
-      setScale(1);
-      setOrigin({ x: 0, y: 0 });
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const now = Date.now();
+      if (now - lastTapRef.current < 300) {
+        setScale(1);
+      }
+      lastTapRef.current = now;
     }
-    lastTapRef.current = now;
-  }, []);
+    if (e.touches.length === 2) {
+      onTouchStart(e);
+    }
+  }, [onTouchStart]);
 
-  return { scale, origin, containerRef, onTouchStart: (e: React.TouchEvent) => { onTouchStart(e); onDoubleTap(e); }, onTouchMove, onTouchEnd };
+  return { scale, setScale, containerRef, onTouchStart: handleTouchStart, onTouchMove, onTouchEnd };
 }
 
 export default function MainPage() {
@@ -242,8 +233,7 @@ export default function MainPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
 
-  // 핀치 줌
-  const pinch = usePinchZoom(1);
+  const pinch = usePinchZoom();
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -270,10 +260,7 @@ export default function MainPage() {
             if (fcmToken) {
               await fetch(`${apiUrl}/api/push/subscribe`, {
                 method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  'Content-Type': 'application/json',
-                },
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ fcmToken }),
               });
               setPushStatus('granted');
@@ -288,13 +275,8 @@ export default function MainPage() {
   }, [token]);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
-      return;
-    }
-    if (status === 'authenticated' && token) {
-      fetchCharacter();
-    }
+    if (status === 'unauthenticated') { router.push('/login'); return; }
+    if (status === 'authenticated' && token) { fetchCharacter(); }
   }, [status, token]);
 
   useEffect(() => {
@@ -304,63 +286,30 @@ export default function MainPage() {
     if (character.xp === 0) return;
     const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
     if (localStorage.getItem('push-prompt-dismissed') === today) return;
-    if (Notification.permission === 'denied') {
-      setTimeout(() => setShowPushPrompt(true), 1000);
-      return;
-    }
-    if (Notification.permission === 'default') {
-      setTimeout(() => setShowPushPrompt(true), 1000);
-      return;
-    }
+    if (Notification.permission === 'denied') { setTimeout(() => setShowPushPrompt(true), 1000); return; }
+    if (Notification.permission === 'default') { setTimeout(() => setShowPushPrompt(true), 1000); return; }
     const checkSub = async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/push/status`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(`${apiUrl}/api/push/status`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
           const data = await res.json();
-          if (!data.subscribed) {
-            setTimeout(() => setShowPushPrompt(true), 1000);
-          }
+          if (!data.subscribed) setTimeout(() => setShowPushPrompt(true), 1000);
         }
       } catch {}
     };
     checkSub();
   }, [character, token]);
 
-  // 캐릭터가 크면 자동 줌아웃
-  useEffect(() => {
-    if (!character) return;
-    const charSize = getCharacterSize(character.xp);
-    const screenW = typeof window !== 'undefined' ? window.innerWidth : 390;
-    const screenH = typeof window !== 'undefined' ? window.innerHeight : 844;
-    const maxDim = Math.max(screenW, screenH);
-    if (charSize > maxDim * 0.8) {
-      // 자동으로 캐릭터가 화면에 들어오도록 초기 스케일 조정
-      const fitScale = (maxDim * 0.7) / charSize;
-      pinch.scale !== fitScale && setTimeout(() => {
-        // 초기 로드 시에만
-      }, 0);
-    }
-  }, [character]);
-
   const fetchCharacter = async () => {
     try {
-      const res = await fetch(`${apiUrl}/api/characters/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`${apiUrl}/api/characters/me`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) {
         if (res.status === 404) { router.push('/character'); return; }
         throw new Error('Failed to fetch character');
       }
       const data = await res.json();
       setCharacter(data);
-
-      if (!data.tutorialCompleted) {
-        router.push('/tutorial');
-        return;
-      }
-
+      if (!data.tutorialCompleted) { router.push('/tutorial'); return; }
       const welcomeKey = `welcome-shown-${data._id}`;
       if (!localStorage.getItem(welcomeKey)) {
         setShowWelcome(true);
@@ -376,54 +325,29 @@ export default function MainPage() {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      const res = await fetch(`${apiUrl}/api/characters/me`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        alert('캐릭터가 삭제되었습니다.');
-        router.push('/character');
-      } else {
-        const data = await res.json();
-        alert(data.error || '삭제 실패');
-      }
-    } catch (e) {
-      console.error('Delete failed:', e);
-      alert('삭제 중 오류가 발생했습니다.');
-    } finally {
-      setDeleting(false);
-      setShowDelete(false);
-    }
+      const res = await fetch(`${apiUrl}/api/characters/me`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) { alert('캐릭터가 삭제되었습니다.'); router.push('/character'); }
+      else { const data = await res.json(); alert(data.error || '삭제 실패'); }
+    } catch (e) { console.error('Delete failed:', e); alert('삭제 중 오류가 발생했습니다.'); }
+    finally { setDeleting(false); setShowDelete(false); }
   };
 
   const handlePushSetup = async () => {
     setMenuOpen(false);
-    if (pushStatus === 'denied') {
-      setShowBlockedGuide(true);
-      return;
-    }
+    if (pushStatus === 'denied') { setShowBlockedGuide(true); return; }
     if (pushStatus === 'granted') {
       try {
         const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-        if (reg) {
-          const sub = await reg.pushManager.getSubscription();
-          if (sub) await sub.unsubscribe();
-        }
+        if (reg) { const sub = await reg.pushManager.getSubscription(); if (sub) await sub.unsubscribe(); }
         await fetch(`${apiUrl}/api/push/unsubscribe`, {
           method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ fcmToken: 'all' }),
         });
         localStorage.setItem('push-manually-disabled', 'true');
         setPushStatus('idle');
         alert('알림이 해제되었습니다.');
-      } catch (e) {
-        console.error('[Push] Unsubscribe failed:', e);
-        alert('알림 해제 중 오류가 발생했습니다.');
-      }
+      } catch (e) { console.error('[Push] Unsubscribe failed:', e); alert('알림 해제 중 오류가 발생했습니다.'); }
       return;
     }
     setPushStatus('loading');
@@ -432,10 +356,7 @@ export default function MainPage() {
       if (fcmToken) {
         await fetch(`${apiUrl}/api/push/subscribe`, {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ fcmToken }),
         });
         localStorage.removeItem('push-manually-disabled');
@@ -445,38 +366,24 @@ export default function MainPage() {
         setPushStatus('denied');
         alert('알림 권한이 차단되었습니다. 브라우저 설정에서 알림을 허용해주세요.');
       }
-    } catch (e) {
-      console.error('[Push] Setup failed:', e);
-      setPushStatus('idle');
-      alert('알림 설정 중 오류가 발생했습니다.');
-    }
+    } catch (e) { console.error('[Push] Setup failed:', e); setPushStatus('idle'); alert('알림 설정 중 오류가 발생했습니다.'); }
   };
 
   const handlePushPromptAccept = async () => {
     setShowPushPrompt(false);
-    if (Notification.permission === 'denied') {
-      setShowBlockedGuide(true);
-      return;
-    }
+    if (Notification.permission === 'denied') { setShowBlockedGuide(true); return; }
     setPushStatus('loading');
     try {
       const fcmToken = await requestFcmToken();
       if (fcmToken) {
         await fetch(`${apiUrl}/api/push/subscribe`, {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ fcmToken }),
         });
         setPushStatus('granted');
-      } else {
-        setPushStatus('denied');
-      }
-    } catch {
-      setPushStatus('idle');
-    }
+      } else { setPushStatus('denied'); }
+    } catch { setPushStatus('idle'); }
   };
 
   const handlePushPromptDismiss = () => {
@@ -485,8 +392,8 @@ export default function MainPage() {
     setShowPushPrompt(false);
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => setTouchStartX(e.touches[0].clientX);
-  const handleTouchEnd = (e: React.TouchEvent) => {
+  const handleHelpTouchStart = (e: React.TouchEvent) => setTouchStartX(e.touches[0].clientX);
+  const handleHelpTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX === null) return;
     const diff = e.changedTouches[0].clientX - touchStartX;
     if (diff > 50 && helpPage > 0) setHelpPage(helpPage - 1);
@@ -519,108 +426,74 @@ export default function MainPage() {
   const card = HELP_CARDS[helpPage];
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 relative overflow-hidden">
+    <div className="min-h-screen bg-gray-50 pb-24 relative">
+      {/* 카카오 브라우저 안내 */}
       {typeof navigator !== 'undefined' && /KAKAOTALK/i.test(navigator.userAgent) && (
         <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
           <div className="text-5xl mb-4">🌐</div>
           <h2 className="text-lg font-bold text-gray-800 mb-2">기본 브라우저에서 열어주세요</h2>
           <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-            카카오톡 브라우저에서는 알림 등<br />
-            일부 기능이 제한됩니다.
+            카카오톡 브라우저에서는 알림 등<br />일부 기능이 제한됩니다.
           </p>
           {/iPhone|iPad/i.test(navigator.userAgent) ? (
             <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
               <p className="text-xs text-gray-500 leading-relaxed">
-                우측 하단 <strong>공유(↗) 아이콘</strong> 탭<br />
-                → <strong>Safari로 열기</strong> 선택
+                우측 하단 <strong>공유(↗) 아이콘</strong> 탭<br />→ <strong>Safari로 열기</strong> 선택
               </p>
             </div>
           ) : (
             <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
               <p className="text-xs text-gray-500 leading-relaxed">
-                우측 하단 <strong>⋮</strong> 메뉴 탭<br />
-                → <strong>다른 브라우저로 열기</strong> 선택
+                우측 하단 <strong>⋮</strong> 메뉴 탭<br />→ <strong>다른 브라우저로 열기</strong> 선택
               </p>
             </div>
           )}
         </div>
       )}
 
-      {/* ──── 캐릭터 배경 레이어 (핀치 줌 적용) ──── */}
+      {/* 로그아웃 */}
+      <div className="px-4 pt-5 pb-2 flex items-center justify-between relative z-10">
+        <div />
+        <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
+      </div>
+
+      {/* ──── 메인 캐릭터 영역 (핀치 줌 + 무한 성장) ──── */}
       <div
         ref={pinch.containerRef}
-        className="absolute inset-0 overflow-auto"
+        className="overflow-auto"
         style={{ touchAction: 'pan-x pan-y' }}
         onTouchStart={pinch.onTouchStart}
         onTouchMove={pinch.onTouchMove}
         onTouchEnd={pinch.onTouchEnd}
       >
         <div
-          className="flex items-center justify-center transition-transform duration-100 ease-out"
+          className="flex flex-col items-center justify-center transition-transform duration-100 ease-out"
           style={{
-            minHeight: `${Math.max(characterSize * pinch.scale + 200, typeof window !== 'undefined' ? window.innerHeight : 844)}px`,
-            minWidth: `${Math.max(characterSize * pinch.scale + 100, typeof window !== 'undefined' ? window.innerWidth : 390)}px`,
+            minHeight: `${Math.max(characterSize * pinch.scale + 200, 500)}px`,
             transform: `scale(${pinch.scale})`,
-            transformOrigin: pinch.origin.x && pinch.origin.y
-              ? `${pinch.origin.x}px ${pinch.origin.y}px`
-              : 'center center',
+            transformOrigin: 'center top',
           }}
         >
           {PIXEL_ART_ANIMALS.includes(character.animalType) ? (
             <img
               src={`/characters/${character.animalType}1.png`}
               alt={character.name}
-              className="select-none"
+              className="select-none transition-all duration-700 ease-out"
               style={{
                 width: `${characterSize}px`,
                 height: `${characterSize}px`,
                 objectFit: 'contain',
                 imageRendering: 'pixelated',
-                opacity: 0.12,
-                filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.05))',
-              }}
-            />
-          ) : (
-            <div
-              className="leading-none select-none"
-              style={{
-                fontSize: `${characterSize}px`,
-                opacity: 0.12,
-                filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.05))',
-              }}
-            >
-              {emoji}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ──── UI 오버레이 레이어 ──── */}
-      <div className="relative z-10 pointer-events-none">
-        <div className="pointer-events-auto px-4 pt-5 pb-2 flex items-center justify-between">
-          <div />
-          <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
-        </div>
-
-        <div className="pointer-events-auto flex flex-col items-center justify-center" style={{ minHeight: '65vh' }}>
-          {/* 메인 캐릭터 (작은 크기, UI용) */}
-          {PIXEL_ART_ANIMALS.includes(character.animalType) ? (
-            <img
-              src={`/characters/${character.animalType}1.png`}
-              alt={character.name}
-              className="select-none transition-all duration-700 ease-out"
-              style={{
-                width: `${Math.min(emojiPx, 180)}px`,
-                height: `${Math.min(emojiPx, 180)}px`,
-                objectFit: 'contain',
-                filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.15))',
-                imageRendering: 'pixelated',
+                filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.08))',
               }}
             />
           ) : (
             <div
               className="leading-none select-none transition-all duration-700 ease-out"
-              style={{ fontSize: `${Math.min(emojiPx, 180)}px`, filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.15))' }}
+              style={{
+                fontSize: `${characterSize}px`,
+                filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.08))',
+              }}
             >
               {emoji}
             </div>
@@ -634,10 +507,9 @@ export default function MainPage() {
             {character.activeTrait && (
               <p className="text-xs text-gray-400 mt-2">{getTraitDisplay(character.activeTrait)}</p>
             )}
-            {/* 줌 힌트 */}
             {characterSize > 300 && (
               <p className="text-xs text-gray-300 mt-3 animate-pulse">
-                두 손가락으로 줌 아웃하면 전체 크기를 볼 수 있어요
+                두 손가락으로 줌 아웃해보세요
               </p>
             )}
           </div>
@@ -691,7 +563,7 @@ export default function MainPage() {
       {/* ──── 모달들 ──── */}
       {showHelp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowHelp(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()} onTouchStart={handleHelpTouchStart} onTouchEnd={handleHelpTouchEnd}>
             <div className="px-6 pt-8 pb-4 text-center min-h-[320px] flex flex-col items-center justify-center">
               <div className="text-5xl mb-4">{card.icon}</div>
               <h3 className="text-lg font-bold text-gray-800 mb-4">{card.title}</h3>
@@ -762,8 +634,7 @@ export default function MainPage() {
             <div className="text-4xl mb-3">{emoji}</div>
             <h2 className="text-lg font-bold text-gray-800 mb-2">캐릭터를 삭제할까요?</h2>
             <p className="text-sm text-gray-400 mb-6">
-              <strong>{character.name}</strong>과(와) 모든 배치 기록이 삭제됩니다.
-              <br />이 작업은 되돌릴 수 없습니다.
+              <strong>{character.name}</strong>과(와) 모든 배치 기록이 삭제됩니다.<br />이 작업은 되돌릴 수 없습니다.
             </p>
             <div className="flex gap-3">
               <button onClick={() => setShowDelete(false)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">취소</button>
@@ -786,16 +657,11 @@ export default function MainPage() {
               </div>
             </div>
             <p className="text-sm text-gray-500 mb-5 leading-relaxed">
-              경기 전 배치 리마인더와<br />
-              정산 결과를 알림으로 받을 수 있어요.
+              경기 전 배치 리마인더와<br />정산 결과를 알림으로 받을 수 있어요.
             </p>
             <div className="flex gap-3">
-              <button onClick={handlePushPromptDismiss} className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-sm font-medium">
-                다음에
-              </button>
-              <button onClick={handlePushPromptAccept} className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold">
-                알림 받기
-              </button>
+              <button onClick={handlePushPromptDismiss} className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-sm font-medium">다음에</button>
+              <button onClick={handlePushPromptAccept} className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold">알림 받기</button>
             </div>
           </div>
         </div>
@@ -806,30 +672,20 @@ export default function MainPage() {
           <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
             <div className="text-4xl text-center mb-3">🔕</div>
             <h2 className="text-lg font-bold text-gray-800 text-center mb-2">알림이 차단되어 있어요</h2>
-            <p className="text-sm text-gray-500 text-center mb-5">
-              브라우저 설정에서 직접 변경해야 합니다.
-            </p>
+            <p className="text-sm text-gray-500 text-center mb-5">브라우저 설정에서 직접 변경해야 합니다.</p>
             <div className="bg-gray-50 rounded-xl p-4 mb-3">
               <p className="text-sm font-bold text-gray-700 mb-2">📱 모바일 (Chrome)</p>
               <p className="text-xs text-gray-500 leading-relaxed">
-                주소창 왼쪽 ⚙️ 아이콘 탭<br />
-                → 권한 또는 사이트 설정<br />
-                → 알림 → 허용으로 변경<br />
-                → 페이지 새로고침
+                주소창 왼쪽 ⚙️ 아이콘 탭<br />→ 권한 또는 사이트 설정<br />→ 알림 → 허용으로 변경<br />→ 페이지 새로고침
               </p>
             </div>
             <div className="bg-gray-50 rounded-xl p-4 mb-5">
               <p className="text-sm font-bold text-gray-700 mb-2">💻 PC (Chrome)</p>
               <p className="text-xs text-gray-500 leading-relaxed">
-                주소창 왼쪽 🔒 아이콘 클릭<br />
-                → 사이트 설정<br />
-                → 알림 → 허용으로 변경<br />
-                → 페이지 새로고침
+                주소창 왼쪽 🔒 아이콘 클릭<br />→ 사이트 설정<br />→ 알림 → 허용으로 변경<br />→ 페이지 새로고침
               </p>
             </div>
-            <button onClick={() => setShowBlockedGuide(false)} className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">
-              닫기
-            </button>
+            <button onClick={() => setShowBlockedGuide(false)} className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">닫기</button>
           </div>
         </div>
       )}
@@ -841,30 +697,23 @@ export default function MainPage() {
               <div className="text-5xl mb-4">🎉</div>
               <h3 className="text-lg font-bold text-gray-800 mb-2">캐릭터가 탄생했어요!</h3>
               <p className="text-sm text-gray-500 leading-relaxed mb-6">
-                매일 KBO 경기에 배치하면<br />
-                실제 선수 성적에 따라 XP를 얻고<br />
-                캐릭터가 성장합니다!
+                매일 KBO 경기에 배치하면<br />실제 선수 성적에 따라 XP를 얻고<br />캐릭터가 성장합니다!
               </p>
               <div className="bg-orange-50 rounded-xl p-4 mb-4 text-left">
                 <p className="text-sm font-bold text-orange-600 mb-2">🔔 알림 설정 추천!</p>
                 <p className="text-xs text-orange-500 leading-relaxed">
-                  알림을 켜면 배치를 잊지 않도록<br />
-                  매일 경기 전에 알려드려요.<br />
-                  오른쪽 하단 + 버튼 → 알림 설정
+                  알림을 켜면 배치를 잊지 않도록<br />매일 경기 전에 알려드려요.<br />오른쪽 하단 + 버튼 → 알림 설정
                 </p>
               </div>
               <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
                 <p className="text-sm font-bold text-gray-700 mb-2">❓ 도움말</p>
                 <p className="text-xs text-gray-500 leading-relaxed">
-                  배치 방법, XP 규칙 등 자세한 내용은<br />
-                  + 버튼 → 도움말에서 확인하세요.
+                  배치 방법, XP 규칙 등 자세한 내용은<br />+ 버튼 → 도움말에서 확인하세요.
                 </p>
               </div>
             </div>
             <div className="px-6 pb-6">
-              <button onClick={() => setShowWelcome(false)} className="w-full py-3 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">
-                시작하기
-              </button>
+              <button onClick={() => setShowWelcome(false)} className="w-full py-3 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">시작하기</button>
             </div>
           </div>
         </div>
