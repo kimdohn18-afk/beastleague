@@ -80,7 +80,9 @@ export default function AchievementsPage() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
+  const [settingTrait, setSettingTrait] = useState(false);
 
+  
   useEffect(() => {
     if (!token) return;
     fetchData();
