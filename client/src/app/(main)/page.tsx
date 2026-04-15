@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
 import ShareCard from '@/components/ShareCard';
-import { captureCardAsBlob, shareToInstagramStory, shareToKakao } from '@/lib/shareUtils';
+import { captureCardAsBlob, shareToInstagramStory } from '@/lib/shareUtils';
 
 interface Character {
   _id: string;
@@ -398,7 +398,26 @@ const [showShareMenu, setShowShareMenu] = useState(false);
   };
 
   const handleShare = async (target: 'kakao' | 'instagram' | 'download') => {
-    if (!character || !shareCardRef.current) return;
+    if (!character) return;
+
+    if (target === 'kakao') {
+      // 기존 kakaoShare.ts 사용 (안정적)
+      const { shareCharacter } = await import('@/lib/kakaoShare');
+      const traitInfo = character.activeTrait ? TRAIT_DISPLAY[character.activeTrait] : null;
+      shareCharacter({
+        characterName: character.name,
+        animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
+        animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
+        animalType: character.animalType,
+        xp: character.xp,
+        traitName: traitInfo ? `${traitInfo.emoji} ${traitInfo.name}` : undefined,
+      });
+      setShowShareMenu(false);
+      return;
+    }
+
+    // 인스타/다운로드는 카드 캡처
+    if (!shareCardRef.current) return;
     setShareLoading(true);
     setShowShareMenu(false);
 
@@ -406,27 +425,11 @@ const [showShareMenu, setShowShareMenu] = useState(false);
       const blob = await captureCardAsBlob(shareCardRef.current);
       if (!blob) { alert('이미지 생성에 실패했습니다.'); setShareLoading(false); return; }
 
-      const traitInfo = character.activeTrait ? TRAIT_DISPLAY[character.activeTrait] : null;
-
       if (target === 'instagram') {
         await shareToInstagramStory(blob);
-      } else if (target === 'kakao') {
-        await shareToKakao(blob, {
-          characterName: character.name,
-          animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
-          animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
-          xp: character.xp,
-          characterSize,
-          traitName: traitInfo ? `${traitInfo.emoji} ${traitInfo.name}` : undefined,
-        });
       } else {
-        // 이미지 다운로드
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'beastleague.png';
-        a.click();
-        URL.revokeObjectURL(url);
+        const { downloadBlob } = await import('@/lib/shareUtils');
+        downloadBlob(blob, 'beastleague.png');
       }
     } catch (e) {
       console.error('Share failed:', e);
