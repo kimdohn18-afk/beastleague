@@ -207,6 +207,25 @@ export default function MatchPage() {
           homeTeam: game.homeTeam,
           date: todayKST(),
         });
+
+        // 공유 보상 요청
+        if (token) {
+          try {
+            const res = await fetch(`${apiUrl}/api/characters/me/share-reward`, {
+              method: 'POST',
+              headers,
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.rewarded) {
+                setToast(`🎉 공유 보상 +${data.added} XP!`);
+                setTimeout(() => setToast(null), 2500);
+              }
+            }
+          } catch (e) {
+            console.error('Share reward failed:', e);
+          }
+        }
       }
     }
     setShowSharePrompt(false);
