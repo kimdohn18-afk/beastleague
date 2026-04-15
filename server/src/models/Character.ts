@@ -10,6 +10,8 @@ export interface ICharacter extends Document {
   totalPlacements: number;
   activeTrait: string | null;
   earnedBadges: string[];
+  earnedAchievements: string[];
+  teamAchievements: Array<{ teamId: string; tier: string; count: number }>;
   tutorialCompleted: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -26,6 +28,12 @@ const characterSchema = new Schema<ICharacter>(
     totalPlacements:    { type: Number, default: 0 },
     activeTrait:        { type: String, default: null },
     earnedBadges:       [{ type: String }],
+    earnedAchievements: [{ type: String }],
+    teamAchievements:   [{
+      teamId: { type: String },
+      tier:   { type: String },
+      count:  { type: Number },
+    }],
     tutorialCompleted:  { type: Boolean, default: false },
   },
   { timestamps: true }
