@@ -389,22 +389,22 @@ export async function calculateAchievements(userId: string, characterId: string)
     count: number;
   }> = [];
 
- for (const team of KBO_TEAMS) {
-  const countById    = ctx.teamPlacementCounts[team.id] || 0;
-  const countByName  = ctx.teamPlacementCounts[team.name] || 0;
-  const countByShort = ctx.teamPlacementCounts[team.shortName] || 0;
-  const totalCount = countById + countByName + countByShort;
-  const tier = getTeamTier(totalCount);
-  if (tier) {
-    teamAchievements.push({
-      teamId: team.id,
-      teamName: team.name,
-      teamEmoji: team.emoji,
-      tier,
-      count: totalCount,
-    });
+  for (const team of KBO_TEAMS) {
+    const countById    = ctx.teamPlacementCounts[team.id] || 0;
+    const countByName  = ctx.teamPlacementCounts[team.name] || 0;
+    const countByShort = ctx.teamPlacementCounts[team.shortName] || 0;
+    const totalCount = countById + countByName + countByShort;
+    const tier = getTeamTier(totalCount);
+    if (tier) {
+      teamAchievements.push({
+        teamId: team.id,
+        teamName: team.name,
+        teamEmoji: team.emoji,
+        tier,
+        count: totalCount,
+      });
+    }
   }
-}
 
   // 팀 업적도 earned 카운트에 포함
   ctx.earnedCount = earned.length + teamAchievements.length;
@@ -418,33 +418,67 @@ export async function calculateAchievements(userId: string, characterId: string)
   // 최종 카운트
   const finalEarnedCount = earned.length + teamAchievements.length;
 
-  // activeTrait: 가장 최근 달성한 희귀 업적
-  const RARITY_ORDER = [
-    'legend', 'streak_100', 'goat', 'xp_world_tree', 'nationwide',
-    'streak_60', 'explosion', 'divine', 'xp_great_tree', 'collector_30',
-    'ironman', 'hr_king', 'streak_30', 'prophet', 'xp_tree',
-    'veteran', 'walkoff_king', 'fortune_teller', 'speedster',
-    'collector_15', 'streak_14', 'jackpot', 'xp_sapling',
-    'regular', 'hr_mania', 'getting_it', 'hit_machine', 'rbi_king', 'run_king',
-    'streak_7', 'big_hit', 'extra_base', 'all_rounder', 'order_explorer',
-    'hot_streak', 'loss_hero', 'nohit_survivor', 'wrong_a_lot', 'lose_streak',
-    'rookie', 'xp_sprout', 'first_hr', 'first_steal', 'first_walkoff',
-    'first_correct', 'xp_seed', 'first_placement', 'first_league',
-    'zero_xp', 'negative_xp',
-  ];
+  // ──── activeTrait: 사용자 설정값 존중 ────
+  // 현재 DB에 저장된 activeTrait 가져오기
+  const currentTrait = character.activeTrait;
+  
+  // 사용자가 설정한 값이 여전히 유효한지 확인
+  let resolvedTrait: { id: string; emoji: string; name: string; description: string } | null = null;
 
-  let activeTrait = null;
-  for (const id of RARITY_ORDER) {
-    if (earned.includes(id)) {
-      const def = ACHIEVEMENT_DEFINITIONS.find(d => d.id === id)!;
-      activeTrait = { id: def.id, emoji: def.emoji, name: def.name, description: def.description };
-      break;
+  if (currentTrait) {
+    // 일반 업적에서 찾기
+    const generalDef = ACHIEVEMENT_DEFINITIONS.find(d => d.id === currentTrait);
+    if (generalDef && earned.includes(currentTrait)) {
+      resolvedTrait = { id: generalDef.id, emoji: generalDef.emoji, name: generalDef.name, description: generalDef.description };
+    }
+    
+    // 팀 업적에서 찾기
+    if (!resolvedTrait) {
+      const teamAch = teamAchievements.find(ta => ta.teamId === currentTrait);
+      if (teamAch) {
+        resolvedTrait = { id: teamAch.teamId, emoji: teamAch.teamEmoji, name: teamAch.teamName, description: `${teamAch.teamName} 충성파` };
+      }
+    }
+
+    // 하위 호환: "🦾 철인" 같은 이전 형식이면 매칭 시도
+    if (!resolvedTrait && currentTrait.includes(' ')) {
+      for (const def of ACHIEVEMENT_DEFINITIONS) {
+        if (currentTrait.includes(def.name) && earned.includes(def.id)) {
+          resolvedTrait = { id: def.id, emoji: def.emoji, name: def.name, description: def.description };
+          break;
+        }
+      }
     }
   }
 
-  // 캐릭터 업데이트
+  // 사용자 설정값이 없거나 유효하지 않으면 자동 선택 (가장 희귀한 업적)
+  if (!resolvedTrait) {
+    const RARITY_ORDER = [
+      'legend', 'streak_100', 'goat', 'xp_world_tree', 'nationwide',
+      'streak_60', 'explosion', 'divine', 'xp_great_tree', 'collector_30',
+      'ironman', 'hr_king', 'streak_30', 'prophet', 'xp_tree',
+      'veteran', 'walkoff_king', 'fortune_teller', 'speedster',
+      'collector_15', 'streak_14', 'jackpot', 'xp_sapling',
+      'regular', 'hr_mania', 'getting_it', 'hit_machine', 'rbi_king', 'run_king',
+      'streak_7', 'big_hit', 'extra_base', 'all_rounder', 'order_explorer',
+      'hot_streak', 'loss_hero', 'nohit_survivor', 'wrong_a_lot', 'lose_streak',
+      'rookie', 'xp_sprout', 'first_hr', 'first_steal', 'first_walkoff',
+      'first_correct', 'xp_seed', 'first_placement', 'first_league',
+      'zero_xp', 'negative_xp',
+    ];
+
+    for (const id of RARITY_ORDER) {
+      if (earned.includes(id)) {
+        const def = ACHIEVEMENT_DEFINITIONS.find(d => d.id === id)!;
+        resolvedTrait = { id: def.id, emoji: def.emoji, name: def.name, description: def.description };
+        break;
+      }
+    }
+  }
+
+  // 캐릭터 업데이트 — activeTrait는 resolvedTrait의 ID로 저장
   await Character.findByIdAndUpdate(characterId, {
-  activeTrait: activeTrait ? activeTrait.id : null,  // "ironman" 같은 ID로 저장
+    activeTrait: resolvedTrait ? resolvedTrait.id : null,
     earnedAchievements: earned,
     teamAchievements: teamAchievements.map(t => ({
       teamId: t.teamId,
@@ -453,21 +487,5 @@ export async function calculateAchievements(userId: string, characterId: string)
     })),
   });
 
-  return { activeTrait, earned, teamAchievements, earnedCount: finalEarnedCount };
-}
-
-// ━━━ 프론트엔드용 헬퍼 ━━━
-export function getAllAchievements() {
-  return ACHIEVEMENT_DEFINITIONS.map(d => ({
-    id: d.id,
-    emoji: d.emoji,
-    name: d.name,
-    category: d.category,
-    description: d.description,
-    condition: d.condition,
-  }));
-}
-
-export function getAchievementById(id: string) {
-  return ACHIEVEMENT_DEFINITIONS.find(d => d.id === id);
+  return { activeTrait: resolvedTrait, earned, teamAchievements, earnedCount: finalEarnedCount };
 }
