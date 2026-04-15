@@ -56,7 +56,11 @@ export default function MatchPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken;
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-
+ 
+  const [characterInfo, setCharacterInfo] = useState<{
+  name: string; animalType: string; xp: number; activeTrait?: string | null;
+} | null>(null);
+  
   const todayKST = () => {
     const now = new Date(Date.now() + 9 * 3600 * 1000);
     return now.toISOString().slice(0, 10);
