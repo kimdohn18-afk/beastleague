@@ -334,11 +334,12 @@ const [showShareMenu, setShowShareMenu] = useState(false);
     setShowPushPrompt(false);
   };
 
-  const handleShare = async (target: 'kakao' | 'instagram' | 'download') => {
+    const handleShare = async (target: 'kakao' | 'instagram' | 'download') => {
     if (!character) return;
 
+    let shareSuccess = false;
+
     if (target === 'kakao') {
-      // 기존 kakaoShare.ts 사용 (안정적)
       const { shareCharacter } = await import('@/lib/kakaoShare');
       const traitInfo = character.activeTrait ? TRAIT_DISPLAY[character.activeTrait] : null;
       shareCharacter({
@@ -349,30 +350,51 @@ const [showShareMenu, setShowShareMenu] = useState(false);
         xp: character.xp,
         traitName: traitInfo ? `${traitInfo.emoji} ${traitInfo.name}` : undefined,
       });
+      shareSuccess = true;
       setShowShareMenu(false);
-      return;
+    } else {
+      // 인스타/다운로드는 카드 캡처
+      if (!shareCardRef.current) return;
+      setShareLoading(true);
+      setShowShareMenu(false);
+
+      try {
+        const blob = await captureCardAsBlob(shareCardRef.current);
+        if (!blob) { alert('이미지 생성에 실패했습니다.'); setShareLoading(false); return; }
+
+        if (target === 'instagram') {
+          shareSuccess = await shareToInstagramStory(blob);
+        } else {
+          const { downloadBlob } = await import('@/lib/shareUtils');
+          downloadBlob(blob, 'beastleague.png');
+          shareSuccess = true;
+        }
+      } catch (e) {
+        console.error('Share failed:', e);
+        alert('공유 중 오류가 발생했습니다.');
+      } finally {
+        setShareLoading(false);
+      }
     }
 
-    // 인스타/다운로드는 카드 캡처
-    if (!shareCardRef.current) return;
-    setShareLoading(true);
-    setShowShareMenu(false);
-
-    try {
-      const blob = await captureCardAsBlob(shareCardRef.current);
-      if (!blob) { alert('이미지 생성에 실패했습니다.'); setShareLoading(false); return; }
-
-      if (target === 'instagram') {
-        await shareToInstagramStory(blob);
-      } else {
-        const { downloadBlob } = await import('@/lib/shareUtils');
-        downloadBlob(blob, 'beastleague.png');
+    // 공유 성공 시 하루 1회 보상 요청
+    if (shareSuccess && token) {
+      try {
+        const res = await fetch(`${apiUrl}/api/characters/me/share-reward`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.rewarded) {
+            alert(`🎉 공유 보상 +${data.added} XP! (${data.xpBefore} → ${data.xpAfter})`);
+            // 캐릭터 정보 새로고침
+            setCharacter((prev) => prev ? { ...prev, xp: data.xpAfter } : prev);
+          }
+        }
+      } catch (e) {
+        console.error('Share reward failed:', e);
       }
-    } catch (e) {
-      console.error('Share failed:', e);
-      alert('공유 중 오류가 발생했습니다.');
-    } finally {
-      setShareLoading(false);
     }
   };
   
