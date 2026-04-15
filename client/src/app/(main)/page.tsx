@@ -14,6 +14,8 @@ import {
   TRAIT_DISPLAY,
   getTraitDisplay,
 } from '@/lib/constants';
+import WalkingCharacter from '@/components/WalkingCharacter';
+
 
 interface Character {
   _id: string;
