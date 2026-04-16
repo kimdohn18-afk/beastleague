@@ -3,60 +3,27 @@
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-
-const ANIMAL_EMOJI: Record<string, string> = {
-  turtle: '🐢', eagle: '🦅', lion: '🦁', dinosaur: '🦖', dog: '🐶',
-  fox: '🦊', penguin: '🐧', shark: '🦈', bear: '🐻', tiger: '🐯',
-  seagull: '🕊️', dragon: '🐉', cat: '🐱', rabbit: '🐰',
-  gorilla: '🦍', elephant: '🐘',
-};
-
-const TRAIT_DISPLAY: Record<string, { emoji: string; name: string }> = {
-  prophet: { emoji: '🔮', name: '예언자' }, oracle: { emoji: '🔮', name: '신탁' },
-  hr_hunter: { emoji: '💣', name: '홈런 헌터' }, hr_master: { emoji: '💥', name: '홈런 마스터' },
-  speedster: { emoji: '🏃', name: '스피드스터' }, hit_machine: { emoji: '🛡️', name: '안타 제조기' },
-  rbi_collector: { emoji: '🎯', name: '타점 수집가' }, reverse_prophet: { emoji: '🎰', name: '역예측왕' },
-  run_radar: { emoji: '🏅', name: '득점 레이더' }, walkoff_magnet: { emoji: '🔗', name: '끝내기 체질' },
-  caught_stealing_king: { emoji: '⚠️', name: '도루 실패왕' }, nohit_survivor: { emoji: '📊', name: '무안타 서바이버' },
-  leadoff_maniac: { emoji: '⚡', name: '리드오프 마니아' }, cleanup_killer: { emoji: '🔨', name: '클린업 킬러' },
-  lower_gambler: { emoji: '🔧', name: '하위타선 도박사' }, order_nomad: { emoji: '🎪', name: '타순 유목민' },
-  four_obsession: { emoji: '4️⃣', name: '4번 집착' }, full_count: { emoji: '🔄', name: '풀카운트' },
-  second_artisan: { emoji: '2️⃣', name: '2번 장인' }, odd_even_master: { emoji: '🎲', name: '홀짝 마스터' },
-  one_team: { emoji: '❤️', name: '원팀 충성파' }, team_explorer: { emoji: '🎲', name: '팀 탐험가' },
-  all_team_conqueror: { emoji: '🗺️', name: '전팀 정복자' }, home_maniac: { emoji: '🏠', name: '홈 매니아' },
-  away_expert: { emoji: '✈️', name: '원정 전문가' }, drifter: { emoji: '🔀', name: '승부사' },
-  tragic_fan: { emoji: '💔', name: '비운의 팬' }, sprout: { emoji: '🌱', name: '새싹' },
-  ten_milestone: { emoji: '🐣', name: '10회 돌파' }, streak_7: { emoji: '🔥', name: '연속 배치왕' },
-  streak_14: { emoji: '🔥', name: '불꽃 투혼' }, streak_30: { emoji: '👑', name: '철인' },
-  attendance_50: { emoji: '📅', name: '개근상' }, veteran_100: { emoji: '🎖️', name: '백전노장' },
-  allrounder: { emoji: '💎', name: '올라운더' }, path_of_pain: { emoji: '💀', name: '수라의 길' },
-  xp_explosion: { emoji: '🌟', name: 'XP 폭발' }, growth_curve: { emoji: '📈', name: '성장 곡선' },
-  collector: { emoji: '🏆', name: '컬렉터' }, rollercoaster: { emoji: '🎭', name: '반전왕' },
-  consistency: { emoji: '🧊', name: '꾸준함의 미학' }, grand_slam: { emoji: '🎯', name: '만루 홈런급' },
-};
+import { ANIMAL_EMOJI, getTraitDisplay } from '@/lib/constants';
 
 type Tab = 'league' | 'versus' | 'all';
 
 interface League { _id: string; name: string; code: string; members: string[]; ownerId: string; }
-interface RankItem { rank: number; name: string; animalType: string; xp: number; activeTrait?: string; placedToday: boolean; isMe: boolean; }
+interface RankItem { rank: number; characterId?: string; name: string; animalType: string; xp: number; activeTrait?: string; placedToday: boolean; isMe: boolean; }
 interface LeagueRankItem { rank: number; name: string; code: string; memberCount: number; totalXp: number; avgXp: number; isMine: boolean; }
-interface AllRankItem { name: string; animalType: string; xp: number; placedToday: boolean; }
+interface AllRankItem { _id?: string; name: string; animalType: string; xp: number; activeTrait?: string; placedToday: boolean; }
 
 export default function RankingPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('league');
 
-  // 리그
   const [leagues, setLeagues] = useState<League[]>([]);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [ranking, setRanking] = useState<RankItem[]>([]);
   const [leagueInfo, setLeagueInfo] = useState<{ name: string; code: string; memberCount: number } | null>(null);
 
-  // 대항전
   const [versusRanking, setVersusRanking] = useState<LeagueRankItem[]>([]);
 
-  // 전체
   const [allRanking, setAllRanking] = useState<AllRankItem[]>([]);
   const [myRank, setMyRank] = useState<number | null>(null);
 
@@ -199,6 +166,11 @@ export default function RankingPage() {
     }
   }
 
+  function goToProfile(characterId: string | undefined, isMe?: boolean) {
+    if (isMe || !characterId) return;
+    router.push(`/profile/${characterId}`);
+  }
+
   const medals = ['🥇', '🥈', '🥉'];
 
   if (status === 'loading' || loading) {
@@ -285,11 +257,17 @@ export default function RankingPage() {
               <div className="px-4 space-y-2">
                 {ranking.map((r) => {
                   const emoji = ANIMAL_EMOJI[r.animalType] || '🐾';
-                  const trait = r.activeTrait ? TRAIT_DISPLAY[r.activeTrait] : null;
+                  const traitStr = r.activeTrait ? getTraitDisplay(r.activeTrait) : null;
                   return (
-                    <div key={r.rank} className={`flex items-center gap-3 p-3 rounded-2xl ${
-                      r.isMe ? 'bg-orange-50 border-2 border-orange-300' : r.rank <= 3 ? 'bg-orange-50 border border-orange-100' : 'bg-white border border-gray-100'
-                    }`}>
+                    <div
+                      key={r.rank}
+                      onClick={() => goToProfile(r.characterId, r.isMe)}
+                      className={`flex items-center gap-3 p-3 rounded-2xl transition-all ${
+                        !r.isMe && r.characterId ? 'cursor-pointer active:scale-[0.98]' : ''
+                      } ${
+                        r.isMe ? 'bg-orange-50 border-2 border-orange-300' : r.rank <= 3 ? 'bg-orange-50 border border-orange-100' : 'bg-white border border-gray-100'
+                      }`}
+                    >
                       <span className="w-8 text-center text-lg">{r.rank <= 3 ? medals[r.rank - 1] : <span className="text-gray-400 text-xs font-bold">{r.rank}</span>}</span>
                       <span className="text-2xl">{emoji}</span>
                       <div className="flex-1 min-w-0">
@@ -301,9 +279,12 @@ export default function RankingPage() {
                             <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full shrink-0">미배치</span>
                           )}
                         </div>
-                        {trait && <p className="text-[11px] text-gray-400 mt-0.5">{trait.emoji} {trait.name}</p>}
+                        {traitStr && <p className="text-[11px] text-gray-400 mt-0.5">{traitStr}</p>}
                       </div>
-                      <p className="text-orange-500 text-sm font-bold shrink-0">{r.xp.toLocaleString()} XP</p>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <p className="text-orange-500 text-sm font-bold">{r.xp.toLocaleString()} XP</p>
+                        {!r.isMe && r.characterId && <span className="text-gray-300 text-xs">›</span>}
+                      </div>
                     </div>
                   );
                 })}
@@ -354,10 +335,17 @@ export default function RankingPage() {
             <div className="space-y-2">
               {allRanking.map((r: any, i: number) => {
                 const emoji = ANIMAL_EMOJI[r.animalType] || '🐾';
+                const traitStr = r.activeTrait ? getTraitDisplay(r.activeTrait) : null;
                 return (
-                  <div key={i} className={`flex items-center gap-3 p-3 rounded-2xl ${
-                    i < 3 ? 'bg-orange-50 border border-orange-100' : 'bg-white border border-gray-100'
-                  }`}>
+                  <div
+                    key={i}
+                    onClick={() => goToProfile(r._id)}
+                    className={`flex items-center gap-3 p-3 rounded-2xl transition-all ${
+                      r._id ? 'cursor-pointer active:scale-[0.98]' : ''
+                    } ${
+                      i < 3 ? 'bg-orange-50 border border-orange-100' : 'bg-white border border-gray-100'
+                    }`}
+                  >
                     <span className="w-8 text-center text-lg">{i < 3 ? medals[i] : <span className="text-gray-400 text-xs font-bold">{i + 1}</span>}</span>
                     <span className="text-2xl">{emoji}</span>
                     <div className="flex-1 min-w-0">
@@ -369,8 +357,12 @@ export default function RankingPage() {
                           <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full shrink-0">미배치</span>
                         )}
                       </div>
+                      {traitStr && <p className="text-[11px] text-gray-400 mt-0.5">{traitStr}</p>}
                     </div>
-                    <p className="text-orange-500 text-sm font-bold shrink-0">{(r.xp ?? 0).toLocaleString()} XP</p>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <p className="text-orange-500 text-sm font-bold">{(r.xp ?? 0).toLocaleString()} XP</p>
+                      {r._id && <span className="text-gray-300 text-xs">›</span>}
+                    </div>
                   </div>
                 );
               })}
