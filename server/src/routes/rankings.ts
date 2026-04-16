@@ -15,25 +15,31 @@ function todayKST(): string {
 }
 
 async function getRanking(type: RankingType, limit: number) {
-  if (type === 'level') {
-    const characters = await Character.find().sort({ xp: -1 }).limit(limit)
-      .select('_id userId name animalType level xp stats activeTrait').lean();
+ // GET /api/rankings 에서 level 타입 응답 수정
+if (type === 'level') {
+  const characters = await Character.find().sort({ xp: -1 }).limit(limit)
+    .select('_id userId name animalType level xp stats activeTrait').lean();
 
-    // 오늘 배치한 유저 목록 조회
-    const today = todayKST();
-    const userIds = characters.map((c) => c.userId);
-    const todayPlacements = await Placement.find({
-      userId: { $in: userIds },
-      date: today,
-    }).select('userId').lean();
+  const today = todayKST();
+  const userIds = characters.map((c) => c.userId);
+  const todayPlacements = await Placement.find({
+    userId: { $in: userIds },
+    date: today,
+  }).select('userId').lean();
 
-    const placedUserIds = new Set(todayPlacements.map((p) => String(p.userId)));
+  const placedUserIds = new Set(todayPlacements.map((p) => String(p.userId)));
 
-    return characters.map((c) => ({
-      ...c,
-      placedToday: placedUserIds.has(String(c.userId)),
-    }));
-  }
+  // ★ 수정: _id를 명시적으로 string 변환
+  return characters.map((c) => ({
+    _id: String(c._id),
+    userId: String(c.userId),
+    name: c.name,
+    animalType: c.animalType,
+    xp: c.xp,
+    activeTrait: c.activeTrait,
+    placedToday: placedUserIds.has(String(c.userId)),
+  }));
+}
 
   if (type === 'totalStats') {
     return Character.aggregate([
