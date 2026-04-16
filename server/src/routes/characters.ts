@@ -207,20 +207,43 @@ charactersRouter.put('/me/active-trait', authenticateUser, async (req: Request, 
 // GET /api/characters/:id/public — 공개 프로필 (인증 불필요)
 charactersRouter.get('/:id/public', async (req: Request, res: Response) => {
   try {
+    // ★ 수정: 유효하지 않은 ObjectId인 경우 먼저 체크
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
+    }
+
     const character = await Character.findById(req.params.id)
       .select('userId name animalType xp activeTrait totalPlacements createdAt')
       .lean();
     if (!character) return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
 
-    const { activeTrait, earned, teamAchievements, earnedCount } =
-      await calculateAchievements(String(character.userId), String(character._id), { skipTraitUpdate: true });
+    // ★ 수정: calculateAchievements를 try-catch로 감싸서 에러 시에도 기본 프로필은 보여줌
+    let achievementData = {
+      activeTrait: null as any,
+      earned: [] as string[],
+      teamAchievements: [] as any[],
+      earnedCount: 0,
+    };
 
+    try {
+      achievementData = await calculateAchievements(
+        String(character.userId),
+        String(character._id),
+        { skipTraitUpdate: true }
+      );
+    } catch (e) {
+      console.error('공개 프로필 업적 계산 실패:', e);
+      // 업적 계산 실패해도 기본 프로필은 표시
+    }
+
+    const { activeTrait, earned, teamAchievements, earnedCount } = achievementData;
     const allDefs = getAllAchievements();
     const totalCount = allDefs.length + KBO_TEAMS.length;
 
     return res.json({
       character: {
-        _id: character._id,
+        _id: String(character._id),
         name: character.name,
         animalType: character.animalType,
         xp: character.xp,
@@ -232,7 +255,6 @@ charactersRouter.get('/:id/public', async (req: Request, res: Response) => {
         activeTrait,
         earnedCount,
         totalCount,
-        // ★ 수정: earned → topAchievements (클라이언트 인터페이스와 일치)
         topAchievements: earned.slice(0, 6).map(id => {
           const def = allDefs.find(d => d.id === id);
           return def ? { id: def.id, emoji: def.emoji, name: def.name } : null;
@@ -241,11 +263,12 @@ charactersRouter.get('/:id/public', async (req: Request, res: Response) => {
           teamId: ta.teamId,
           teamName: ta.teamName,
           teamEmoji: ta.teamEmoji,
-          tier: ta.tier.tier,
+          tier: ta.tier?.tier || ta.tier,
         })),
       },
     });
   } catch (err) {
+    console.error('공개 프로필 전체 에러:', err);
     return res.status(500).json({ error: String(err) });
   }
 });
