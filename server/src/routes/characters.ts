@@ -4,6 +4,7 @@ import { Character } from '../models/Character';
 import { StatLog } from '../models/StatLog';
 import { Placement } from '../models/Placement';
 import { Game } from '../models/Game';
+import { Like } from '../models/Like';
 import { calculateAchievements, getAllAchievements, KBO_TEAMS } from '../services/TraitCalculator';
 import mongoose from 'mongoose';
 
@@ -61,6 +62,7 @@ charactersRouter.delete('/me', authenticateUser, async (req: Request, res: Respo
       Character.deleteOne({ userId }),
       Placement.deleteMany({ userId }),
       StatLog.deleteMany({ userId }),
+      Like.deleteMany({ $or: [{ fromUserId: userId }, { toCharacterId: character._id }] }),
     ]);
 
     return res.json({ message: '캐릭터가 삭제되었습니다' });
@@ -124,7 +126,7 @@ charactersRouter.post('/me/share-reward', authenticateUser, async (req: Request,
     const character = await Character.findOne({ userId });
     if (!character) return res.status(404).json({ error: '캐릭터가 없습니다' });
 
-    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    const today = todayKST();
 
     const existing = await StatLog.findOne({
       userId: character.userId,
@@ -185,9 +187,7 @@ charactersRouter.put('/me/active-trait', authenticateUser, async (req: Request, 
     }
 
     const { earned, teamAchievements } = await calculateAchievements(
-      userId,
-      String(character._id),
-      { skipTraitUpdate: true }
+      userId, String(character._id), { skipTraitUpdate: true }
     );
 
     const isGeneralEarned = earned.includes(traitId);
@@ -204,7 +204,7 @@ charactersRouter.put('/me/active-trait', authenticateUser, async (req: Request, 
   }
 });
 
-// ★ GET /api/characters/:id/public — 공개 프로필 (캐릭터 + 오늘 배치만)
+// ★ GET /api/characters/:id/public — 공개 프로필
 charactersRouter.get('/:id/public', async (req: Request, res: Response) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -212,25 +212,28 @@ charactersRouter.get('/:id/public', async (req: Request, res: Response) => {
     }
 
     const character = await Character.findById(req.params.id)
-      .select('userId name animalType xp activeTrait totalPlacements streak createdAt')
+      .select('userId name animalType xp activeTrait totalPlacements streak totalLikes createdAt')
       .lean();
     if (!character) return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
 
-    // ★ 오늘 배치 조회
+    // 오늘 배치
     const today = todayKST();
-    const placement = await Placement.findOne({
-      userId: character.userId,
-      date: today,
-    }).lean();
+    const placement = await Placement.findOne({ userId: character.userId, date: today }).lean();
 
-    // 배치한 경기 정보
-    let todayGame: any = null;
+    let todayPlacement: any = null;
     if (placement) {
       const game = await Game.findOne({ gameId: placement.gameId })
         .select('gameId homeTeam awayTeam status homeScore awayScore startTime')
         .lean();
-      if (game) {
-        todayGame = {
+      todayPlacement = {
+        team: placement.team,
+        battingOrder: placement.battingOrder,
+        predictedWinner: placement.predictedWinner,
+        status: placement.status,
+        isCorrect: placement.isCorrect,
+        xpFromPlayer: placement.xpFromPlayer,
+        xpFromPrediction: placement.xpFromPrediction,
+        game: game ? {
           gameId: game.gameId,
           homeTeam: game.homeTeam,
           awayTeam: game.awayTeam,
@@ -238,8 +241,8 @@ charactersRouter.get('/:id/public', async (req: Request, res: Response) => {
           homeScore: game.homeScore,
           awayScore: game.awayScore,
           startTime: game.startTime,
-        };
-      }
+        } : null,
+      };
     }
 
     return res.json({
@@ -251,21 +254,75 @@ charactersRouter.get('/:id/public', async (req: Request, res: Response) => {
         activeTrait: character.activeTrait,
         totalPlacements: character.totalPlacements,
         streak: character.streak || 0,
+        totalLikes: character.totalLikes || 0,
         createdAt: character.createdAt,
       },
-      todayPlacement: placement ? {
-        team: placement.team,
-        battingOrder: placement.battingOrder,
-        predictedWinner: placement.predictedWinner,
-        status: placement.status,
-        isCorrect: placement.isCorrect,
-        xpFromPlayer: placement.xpFromPlayer,
-        xpFromPrediction: placement.xpFromPrediction,
-        game: todayGame,
-      } : null,
+      todayPlacement,
     });
   } catch (err) {
     console.error('공개 프로필 에러:', err);
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ★ POST /api/characters/:id/like — 좋아요 (하루 1회)
+charactersRouter.post('/:id/like', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const fromUserId = req.user!.userId;
+    const toCharacterId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(toCharacterId)) {
+      return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
+    }
+
+    const character = await Character.findById(toCharacterId).lean();
+    if (!character) return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
+
+    // 자기 자신에게 좋아요 불가
+    if (String(character.userId) === String(fromUserId)) {
+      return res.status(400).json({ error: '자신에게는 좋아요를 누를 수 없습니다' });
+    }
+
+    const today = todayKST();
+
+    // 중복 체크 (unique index가 잡아주지만 친절한 메시지용)
+    const existing = await Like.findOne({ fromUserId, toCharacterId, date: today });
+    if (existing) {
+      return res.status(400).json({ error: '오늘 이미 좋아요를 눌렀습니다', alreadyLiked: true });
+    }
+
+    await Like.create({ fromUserId, toCharacterId, date: today });
+
+    // 캐릭터 totalLikes 증가
+    const updated = await Character.findByIdAndUpdate(
+      toCharacterId,
+      { $inc: { totalLikes: 1 } },
+      { new: true }
+    );
+
+    return res.json({
+      liked: true,
+      totalLikes: updated?.totalLikes || 0,
+    });
+  } catch (err: any) {
+    // unique index 위반 (동시 요청 방어)
+    if (err.code === 11000) {
+      return res.status(400).json({ error: '오늘 이미 좋아요를 눌렀습니다', alreadyLiked: true });
+    }
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ★ GET /api/characters/:id/like-status — 오늘 좋아요 눌렀는지 확인
+charactersRouter.get('/:id/like-status', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const fromUserId = req.user!.userId;
+    const toCharacterId = req.params.id;
+    const today = todayKST();
+
+    const existing = await Like.findOne({ fromUserId, toCharacterId, date: today }).lean();
+    return res.json({ liked: !!existing });
+  } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
 });
