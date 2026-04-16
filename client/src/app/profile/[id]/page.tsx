@@ -151,13 +151,13 @@ export default function PublicProfilePage() {
   /* ───── 좋아요 상태 확인 ───── */
 
   useEffect(() => {
-    if (!session || !characterId) return;
+    if (!token || !characterId) return;
     const checkLikeStatus = async () => {
       try {
         const res = await fetch(
           `${API_URL}/api/characters/${characterId}/like-status`,
           {
-            headers: { Authorization: `Bearer ${session.token}` },
+            headers: { Authorization: `Bearer ${token}` },
           },
         );
         if (res.ok) {
@@ -174,13 +174,13 @@ export default function PublicProfilePage() {
   /* ───── 밥주기 상태 확인 ───── */
 
   useEffect(() => {
-    if (!session || !characterId) return;
+      if (!token || !characterId) return;
     const checkFeedStatus = async () => {
       try {
         const res = await fetch(
           `${API_URL}/api/characters/${characterId}/feed-status`,
           {
-            headers: { Authorization: `Bearer ${session.token}` },
+             headers: { Authorization: `Bearer ${token}` },
           },
         );
         if (res.ok) {
@@ -207,7 +207,7 @@ export default function PublicProfilePage() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.token}`,
+             Authorization: `Bearer ${token}`,
           },
         },
       );
@@ -239,7 +239,7 @@ export default function PublicProfilePage() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.token}`,
+             Authorization: `Bearer ${token}`,
           },
         },
       );
@@ -402,7 +402,7 @@ export default function PublicProfilePage() {
       </div>
 
       {/* 액션 버튼 */}
-      {session && (
+        {token && (
         <div className="flex justify-center gap-3 px-6 mb-6">
           {/* 좋아요 버튼 */}
           <button
