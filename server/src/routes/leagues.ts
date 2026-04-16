@@ -183,6 +183,7 @@ leaguesRouter.get('/:code/ranking', authenticateUser, async (req: Request, res: 
 
     const ranking = characters.map((c, i) => ({
       rank: i + 1,
+      characterId: String(c._id),
       name: c.name,
       animalType: c.animalType,
       xp: c.xp,
@@ -190,7 +191,6 @@ leaguesRouter.get('/:code/ranking', authenticateUser, async (req: Request, res: 
       placedToday: placedSet.has(String(c.userId)),
       isMe: String(c.userId) === String(userId),
     }));
-
     return res.json({
       league: { name: league.name, code: league.code, memberCount: league.members.length },
       ranking,
