@@ -148,3 +148,43 @@ export function getTraitDisplay(traitId: string): string {
   
   return '';
 }
+
+// ──────────────────────────────────────────────
+// 진화 시스템
+// ──────────────────────────────────────────────
+
+export interface EvolutionStage {
+  stage: number;
+  name: string;
+  minXp: number;
+  badge: string;
+  color: string;       // tailwind 텍스트 색상
+  borderColor: string; // tailwind 보더 색상
+  bgColor: string;     // tailwind 배경 색상
+  glowColor: string;   // CSS 글로우 색상
+}
+
+export const EVOLUTION_STAGES: EvolutionStage[] = [
+  { stage: 1, name: '아기',  minXp: 0,     badge: '🥚', color: 'text-gray-500',   borderColor: 'border-gray-200', bgColor: 'bg-gray-50',   glowColor: 'transparent' },
+  { stage: 2, name: '성장',  minXp: 300,   badge: '⭐', color: 'text-yellow-500', borderColor: 'border-yellow-300', bgColor: 'bg-yellow-50', glowColor: '#fbbf24' },
+  { stage: 3, name: '성숙',  minXp: 1000,  badge: '🔥', color: 'text-orange-500', borderColor: 'border-orange-300', bgColor: 'bg-orange-50', glowColor: '#f97316' },
+  { stage: 4, name: '전설',  minXp: 3000,  badge: '👑', color: 'text-purple-500', borderColor: 'border-purple-300', bgColor: 'bg-purple-50', glowColor: '#a855f7' },
+  { stage: 5, name: '신화',  minXp: 10000, badge: '💎', color: 'text-cyan-400',   borderColor: 'border-cyan-300',   bgColor: 'bg-cyan-50',   glowColor: '#22d3ee' },
+];
+
+export function getEvolutionStage(xp: number): EvolutionStage {
+  let current = EVOLUTION_STAGES[0];
+  for (const stage of EVOLUTION_STAGES) {
+    if (xp >= stage.minXp) current = stage;
+  }
+  return current;
+}
+
+export function getNextEvolutionStage(xp: number): EvolutionStage | null {
+  for (const stage of EVOLUTION_STAGES) {
+    if (xp < stage.minXp) return stage;
+  }
+  return null; // 최고 단계
+}
+
+export const CHANGE_ANIMAL_COST = 100; // 캐릭터 변경 비용 (XP)
