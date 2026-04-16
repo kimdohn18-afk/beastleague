@@ -39,6 +39,7 @@ const characterSchema = new Schema<ICharacter>(
     }],
     tutorialCompleted: { type: Boolean, default: false },
     totalLikes: { type: Number, default: 0 },
+     totalFeeds: { type: Number, default: 0 },
     totalFeeds: { type: Number, default: 0 },
   },
   { timestamps: true }
