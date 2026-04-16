@@ -3,7 +3,9 @@ import { authenticateUser } from '../middleware/auth';
 import { Character } from '../models/Character';
 import { StatLog } from '../models/StatLog';
 import { Placement } from '../models/Placement';
+import { Game } from '../models/Game';
 import { calculateAchievements, getAllAchievements, KBO_TEAMS } from '../services/TraitCalculator';
+import mongoose from 'mongoose';
 
 export const charactersRouter = Router();
 
@@ -12,6 +14,10 @@ const VALID_ANIMALS = [
   'fox', 'penguin', 'shark', 'bear', 'tiger', 'seagull',
   'dragon', 'cat', 'rabbit', 'gorilla', 'elephant',
 ];
+
+function todayKST(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
 
 // POST /api/characters
 charactersRouter.post('/', authenticateUser, async (req: Request, res: Response) => {
@@ -76,12 +82,12 @@ charactersRouter.get('/me/history', authenticateUser, async (req: Request, res: 
   }
 });
 
-// GET /api/characters/achievements/all — 전체 업적 목록
+// GET /api/characters/achievements/all
 charactersRouter.get('/achievements/all', (_req: Request, res: Response) => {
   res.json(getAllAchievements());
 });
 
-// GET /api/characters/me/achievements — 내 업적 정보
+// GET /api/characters/me/achievements
 charactersRouter.get('/me/achievements', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -92,7 +98,7 @@ charactersRouter.get('/me/achievements', authenticateUser, async (req: Request, 
       await calculateAchievements(userId, String(character._id), { skipTraitUpdate: true });
 
     const allDefs = getAllAchievements();
-    const achievements = allDefs.map(d => ({
+    const achievements = allDefs.map((d: any) => ({
       ...d,
       earned: earned.includes(d.id),
     }));
@@ -111,19 +117,19 @@ charactersRouter.get('/me/achievements', authenticateUser, async (req: Request, 
   }
 });
 
-// POST /api/characters/me/share-reward — 하루 1회 공유 보상 (10 XP)
+// POST /api/characters/me/share-reward
 charactersRouter.post('/me/share-reward', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const character = await Character.findOne({ userId });
     if (!character) return res.status(404).json({ error: '캐릭터가 없습니다' });
 
-    const todayKST = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
     const existing = await StatLog.findOne({
       userId: character.userId,
       source: 'training',
-      sourceId: `share-${todayKST}`,
+      sourceId: `share-${today}`,
     });
 
     if (existing) {
@@ -143,7 +149,7 @@ charactersRouter.post('/me/share-reward', authenticateUser, async (req: Request,
       userId: character.userId,
       characterId: character._id,
       source: 'training',
-      sourceId: `share-${todayKST}`,
+      sourceId: `share-${today}`,
       before: { power: 0, agility: 0, skill: 0, stamina: 0, mind: 0 },
       after: { power: 0, agility: 0, skill: 0, stamina: 0, mind: 0 },
       xpBefore,
@@ -164,7 +170,7 @@ charactersRouter.post('/me/share-reward', authenticateUser, async (req: Request,
   }
 });
 
-// ★ PUT /api/characters/me/active-trait — 대표 업적 선택 (수정됨)
+// PUT /api/characters/me/active-trait
 charactersRouter.put('/me/active-trait', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -173,13 +179,11 @@ charactersRouter.put('/me/active-trait', authenticateUser, async (req: Request, 
     const character = await Character.findOne({ userId });
     if (!character) return res.status(404).json({ error: '캐릭터가 없습니다' });
 
-    // null이면 해제 — findByIdAndUpdate 사용
     if (!traitId) {
       await Character.findByIdAndUpdate(character._id, { activeTrait: null });
       return res.json({ activeTrait: null });
     }
 
-    // 달성한 업적인지 검증 — skipTraitUpdate로 activeTrait 덮어쓰기 방지
     const { earned, teamAchievements } = await calculateAchievements(
       userId,
       String(character._id),
@@ -193,53 +197,50 @@ charactersRouter.put('/me/active-trait', authenticateUser, async (req: Request, 
       return res.status(400).json({ error: '아직 달성하지 않은 업적입니다' });
     }
 
-    // ★ 핵심 수정: character.save() 대신 findByIdAndUpdate 사용
-    // calculateAchievements 내부에서 이미 findByIdAndUpdate로 문서를 수정했기 때문에
-    // 기존 Mongoose 문서 인스턴스의 save()는 충돌(VersionError)을 일으킬 수 있음
     await Character.findByIdAndUpdate(character._id, { activeTrait: traitId });
-
     return res.json({ activeTrait: traitId });
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
 });
 
-// GET /api/characters/:id/public — 공개 프로필 (인증 불필요)
+// ★ GET /api/characters/:id/public — 공개 프로필 (캐릭터 + 오늘 배치만)
 charactersRouter.get('/:id/public', async (req: Request, res: Response) => {
   try {
-    // ★ 수정: 유효하지 않은 ObjectId인 경우 먼저 체크
-    const mongoose = require('mongoose');
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
     }
 
     const character = await Character.findById(req.params.id)
-      .select('userId name animalType xp activeTrait totalPlacements createdAt')
+      .select('userId name animalType xp activeTrait totalPlacements streak createdAt')
       .lean();
     if (!character) return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
 
-    // ★ 수정: calculateAchievements를 try-catch로 감싸서 에러 시에도 기본 프로필은 보여줌
-    let achievementData = {
-      activeTrait: null as any,
-      earned: [] as string[],
-      teamAchievements: [] as any[],
-      earnedCount: 0,
-    };
+    // ★ 오늘 배치 조회
+    const today = todayKST();
+    const placement = await Placement.findOne({
+      userId: character.userId,
+      date: today,
+    }).lean();
 
-    try {
-      achievementData = await calculateAchievements(
-        String(character.userId),
-        String(character._id),
-        { skipTraitUpdate: true }
-      );
-    } catch (e) {
-      console.error('공개 프로필 업적 계산 실패:', e);
-      // 업적 계산 실패해도 기본 프로필은 표시
+    // 배치한 경기 정보
+    let todayGame: any = null;
+    if (placement) {
+      const game = await Game.findOne({ gameId: placement.gameId })
+        .select('gameId homeTeam awayTeam status homeScore awayScore startTime')
+        .lean();
+      if (game) {
+        todayGame = {
+          gameId: game.gameId,
+          homeTeam: game.homeTeam,
+          awayTeam: game.awayTeam,
+          status: game.status,
+          homeScore: game.homeScore,
+          awayScore: game.awayScore,
+          startTime: game.startTime,
+        };
+      }
     }
-
-    const { activeTrait, earned, teamAchievements, earnedCount } = achievementData;
-    const allDefs = getAllAchievements();
-    const totalCount = allDefs.length + KBO_TEAMS.length;
 
     return res.json({
       character: {
@@ -249,26 +250,22 @@ charactersRouter.get('/:id/public', async (req: Request, res: Response) => {
         xp: character.xp,
         activeTrait: character.activeTrait,
         totalPlacements: character.totalPlacements,
+        streak: character.streak || 0,
         createdAt: character.createdAt,
       },
-      achievements: {
-        activeTrait,
-        earnedCount,
-        totalCount,
-        topAchievements: earned.slice(0, 6).map(id => {
-          const def = allDefs.find(d => d.id === id);
-          return def ? { id: def.id, emoji: def.emoji, name: def.name } : null;
-        }).filter(Boolean),
-        teamAchievements: teamAchievements.map(ta => ({
-          teamId: ta.teamId,
-          teamName: ta.teamName,
-          teamEmoji: ta.teamEmoji,
-          tier: ta.tier?.tier || ta.tier,
-        })),
-      },
+      todayPlacement: placement ? {
+        team: placement.team,
+        battingOrder: placement.battingOrder,
+        predictedWinner: placement.predictedWinner,
+        status: placement.status,
+        isCorrect: placement.isCorrect,
+        xpFromPlayer: placement.xpFromPlayer,
+        xpFromPrediction: placement.xpFromPrediction,
+        game: todayGame,
+      } : null,
     });
   } catch (err) {
-    console.error('공개 프로필 전체 에러:', err);
+    console.error('공개 프로필 에러:', err);
     return res.status(500).json({ error: String(err) });
   }
 });
