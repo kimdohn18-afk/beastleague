@@ -92,6 +92,7 @@ export default function AchievementsPage() {
     try {
       const res = await fetch(`${apiUrl}/api/characters/me/achievements`, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store', 
       });
       if (res.ok) setData(await res.json());
     } catch (e) {
