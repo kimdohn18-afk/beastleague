@@ -91,8 +91,9 @@ interface PublicProfile {
 export default function PublicProfilePage() {
   const params = useParams();
   const router = useRouter();
-  const { session } = useSession();
+  const { data: session } = useSession();
   const characterId = params.id as string;
+  const token = (session as any)?.backendToken || (session as any)?.accessToken;
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
