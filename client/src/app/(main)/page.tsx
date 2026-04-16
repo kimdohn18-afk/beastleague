@@ -16,7 +16,6 @@ import {
 } from '@/lib/constants';
 import WalkingCharacter from '@/components/WalkingCharacter';
 
-
 interface Character {
   _id: string;
   name: string;
@@ -28,10 +27,9 @@ interface Character {
   totalPlacements?: number;
   tutorialCompleted?: boolean;
   totalLikes?: number;
-    totalFeeds?: number; 
+  totalFeeds?: number;
 }
 
-// 상한 없는 캐릭터 크기: 1000 XP ≈ 390px (모바일 화면 꽉 참)
 function getCharacterSize(xp: number): number {
   const minPx = 60;
   if (xp <= 0) return minPx;
@@ -39,14 +37,17 @@ function getCharacterSize(xp: number): number {
   return Math.max(minPx, Math.round(size));
 }
 
-// 모달 비교용 (상한 있는 버전)
 function getEmojiPx(xp: number): number {
   const minPx = 60;
   const maxPx = 220;
   if (xp <= 0) return minPx;
   const progress = Math.log(1 + xp) / Math.log(1 + 10000);
   const clamped = Math.min(progress, 1.3);
-  return Math.round(minPx + (maxPx - minPx) * Math.min(clamped, 1.0) + Math.max(0, clamped - 1.0) * 20);
+  return Math.round(
+    minPx +
+      (maxPx - minPx) * Math.min(clamped, 1.0) +
+      Math.max(0, clamped - 1.0) * 20,
+  );
 }
 
 const HELP_CARDS = [
@@ -117,42 +118,57 @@ function usePinchZoom() {
     return Math.sqrt(dx * dx + dy * dy);
   };
 
-  const onTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      startDistRef.current = getDistance(e.touches[0], e.touches[1]);
-      startScaleRef.current = scale;
-    }
-  }, [scale]);
+  const onTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        startDistRef.current = getDistance(e.touches[0], e.touches[1]);
+        startScaleRef.current = scale;
+      }
+    },
+    [scale],
+  );
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
       e.preventDefault();
       const dist = getDistance(e.touches[0], e.touches[1]);
       const ratio = dist / startDistRef.current;
-      const newScale = Math.max(0.02, Math.min(startScaleRef.current * ratio, 3));
+      const newScale = Math.max(
+        0.02,
+        Math.min(startScaleRef.current * ratio, 3),
+      );
       setScale(newScale);
     }
   }, []);
 
   const onTouchEnd = useCallback(() => {}, []);
 
-  // 더블탭으로 리셋
   const lastTapRef = useRef(0);
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      const now = Date.now();
-      if (now - lastTapRef.current < 300) {
-        setScale(1);
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (e.touches.length === 1) {
+        const now = Date.now();
+        if (now - lastTapRef.current < 300) {
+          setScale(1);
+        }
+        lastTapRef.current = now;
       }
-      lastTapRef.current = now;
-    }
-    if (e.touches.length === 2) {
-      onTouchStart(e);
-    }
-  }, [onTouchStart]);
+      if (e.touches.length === 2) {
+        onTouchStart(e);
+      }
+    },
+    [onTouchStart],
+  );
 
-  return { scale, setScale, containerRef, onTouchStart: handleTouchStart, onTouchMove, onTouchEnd };
+  return {
+    scale,
+    setScale,
+    containerRef,
+    onTouchStart: handleTouchStart,
+    onTouchMove,
+    onTouchEnd,
+  };
 }
 
 export default function MainPage() {
@@ -166,24 +182,29 @@ export default function MainPage() {
   const [deleting, setDeleting] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [helpPage, setHelpPage] = useState(0);
-  const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'granted' | 'denied'>('idle');
+  const [pushStatus, setPushStatus] = useState<
+    'idle' | 'loading' | 'granted' | 'denied'
+  >('idle');
   const [showWelcome, setShowWelcome] = useState(false);
   const [showBlockedGuide, setShowBlockedGuide] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+  // ★ 밥주기 state
   const [selfFed, setSelfFed] = useState(false);
-const [feedAnimation, setFeedAnimation] = useState(false);
-const [feedToast, setFeedToast] = useState('');
+  const [feedAnimation, setFeedAnimation] = useState(false);
+  const [feedToast, setFeedToast] = useState('');
 
-
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-  const token = (session as any)?.backendToken || (session as any)?.accessToken;
+  const apiUrl =
+    process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const token =
+    (session as any)?.backendToken || (session as any)?.accessToken;
 
   const pinch = usePinchZoom();
 
   const shareCardRef = useRef<HTMLDivElement>(null);
-const [shareLoading, setShareLoading] = useState(false);
-const [showShareMenu, setShowShareMenu] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -210,7 +231,10 @@ const [showShareMenu, setShowShareMenu] = useState(false);
             if (fcmToken) {
               await fetch(`${apiUrl}/api/push/subscribe`, {
                 method: 'POST',
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({ fcmToken }),
               });
               setPushStatus('granted');
@@ -225,8 +249,13 @@ const [showShareMenu, setShowShareMenu] = useState(false);
   }, [token]);
 
   useEffect(() => {
-    if (status === 'unauthenticated') { router.push('/login'); return; }
-    if (status === 'authenticated' && token) { fetchCharacter(); }
+    if (status === 'unauthenticated') {
+      router.push('/login');
+      return;
+    }
+    if (status === 'authenticated' && token) {
+      fetchCharacter();
+    }
   }, [status, token]);
 
   useEffect(() => {
@@ -234,16 +263,27 @@ const [showShareMenu, setShowShareMenu] = useState(false);
     if (typeof window === 'undefined' || !('Notification' in window)) return;
     if (/KAKAOTALK/i.test(navigator.userAgent)) return;
     if (character.xp === 0) return;
-    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    const today = new Date(Date.now() + 9 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 10);
     if (localStorage.getItem('push-prompt-dismissed') === today) return;
-    if (Notification.permission === 'denied') { setTimeout(() => setShowPushPrompt(true), 1000); return; }
-    if (Notification.permission === 'default') { setTimeout(() => setShowPushPrompt(true), 1000); return; }
+    if (Notification.permission === 'denied') {
+      setTimeout(() => setShowPushPrompt(true), 1000);
+      return;
+    }
+    if (Notification.permission === 'default') {
+      setTimeout(() => setShowPushPrompt(true), 1000);
+      return;
+    }
     const checkSub = async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/push/status`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`${apiUrl}/api/push/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (res.ok) {
           const data = await res.json();
-          if (!data.subscribed) setTimeout(() => setShowPushPrompt(true), 1000);
+          if (!data.subscribed)
+            setTimeout(() => setShowPushPrompt(true), 1000);
         }
       } catch {}
     };
@@ -252,15 +292,23 @@ const [showShareMenu, setShowShareMenu] = useState(false);
 
   const fetchCharacter = async () => {
     try {
-      const res = await fetch(`${apiUrl}/api/characters/me`, { headers: { Authorization: `Bearer ${token}` },
-                                                               cache: 'no-store',});
+      const res = await fetch(`${apiUrl}/api/characters/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
       if (!res.ok) {
-        if (res.status === 404) { router.push('/character'); return; }
+        if (res.status === 404) {
+          router.push('/character');
+          return;
+        }
         throw new Error('Failed to fetch character');
       }
       const data = await res.json();
       setCharacter(data);
-      if (!data.tutorialCompleted) { router.push('/tutorial'); return; }
+      if (!data.tutorialCompleted) {
+        router.push('/tutorial');
+        return;
+      }
       const welcomeKey = `welcome-shown-${data._id}`;
       if (!localStorage.getItem(welcomeKey)) {
         setShowWelcome(true);
@@ -273,50 +321,134 @@ const [showShareMenu, setShowShareMenu] = useState(false);
     }
   };
 
-// 다른 페이지(업적 등)에서 돌아왔을 때 캐릭터 데이터 갱신
-useEffect(() => {
-  const handleFocus = () => {
-    if (token && !loading) {
-      fetchCharacter();
+  // 다른 페이지에서 돌아왔을 때 캐릭터 데이터 갱신
+  useEffect(() => {
+    const handleFocus = () => {
+      if (token && !loading) {
+        fetchCharacter();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') handleFocus();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [token, loading]);
+
+  // ★ 자기 밥주기 상태 확인 — token 변수 사용
+  useEffect(() => {
+    if (!character?._id || !token) return;
+    const checkFeedStatus = async () => {
+      try {
+        const res = await fetch(
+          `${apiUrl}/api/characters/${character._id}/feed-status`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setSelfFed(data.fed);
+        }
+      } catch (e) {
+        console.error('Feed status check failed:', e);
+      }
+    };
+    checkFeedStatus();
+  }, [character?._id, token]);
+
+  // ★ 자기 밥주기 함수 — token 변수 사용
+  const handleSelfFeed = async () => {
+    if (!character || !token || selfFed) return;
+    try {
+      const res = await fetch(
+        `${apiUrl}/api/characters/${character._id}/feed`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      const data = await res.json();
+      if (res.ok) {
+        setSelfFed(true);
+        setFeedAnimation(true);
+        setTimeout(() => setFeedAnimation(false), 1800);
+        setCharacter((prev) =>
+          prev
+            ? { ...prev, xp: data.theirXp, totalFeeds: data.totalFeeds }
+            : prev,
+        );
+        setFeedToast('🍖 냠냠! +3 XP');
+        setTimeout(() => setFeedToast(''), 2500);
+      } else {
+        if (data.code === 'alreadyFed') setSelfFed(true);
+        setFeedToast(data.error || '밥주기 실패');
+        setTimeout(() => setFeedToast(''), 2500);
+      }
+    } catch (e) {
+      setFeedToast('네트워크 오류');
+      setTimeout(() => setFeedToast(''), 2500);
     }
   };
-  window.addEventListener('focus', handleFocus);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') handleFocus();
-  });
-  return () => {
-    window.removeEventListener('focus', handleFocus);
-    document.removeEventListener('visibilitychange', handleFocus);
-  };
-}, [token, loading]);
 
-  
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      const res = await fetch(`${apiUrl}/api/characters/me`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) { alert('캐릭터가 삭제되었습니다.'); router.push('/character'); }
-      else { const data = await res.json(); alert(data.error || '삭제 실패'); }
-    } catch (e) { console.error('Delete failed:', e); alert('삭제 중 오류가 발생했습니다.'); }
-    finally { setDeleting(false); setShowDelete(false); }
+      const res = await fetch(`${apiUrl}/api/characters/me`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        alert('캐릭터가 삭제되었습니다.');
+        router.push('/character');
+      } else {
+        const data = await res.json();
+        alert(data.error || '삭제 실패');
+      }
+    } catch (e) {
+      console.error('Delete failed:', e);
+      alert('삭제 중 오류가 발생했습니다.');
+    } finally {
+      setDeleting(false);
+      setShowDelete(false);
+    }
   };
 
   const handlePushSetup = async () => {
     setMenuOpen(false);
-    if (pushStatus === 'denied') { setShowBlockedGuide(true); return; }
+    if (pushStatus === 'denied') {
+      setShowBlockedGuide(true);
+      return;
+    }
     if (pushStatus === 'granted') {
       try {
-        const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-        if (reg) { const sub = await reg.pushManager.getSubscription(); if (sub) await sub.unsubscribe(); }
+        const reg = await navigator.serviceWorker.getRegistration(
+          '/firebase-messaging-sw.js',
+        );
+        if (reg) {
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) await sub.unsubscribe();
+        }
         await fetch(`${apiUrl}/api/push/unsubscribe`, {
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({ fcmToken: 'all' }),
         });
         localStorage.setItem('push-manually-disabled', 'true');
         setPushStatus('idle');
         alert('알림이 해제되었습니다.');
-      } catch (e) { console.error('[Push] Unsubscribe failed:', e); alert('알림 해제 중 오류가 발생했습니다.'); }
+      } catch (e) {
+        console.error('[Push] Unsubscribe failed:', e);
+        alert('알림 해제 중 오류가 발생했습니다.');
+      }
       return;
     }
     setPushStatus('loading');
@@ -325,43 +457,68 @@ useEffect(() => {
       if (fcmToken) {
         await fetch(`${apiUrl}/api/push/subscribe`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({ fcmToken }),
         });
         localStorage.removeItem('push-manually-disabled');
         setPushStatus('granted');
-        alert('알림이 설정되었습니다! 배치 미완료 시 알림을 받을 수 있어요.');
+        alert(
+          '알림이 설정되었습니다! 배치 미완료 시 알림을 받을 수 있어요.',
+        );
       } else {
         setPushStatus('denied');
-        alert('알림 권한이 차단되었습니다. 브라우저 설정에서 알림을 허용해주세요.');
+        alert(
+          '알림 권한이 차단되었습니다. 브라우저 설정에서 알림을 허용해주세요.',
+        );
       }
-    } catch (e) { console.error('[Push] Setup failed:', e); setPushStatus('idle'); alert('알림 설정 중 오류가 발생했습니다.'); }
+    } catch (e) {
+      console.error('[Push] Setup failed:', e);
+      setPushStatus('idle');
+      alert('알림 설정 중 오류가 발생했습니다.');
+    }
   };
 
   const handlePushPromptAccept = async () => {
     setShowPushPrompt(false);
-    if (Notification.permission === 'denied') { setShowBlockedGuide(true); return; }
+    if (Notification.permission === 'denied') {
+      setShowBlockedGuide(true);
+      return;
+    }
     setPushStatus('loading');
     try {
       const fcmToken = await requestFcmToken();
       if (fcmToken) {
         await fetch(`${apiUrl}/api/push/subscribe`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({ fcmToken }),
         });
         setPushStatus('granted');
-      } else { setPushStatus('denied'); }
-    } catch { setPushStatus('idle'); }
+      } else {
+        setPushStatus('denied');
+      }
+    } catch {
+      setPushStatus('idle');
+    }
   };
 
   const handlePushPromptDismiss = () => {
-    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    const today = new Date(Date.now() + 9 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 10);
     localStorage.setItem('push-prompt-dismissed', today);
     setShowPushPrompt(false);
   };
 
-  const handleShare = async (target: 'kakao' | 'instagram' | 'download') => {
+  const handleShare = async (
+    target: 'kakao' | 'instagram' | 'download',
+  ) => {
     if (!character) return;
 
     let shareSuccess = false;
@@ -370,7 +527,8 @@ useEffect(() => {
       const { shareCharacter } = await import('@/lib/kakaoShare');
       shareCharacter({
         characterName: character.name,
-        animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
+        animalName:
+          ANIMAL_NAMES[character.animalType] || character.animalType,
         animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
         animalType: character.animalType,
         xp: character.xp,
@@ -387,7 +545,11 @@ useEffect(() => {
 
       try {
         const blob = await captureCardAsBlob(shareCardRef.current);
-        if (!blob) { alert('이미지 생성에 실패했습니다.'); setShareLoading(false); return; }
+        if (!blob) {
+          alert('이미지 생성에 실패했습니다.');
+          setShareLoading(false);
+          return;
+        }
 
         if (target === 'instagram') {
           shareSuccess = await shareToInstagramStory(blob);
@@ -406,15 +568,25 @@ useEffect(() => {
 
     if (shareSuccess && token) {
       try {
-        const res = await fetch(`${apiUrl}/api/characters/me/share-reward`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        });
+        const res = await fetch(
+          `${apiUrl}/api/characters/me/share-reward`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        );
         if (res.ok) {
           const data = await res.json();
           if (data.rewarded) {
-            alert(`🎉 공유 보상 +${data.added} XP! (${data.xpBefore} → ${data.xpAfter})`);
-            setCharacter((prev) => prev ? { ...prev, xp: data.xpAfter } : prev);
+            alert(
+              `🎉 공유 보상 +${data.added} XP! (${data.xpBefore} → ${data.xpAfter})`,
+            );
+            setCharacter((prev) =>
+              prev ? { ...prev, xp: data.xpAfter } : prev,
+            );
           }
         }
       } catch (e) {
@@ -423,12 +595,14 @@ useEffect(() => {
     }
   };
 
-  const handleHelpTouchStart = (e: React.TouchEvent) => setTouchStartX(e.touches[0].clientX);
+  const handleHelpTouchStart = (e: React.TouchEvent) =>
+    setTouchStartX(e.touches[0].clientX);
   const handleHelpTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX === null) return;
     const diff = e.changedTouches[0].clientX - touchStartX;
     if (diff > 50 && helpPage > 0) setHelpPage(helpPage - 1);
-    if (diff < -50 && helpPage < HELP_CARDS.length - 1) setHelpPage(helpPage + 1);
+    if (diff < -50 && helpPage < HELP_CARDS.length - 1)
+      setHelpPage(helpPage + 1);
     setTouchStartX(null);
   };
 
@@ -450,7 +624,8 @@ useEffect(() => {
   }
 
   const emoji = ANIMAL_EMOJI[character.animalType] || '🐾';
-  const animalName = ANIMAL_NAMES[character.animalType] || character.animalType;
+  const animalName =
+    ANIMAL_NAMES[character.animalType] || character.animalType;
   const characterSize = getCharacterSize(character.xp);
   const initialPx = getEmojiPx(0);
   const emojiPx = getEmojiPx(character.xp);
@@ -458,29 +633,67 @@ useEffect(() => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24 relative">
-      {/* 카카오 브라우저 안내 */}
-      {typeof navigator !== 'undefined' && /KAKAOTALK/i.test(navigator.userAgent) && (
-        <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
-          <div className="text-5xl mb-4">🌐</div>
-          <h2 className="text-lg font-bold text-gray-800 mb-2">기본 브라우저에서 열어주세요</h2>
-          <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-            카카오톡 브라우저에서는 알림 등<br />일부 기능이 제한됩니다.
-          </p>
-          {/iPhone|iPad/i.test(navigator.userAgent) ? (
-            <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
-              <p className="text-xs text-gray-500 leading-relaxed">
-                우측 하단 <strong>공유(↗) 아이콘</strong> 탭<br />→ <strong>Safari로 열기</strong> 선택
-              </p>
+      {/* ★ 밥 먹는 애니메이션 */}
+      {feedAnimation && (
+        <div className="fixed inset-0 pointer-events-none z-[60]">
+          {['🍖', '🥩', '🍗'].map((food, i) => (
+            <div
+              key={i}
+              className="absolute text-4xl"
+              style={{
+                left: `${25 + i * 25}%`,
+                animation: `feedFly${i} 1.5s ease-in forwards`,
+              }}
+            >
+              {food}
             </div>
-          ) : (
-            <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
-              <p className="text-xs text-gray-500 leading-relaxed">
-                우측 하단 <strong>⋮</strong> 메뉴 탭<br />→ <strong>다른 브라우저로 열기</strong> 선택
-              </p>
-            </div>
-          )}
+          ))}
+          <div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 text-3xl font-black text-orange-500"
+            style={{ animation: 'nomnom 1.5s ease-out forwards' }}
+          >
+            냠냠!
+          </div>
         </div>
       )}
+
+      {/* ★ 밥주기 토스트 */}
+      {feedToast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-black/80 text-white px-5 py-2.5 rounded-full text-sm font-medium z-[60] animate-bounce">
+          {feedToast}
+        </div>
+      )}
+
+      {/* 카카오 브라우저 안내 */}
+      {typeof navigator !== 'undefined' &&
+        /KAKAOTALK/i.test(navigator.userAgent) && (
+          <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
+            <div className="text-5xl mb-4">🌐</div>
+            <h2 className="text-lg font-bold text-gray-800 mb-2">
+              기본 브라우저에서 열어주세요
+            </h2>
+            <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+              카카오톡 브라우저에서는 알림 등
+              <br />
+              일부 기능이 제한됩니다.
+            </p>
+            {/iPhone|iPad/i.test(navigator.userAgent) ? (
+              <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  우측 하단 <strong>공유(↗) 아이콘</strong> 탭
+                  <br />→ <strong>Safari로 열기</strong> 선택
+                </p>
+              </div>
+            ) : (
+              <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs">
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  우측 하단 <strong>⋮</strong> 메뉴 탭
+                  <br />→ <strong>다른 브라우저로 열기</strong> 선택
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
       {/* 로그아웃 */}
       <div className="px-4 pt-5 pb-2 flex items-center justify-between relative z-10">
@@ -488,7 +701,7 @@ useEffect(() => {
         <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
       </div>
 
-            {/* ──── 돌아다니는 캐릭터 ──── */}
+      {/* ──── 돌아다니는 캐릭터 ──── */}
       <WalkingCharacter
         animalType={character.animalType}
         characterSize={characterSize}
@@ -496,97 +709,203 @@ useEffect(() => {
         emoji={emoji}
       />
 
-            {/* ──── 캐릭터 정보 ──── */}
+      {/* ──── 캐릭터 정보 ──── */}
       <div className="flex flex-col items-center justify-center pt-8 pb-4 relative z-10">
-        <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
+        <h1 className="text-2xl font-bold text-gray-800">
+          {character.name}
+        </h1>
         <p className="text-sm text-gray-400 mt-1">
           {animalName} · {character.xp.toLocaleString()} XP
         </p>
         {character.activeTrait && (
           <div className="mt-3 bg-white/80 backdrop-blur rounded-xl px-4 py-2 border border-orange-100 shadow-sm">
-            <p className="text-sm text-gray-700 font-medium">{getTraitDisplay(character.activeTrait)}</p>
+            <p className="text-sm text-gray-700 font-medium">
+              {getTraitDisplay(character.activeTrait)}
+            </p>
           </div>
         )}
 
-        {/* 좋아요 & 밥 카운트 */}
-        {((character.totalLikes ?? 0) > 0 || (character.totalFeeds ?? 0) > 0) && (
+        {/* ★ 좋아요 & 밥 카운트 */}
+        {((character.totalLikes ?? 0) > 0 ||
+          (character.totalFeeds ?? 0) > 0) && (
           <div className="mt-3 flex items-center gap-3">
             {(character.totalLikes ?? 0) > 0 && (
               <div className="flex items-center gap-1.5 bg-pink-50 rounded-full px-3 py-1">
                 <span className="text-sm">❤️</span>
-                <span className="text-xs font-bold text-pink-400">{(character.totalLikes ?? 0).toLocaleString()}</span>
+                <span className="text-xs font-bold text-pink-400">
+                  {(character.totalLikes ?? 0).toLocaleString()}
+                </span>
               </div>
             )}
             {(character.totalFeeds ?? 0) > 0 && (
               <div className="flex items-center gap-1.5 bg-amber-50 rounded-full px-3 py-1">
                 <span className="text-sm">🍖</span>
-                <span className="text-xs font-bold text-amber-400">{(character.totalFeeds ?? 0).toLocaleString()}</span>
+                <span className="text-xs font-bold text-amber-400">
+                  {(character.totalFeeds ?? 0).toLocaleString()}
+                </span>
               </div>
             )}
           </div>
         )}
-      </div>
 
+        {/* ★ 밥주기 버튼 */}
+        <button
+          onClick={handleSelfFeed}
+          disabled={selfFed}
+          className={`mt-4 px-6 py-2.5 rounded-full text-sm font-bold transition-all ${
+            selfFed
+              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              : 'bg-orange-400 text-white hover:bg-orange-500 active:scale-95 shadow-md'
+          }`}
+        >
+          {selfFed ? '🍖 오늘 밥 완료!' : '🍖 밥주기 (+3 XP)'}
+        </button>
+      </div>
 
       {/* ──── FAB 메뉴 ──── */}
       <div className="fixed bottom-24 right-4 z-50">
         {menuOpen && (
           <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
-            <button onClick={handlePushSetup} disabled={pushStatus === 'loading'} className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 border-b border-gray-50 ${pushStatus === 'denied' ? 'text-red-400' : 'text-gray-700'}`}>
-              {pushStatus === 'granted' ? '✅ 알림 설정됨' : pushStatus === 'loading' ? '⏳ 설정 중...' : pushStatus === 'denied' ? '🔕 알림 차단됨' : '🔔 알림 설정'}
+            <button
+              onClick={handlePushSetup}
+              disabled={pushStatus === 'loading'}
+              className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 border-b border-gray-50 ${pushStatus === 'denied' ? 'text-red-400' : 'text-gray-700'}`}
+            >
+              {pushStatus === 'granted'
+                ? '✅ 알림 설정됨'
+                : pushStatus === 'loading'
+                  ? '⏳ 설정 중...'
+                  : pushStatus === 'denied'
+                    ? '🔕 알림 차단됨'
+                    : '🔔 알림 설정'}
             </button>
-            <button onClick={() => { setShowHelp(true); setHelpPage(0); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
+            <button
+              onClick={() => {
+                setShowHelp(true);
+                setHelpPage(0);
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
               ❓ 도움말
             </button>
-            <button onClick={() => { router.push('/achievements'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
+            <button
+              onClick={() => {
+                router.push('/achievements');
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
               🏆 내 업적
             </button>
-                      <button onClick={() => { setShowShareMenu(true); setMenuOpen(false); }}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
+            <button
+              onClick={() => {
+                setShowShareMenu(true);
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
               📢 공유하기
             </button>
-            <button onClick={() => { setShowDelete(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50">
+            <button
+              onClick={() => {
+                setShowDelete(true);
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50"
+            >
               🗑️ 캐릭터 삭제
             </button>
           </div>
         )}
         <button
-          onClick={() => { setMenuOpen(!menuOpen); setShowDelete(false); setShowHelp(false); }}
+          onClick={() => {
+            setMenuOpen(!menuOpen);
+            setShowDelete(false);
+            setShowHelp(false);
+          }}
           className={`w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg flex items-center justify-center text-2xl transition-transform duration-300 hover:bg-orange-600 active:scale-95 ${menuOpen ? 'rotate-45' : ''}`}
         >
           +
         </button>
       </div>
 
-      {menuOpen && <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />}
+      {menuOpen && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
 
       {/* ──── 모달들 ──── */}
+
+      {/* 도움말 */}
       {showHelp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowHelp(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()} onTouchStart={handleHelpTouchStart} onTouchEnd={handleHelpTouchEnd}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+          onClick={() => setShowHelp(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={handleHelpTouchStart}
+            onTouchEnd={handleHelpTouchEnd}
+          >
             <div className="px-6 pt-8 pb-4 text-center min-h-[320px] flex flex-col items-center justify-center">
               <div className="text-5xl mb-4">{card.icon}</div>
-              <h3 className="text-lg font-bold text-gray-800 mb-4">{card.title}</h3>
+              <h3 className="text-lg font-bold text-gray-800 mb-4">
+                {card.title}
+              </h3>
               <div className="space-y-0.5">
                 {card.lines.map((line, i) =>
-                  line === '' ? <div key={i} className="h-3" /> : <p key={i} className="text-sm text-gray-500 leading-relaxed">{line}</p>
+                  line === '' ? (
+                    <div key={i} className="h-3" />
+                  ) : (
+                    <p
+                      key={i}
+                      className="text-sm text-gray-500 leading-relaxed"
+                    >
+                      {line}
+                    </p>
+                  ),
                 )}
               </div>
             </div>
             <div className="px-6 pb-6">
               <div className="flex justify-center gap-1.5 mb-4">
                 {HELP_CARDS.map((_, i) => (
-                  <button key={i} onClick={() => setHelpPage(i)} className={`w-2 h-2 rounded-full transition-all ${i === helpPage ? 'bg-orange-400 w-4' : 'bg-gray-200'}`} />
+                  <button
+                    key={i}
+                    onClick={() => setHelpPage(i)}
+                    className={`w-2 h-2 rounded-full transition-all ${i === helpPage ? 'bg-orange-400 w-4' : 'bg-gray-200'}`}
+                  />
                 ))}
               </div>
               <div className="flex gap-3">
                 {helpPage > 0 ? (
-                  <button onClick={() => setHelpPage(helpPage - 1)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">이전</button>
-                ) : <div className="flex-1" />}
-                {helpPage < HELP_CARDS.length - 1 ? (
-                  <button onClick={() => setHelpPage(helpPage + 1)} className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">다음</button>
+                  <button
+                    onClick={() => setHelpPage(helpPage - 1)}
+                    className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
+                  >
+                    이전
+                  </button>
                 ) : (
-                  <button onClick={() => setShowHelp(false)} className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">닫기</button>
+                  <div className="flex-1" />
+                )}
+                {helpPage < HELP_CARDS.length - 1 ? (
+                  <button
+                    onClick={() => setHelpPage(helpPage + 1)}
+                    className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500"
+                  >
+                    다음
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowHelp(false)}
+                    className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500"
+                  >
+                    닫기
+                  </button>
                 )}
               </div>
             </div>
@@ -594,51 +913,109 @@ useEffect(() => {
         </div>
       )}
 
+      {/* 비교 */}
       {showCompare && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowCompare(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-800 mb-6 text-center">초기와 비교</h2>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+          onClick={() => setShowCompare(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-gray-800 mb-6 text-center">
+              초기와 비교
+            </h2>
             <div className="flex items-end justify-center gap-10 mb-8">
               <div className="text-center">
-                <div className="leading-none mx-auto grayscale opacity-40" style={{ fontSize: `${initialPx}px` }}>{emoji}</div>
+                <div
+                  className="leading-none mx-auto grayscale opacity-40"
+                  style={{ fontSize: `${initialPx}px` }}
+                >
+                  {emoji}
+                </div>
                 <p className="text-xs text-gray-400 mt-3">처음</p>
                 <p className="text-sm font-bold text-gray-400">0 XP</p>
               </div>
               <div className="text-2xl text-orange-400 mb-6">→</div>
               <div className="text-center">
-                <div className="leading-none mx-auto" style={{ fontSize: `${Math.min(emojiPx, 100)}px` }}>{emoji}</div>
-                <p className="text-xs text-orange-500 font-medium mt-3">현재</p>
-                <p className="text-sm font-bold text-gray-800">{character.xp.toLocaleString()} XP</p>
+                <div
+                  className="leading-none mx-auto"
+                  style={{
+                    fontSize: `${Math.min(emojiPx, 100)}px`,
+                  }}
+                >
+                  {emoji}
+                </div>
+                <p className="text-xs text-orange-500 font-medium mt-3">
+                  현재
+                </p>
+                <p className="text-sm font-bold text-gray-800">
+                  {character.xp.toLocaleString()} XP
+                </p>
               </div>
             </div>
             <div className="bg-gray-50 rounded-xl p-4">
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-500">획득 XP</span>
-                <span className="font-bold text-orange-500">+{character.xp.toLocaleString()} XP</span>
+                <span className="font-bold text-orange-500">
+                  +{character.xp.toLocaleString()} XP
+                </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">캐릭터 크기</span>
                 <span className="font-bold text-gray-800">
-                  {characterSize <= 60 ? '기본' : characterSize <= 200 ? '성장 중' : characterSize <= 500 ? '많이 성장' : '거대'}
+                  {characterSize <= 60
+                    ? '기본'
+                    : characterSize <= 200
+                      ? '성장 중'
+                      : characterSize <= 500
+                        ? '많이 성장'
+                        : '거대'}
                 </span>
               </div>
             </div>
-            <button onClick={() => setShowCompare(false)} className="w-full mt-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">닫기</button>
+            <button
+              onClick={() => setShowCompare(false)}
+              className="w-full mt-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
+            >
+              닫기
+            </button>
           </div>
         </div>
       )}
 
+      {/* 삭제 확인 */}
       {showDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowDelete(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+          onClick={() => setShowDelete(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="text-4xl mb-3">{emoji}</div>
-            <h2 className="text-lg font-bold text-gray-800 mb-2">캐릭터를 삭제할까요?</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-2">
+              캐릭터를 삭제할까요?
+            </h2>
             <p className="text-sm text-gray-400 mb-6">
-              <strong>{character.name}</strong>과(와) 모든 배치 기록이 삭제됩니다.<br />이 작업은 되돌릴 수 없습니다.
+              <strong>{character.name}</strong>과(와) 모든 배치 기록이
+              삭제됩니다.
+              <br />이 작업은 되돌릴 수 없습니다.
             </p>
             <div className="flex gap-3">
-              <button onClick={() => setShowDelete(false)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">취소</button>
-              <button onClick={handleDelete} disabled={deleting} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 disabled:opacity-50">
+              <button
+                onClick={() => setShowDelete(false)}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 disabled:opacity-50"
+              >
                 {deleting ? '삭제 중...' : '삭제'}
               </button>
             </div>
@@ -646,138 +1023,300 @@ useEffect(() => {
         </div>
       )}
 
+      {/* 푸시 안내 */}
       {showPushPrompt && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center pb-28 bg-black/30" onClick={handlePushPromptDismiss}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center pb-28 bg-black/30"
+          onClick={handlePushPromptDismiss}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-3 mb-3">
               <div className="text-3xl">🔔</div>
               <div>
-                <h3 className="text-base font-bold text-gray-800">알림을 켜볼까요?</h3>
-                <p className="text-xs text-gray-400 mt-0.5">하루에 한 번만 물어볼게요</p>
+                <h3 className="text-base font-bold text-gray-800">
+                  알림을 켜볼까요?
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  하루에 한 번만 물어볼게요
+                </p>
               </div>
             </div>
             <p className="text-sm text-gray-500 mb-5 leading-relaxed">
-              경기 전 배치 리마인더와<br />정산 결과를 알림으로 받을 수 있어요.
+              경기 전 배치 리마인더와
+              <br />
+              정산 결과를 알림으로 받을 수 있어요.
             </p>
             <div className="flex gap-3">
-              <button onClick={handlePushPromptDismiss} className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-sm font-medium">다음에</button>
-              <button onClick={handlePushPromptAccept} className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold">알림 받기</button>
+              <button
+                onClick={handlePushPromptDismiss}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-sm font-medium"
+              >
+                다음에
+              </button>
+              <button
+                onClick={handlePushPromptAccept}
+                className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold"
+              >
+                알림 받기
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* 알림 차단 가이드 */}
       {showBlockedGuide && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowBlockedGuide(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+          onClick={() => setShowBlockedGuide(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="text-4xl text-center mb-3">🔕</div>
-            <h2 className="text-lg font-bold text-gray-800 text-center mb-2">알림이 차단되어 있어요</h2>
-            <p className="text-sm text-gray-500 text-center mb-5">브라우저 설정에서 직접 변경해야 합니다.</p>
+            <h2 className="text-lg font-bold text-gray-800 text-center mb-2">
+              알림이 차단되어 있어요
+            </h2>
+            <p className="text-sm text-gray-500 text-center mb-5">
+              브라우저 설정에서 직접 변경해야 합니다.
+            </p>
             <div className="bg-gray-50 rounded-xl p-4 mb-3">
-              <p className="text-sm font-bold text-gray-700 mb-2">📱 모바일 (Chrome)</p>
+              <p className="text-sm font-bold text-gray-700 mb-2">
+                📱 모바일 (Chrome)
+              </p>
               <p className="text-xs text-gray-500 leading-relaxed">
-                주소창 왼쪽 ⚙️ 아이콘 탭<br />→ 권한 또는 사이트 설정<br />→ 알림 → 허용으로 변경<br />→ 페이지 새로고침
+                주소창 왼쪽 ⚙️ 아이콘 탭
+                <br />→ 권한 또는 사이트 설정
+                <br />→ 알림 → 허용으로 변경
+                <br />→ 페이지 새로고침
               </p>
             </div>
             <div className="bg-gray-50 rounded-xl p-4 mb-5">
-              <p className="text-sm font-bold text-gray-700 mb-2">💻 PC (Chrome)</p>
+              <p className="text-sm font-bold text-gray-700 mb-2">
+                💻 PC (Chrome)
+              </p>
               <p className="text-xs text-gray-500 leading-relaxed">
-                주소창 왼쪽 🔒 아이콘 클릭<br />→ 사이트 설정<br />→ 알림 → 허용으로 변경<br />→ 페이지 새로고침
+                주소창 왼쪽 🔒 아이콘 클릭
+                <br />→ 사이트 설정
+                <br />→ 알림 → 허용으로 변경
+                <br />→ 페이지 새로고침
               </p>
             </div>
-            <button onClick={() => setShowBlockedGuide(false)} className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200">닫기</button>
+            <button
+              onClick={() => setShowBlockedGuide(false)}
+              className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
+            >
+              닫기
+            </button>
           </div>
         </div>
       )}
 
+      {/* 웰컴 */}
       {showWelcome && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowWelcome(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+          onClick={() => setShowWelcome(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-6 pt-8 pb-4 text-center">
               <div className="text-5xl mb-4">🎉</div>
-              <h3 className="text-lg font-bold text-gray-800 mb-2">캐릭터가 탄생했어요!</h3>
+              <h3 className="text-lg font-bold text-gray-800 mb-2">
+                캐릭터가 탄생했어요!
+              </h3>
               <p className="text-sm text-gray-500 leading-relaxed mb-6">
-                매일 KBO 경기에 배치하면<br />실제 선수 성적에 따라 XP를 얻고<br />캐릭터가 성장합니다!
+                매일 KBO 경기에 배치하면
+                <br />
+                실제 선수 성적에 따라 XP를 얻고
+                <br />
+                캐릭터가 성장합니다!
               </p>
               <div className="bg-orange-50 rounded-xl p-4 mb-4 text-left">
-                <p className="text-sm font-bold text-orange-600 mb-2">🔔 알림 설정 추천!</p>
+                <p className="text-sm font-bold text-orange-600 mb-2">
+                  🔔 알림 설정 추천!
+                </p>
                 <p className="text-xs text-orange-500 leading-relaxed">
-                  알림을 켜면 배치를 잊지 않도록<br />매일 경기 전에 알려드려요.<br />오른쪽 하단 + 버튼 → 알림 설정
+                  알림을 켜면 배치를 잊지 않도록
+                  <br />
+                  매일 경기 전에 알려드려요.
+                  <br />
+                  오른쪽 하단 + 버튼 → 알림 설정
                 </p>
               </div>
               <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
-                <p className="text-sm font-bold text-gray-700 mb-2">❓ 도움말</p>
+                <p className="text-sm font-bold text-gray-700 mb-2">
+                  ❓ 도움말
+                </p>
                 <p className="text-xs text-gray-500 leading-relaxed">
-                  배치 방법, XP 규칙 등 자세한 내용은<br />+ 버튼 → 도움말에서 확인하세요.
+                  배치 방법, XP 규칙 등 자세한 내용은
+                  <br />+ 버튼 → 도움말에서 확인하세요.
                 </p>
               </div>
             </div>
             <div className="px-6 pb-6">
-              <button onClick={() => setShowWelcome(false)} className="w-full py-3 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500">시작하기</button>
+              <button
+                onClick={() => setShowWelcome(false)}
+                className="w-full py-3 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500"
+              >
+                시작하기
+              </button>
             </div>
           </div>
         </div>
       )}
-     {/* 공유용 카드 — TRAIT_DISPLAY 뿐 아니라 ACHIEVEMENT_DISPLAY도 확인 */}
-<div style={{ position: 'fixed', top: '-9999px', left: '-9999px' }}>
-  <ShareCard
-    ref={shareCardRef}
-    characterName={character.name}
-    animalType={character.animalType}
-    animalName={animalName}
-    xp={character.xp}
-    characterSize={characterSize}
-    traitName={
-      character.activeTrait
-        ? getTraitDisplay(character.activeTrait) || undefined
-        : undefined
-    }
-  />
-</div>
+
+      {/* 공유용 카드 */}
+      <div
+        style={{ position: 'fixed', top: '-9999px', left: '-9999px' }}
+      >
+        <ShareCard
+          ref={shareCardRef}
+          characterName={character.name}
+          animalType={character.animalType}
+          animalName={animalName}
+          xp={character.xp}
+          characterSize={characterSize}
+          traitName={
+            character.activeTrait
+              ? getTraitDisplay(character.activeTrait) || undefined
+              : undefined
+          }
+        />
+      </div>
 
       {/* 공유 메뉴 모달 */}
       {showShareMenu && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center pb-28 bg-black/30"
-          onClick={() => setShowShareMenu(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-5"
-            onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-base font-bold text-gray-800 mb-4 text-center">공유하기</h3>
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center pb-28 bg-black/30"
+          onClick={() => setShowShareMenu(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-gray-800 mb-4 text-center">
+              공유하기
+            </h3>
             <div className="flex gap-3">
               <button
                 onClick={() => handleShare('kakao')}
                 disabled={shareLoading}
-                className="flex-1 flex flex-col items-center gap-2 py-4 bg-yellow-50 rounded-xl
-                           hover:bg-yellow-100 active:scale-95 transition-all disabled:opacity-50"
+                className="flex-1 flex flex-col items-center gap-2 py-4 bg-yellow-50 rounded-xl hover:bg-yellow-100 active:scale-95 transition-all disabled:opacity-50"
               >
                 <span className="text-2xl">💬</span>
-                <span className="text-xs font-medium text-gray-700">카카오톡</span>
+                <span className="text-xs font-medium text-gray-700">
+                  카카오톡
+                </span>
               </button>
               <button
                 onClick={() => handleShare('instagram')}
                 disabled={shareLoading}
-                className="flex-1 flex flex-col items-center gap-2 py-4 bg-purple-50 rounded-xl
-                           hover:bg-purple-100 active:scale-95 transition-all disabled:opacity-50"
+                className="flex-1 flex flex-col items-center gap-2 py-4 bg-purple-50 rounded-xl hover:bg-purple-100 active:scale-95 transition-all disabled:opacity-50"
               >
                 <span className="text-2xl">📸</span>
-                <span className="text-xs font-medium text-gray-700">인스타 스토리</span>
+                <span className="text-xs font-medium text-gray-700">
+                  인스타 스토리
+                </span>
               </button>
               <button
                 onClick={() => handleShare('download')}
                 disabled={shareLoading}
-                className="flex-1 flex flex-col items-center gap-2 py-4 bg-gray-50 rounded-xl
-                           hover:bg-gray-100 active:scale-95 transition-all disabled:opacity-50"
+                className="flex-1 flex flex-col items-center gap-2 py-4 bg-gray-50 rounded-xl hover:bg-gray-100 active:scale-95 transition-all disabled:opacity-50"
               >
                 <span className="text-2xl">📋</span>
-                <span className="text-xs font-medium text-gray-700">이미지 저장</span>
+                <span className="text-xs font-medium text-gray-700">
+                  이미지 저장
+                </span>
               </button>
             </div>
             {shareLoading && (
-              <p className="text-xs text-gray-400 text-center mt-3 animate-pulse">카드 생성 중...</p>
+              <p className="text-xs text-gray-400 text-center mt-3 animate-pulse">
+                카드 생성 중...
+              </p>
             )}
           </div>
         </div>
       )}
 
+      {/* ★ CSS 애니메이션 */}
+      <style jsx global>{`
+        @keyframes feedFly0 {
+          0% {
+            top: 80%;
+            opacity: 1;
+            transform: scale(1);
+          }
+          80% {
+            top: 40%;
+            opacity: 1;
+            transform: scale(1.3);
+          }
+          100% {
+            top: 35%;
+            opacity: 0;
+            transform: scale(0.5);
+          }
+        }
+        @keyframes feedFly1 {
+          0% {
+            top: 85%;
+            opacity: 1;
+            transform: scale(1);
+          }
+          80% {
+            top: 42%;
+            opacity: 1;
+            transform: scale(1.2);
+          }
+          100% {
+            top: 37%;
+            opacity: 0;
+            transform: scale(0.5);
+          }
+        }
+        @keyframes feedFly2 {
+          0% {
+            top: 82%;
+            opacity: 1;
+            transform: scale(1);
+          }
+          80% {
+            top: 38%;
+            opacity: 1;
+            transform: scale(1.4);
+          }
+          100% {
+            top: 33%;
+            opacity: 0;
+            transform: scale(0.5);
+          }
+        }
+        @keyframes nomnom {
+          0% {
+            opacity: 0;
+            transform: translate(-50%, 0) scale(0.5);
+          }
+          30% {
+            opacity: 1;
+            transform: translate(-50%, -20px) scale(1.2);
+          }
+          60% {
+            opacity: 1;
+            transform: translate(-50%, -30px) scale(1);
+          }
+          100% {
+            opacity: 0;
+            transform: translate(-50%, -50px) scale(0.8);
+          }
+        }
+      `}</style>
     </div>
   );
 }
