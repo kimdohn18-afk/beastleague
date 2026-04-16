@@ -171,6 +171,10 @@ export default function MainPage() {
   const [showBlockedGuide, setShowBlockedGuide] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [selfFed, setSelfFed] = useState(false);
+const [feedAnimation, setFeedAnimation] = useState(false);
+const [feedToast, setFeedToast] = useState('');
+
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
