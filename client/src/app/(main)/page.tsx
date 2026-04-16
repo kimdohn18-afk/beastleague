@@ -28,6 +28,7 @@ interface Character {
   totalPlacements?: number;
   tutorialCompleted?: boolean;
   totalLikes?: number;
+    totalFeeds?: number; 
 }
 
 // 상한 없는 캐릭터 크기: 1000 XP ≈ 390px (모바일 화면 꽉 참)
