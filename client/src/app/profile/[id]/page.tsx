@@ -3,6 +3,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import WalkingCharacter from '@/components/WalkingCharacter';
+import { PIXEL_ART_ANIMALS } from '@/lib/constants';
+
 
 /* ───── 상수 ───── */
 
@@ -365,14 +368,15 @@ export default function PublicProfilePage() {
         </h1>
       </div>
 
-      {/* 캐릭터 영역 */}
+           {/* 캐릭터 영역 */}
+      <WalkingCharacter
+        animalType={character.animalType}
+        characterSize={size}
+        isPixelArt={PIXEL_ART_ANIMALS.includes(character.animalType)}
+        emoji={emoji}
+      />
+
       <div className="flex flex-col items-center pt-10 pb-6">
-        <div
-          className="flex items-center justify-center"
-          style={{ fontSize: `${size}px`, lineHeight: 1 }}
-        >
-          {emoji}
-        </div>
         <h2 className="text-xl font-bold text-gray-800 mt-4">
           {character.name}
         </h2>
