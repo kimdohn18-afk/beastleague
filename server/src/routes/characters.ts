@@ -317,7 +317,9 @@ charactersRouter.get('/:id/like-status', authenticateUser, async (req: Request, 
   }
 });
 
-// ★ POST /api/characters/:id/feed — 밥주기 (내 XP -5, 상대 XP +3, 하루 총 3회, 같은 캐릭터 1회)
+// ★ POST /api/characters/:id/feed — 밥주기
+// 자기 캐릭터: 하루 1회 무료, +3 XP
+// 다른 캐릭터: 하루 같은 캐릭터 1회, 총 3회, 내 XP -5 → 상대 +3
 charactersRouter.post('/:id/feed', authenticateUser, async (req: Request, res: Response) => {
   try {
     const fromUserId = req.user!.userId;
@@ -327,46 +329,57 @@ charactersRouter.post('/:id/feed', authenticateUser, async (req: Request, res: R
       return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
     }
 
-    // 받는 캐릭터 확인
     const toCharacter = await Character.findById(toCharacterId);
     if (!toCharacter) return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
 
-    // 자기 자신에게 불가
-    if (String(toCharacter.userId) === String(fromUserId)) {
-      return res.status(400).json({ error: '자신의 캐릭터에게는 밥을 줄 수 없습니다' });
-    }
-
-    // 보내는 캐릭터 확인
-    const fromCharacter = await Character.findOne({ userId: fromUserId });
-    if (!fromCharacter) return res.status(400).json({ error: '캐릭터가 없습니다' });
-
-    // XP 부족 체크
-    const FEED_COST = 5;
-    const FEED_GIVE = 3;
-
-    if (fromCharacter.xp < FEED_COST) {
-      return res.status(400).json({ error: `XP가 부족합니다 (필요: ${FEED_COST}, 보유: ${fromCharacter.xp})` });
-    }
-
+    const isSelf = String(toCharacter.userId) === String(fromUserId);
     const today = todayKST();
 
-    // 같은 캐릭터에 오늘 이미 줬는지
+    const FEED_COST = isSelf ? 0 : 5;
+    const FEED_GIVE = 3;
+
+    // 이미 이 캐릭터에게 오늘 줬는지
     const alreadyFed = await Feed.findOne({ fromUserId, toCharacterId, date: today });
     if (alreadyFed) {
-      return res.status(400).json({ error: '오늘 이미 이 캐릭터에게 밥을 줬습니다', alreadyFed: true });
-    }
-
-    // 오늘 총 횟수 체크 (최대 3회)
-    const MAX_DAILY_FEEDS = 3;
-    const todayCount = await Feed.countDocuments({ fromUserId, date: today });
-    if (todayCount >= MAX_DAILY_FEEDS) {
       return res.status(400).json({
-        error: `오늘 밥주기 횟수를 모두 사용했습니다 (${MAX_DAILY_FEEDS}/${MAX_DAILY_FEEDS})`,
-        limitReached: true,
+        error: isSelf ? '오늘 이미 밥을 줬습니다' : '오늘 이미 이 캐릭터에게 밥을 줬습니다',
+        alreadyFed: true,
       });
     }
 
-    // Feed 기록 생성
+    if (!isSelf) {
+      // 다른 캐릭터: 총 횟수 체크
+      const MAX_DAILY_FEEDS = 3;
+      const todayCount = await Feed.countDocuments({ fromUserId, date: today, toCharacterId: { $ne: new mongoose.Types.ObjectId(fromUserId) } });
+      // 자기 밥주기는 카운트에서 제외하기 위해 fromUser의 캐릭터 ID를 구함
+      const fromCharacter = await Character.findOne({ userId: fromUserId });
+      if (!fromCharacter) return res.status(400).json({ error: '캐릭터가 없습니다' });
+
+      // 자기 밥주기를 제외한 오늘 횟수
+      const othersCount = await Feed.countDocuments({
+        fromUserId,
+        date: today,
+        toCharacterId: { $ne: fromCharacter._id },
+      });
+
+      if (othersCount >= MAX_DAILY_FEEDS) {
+        return res.status(400).json({
+          error: `오늘 밥주기 횟수를 모두 사용했습니다 (${MAX_DAILY_FEEDS}/${MAX_DAILY_FEEDS})`,
+          limitReached: true,
+        });
+      }
+
+      // XP 부족 체크
+      if (fromCharacter.xp < FEED_COST) {
+        return res.status(400).json({ error: `XP가 부족합니다 (필요: ${FEED_COST}, 보유: ${fromCharacter.xp})` });
+      }
+
+      // 내 XP 차감
+      fromCharacter.xp -= FEED_COST;
+      await fromCharacter.save();
+    }
+
+    // Feed 기록
     await Feed.create({
       fromUserId,
       toCharacterId,
@@ -375,51 +388,39 @@ charactersRouter.post('/:id/feed', authenticateUser, async (req: Request, res: R
       xpGiven: FEED_GIVE,
     });
 
-    // 내 XP 차감
-    fromCharacter.xp -= FEED_COST;
-    await fromCharacter.save();
-
-    // 상대 XP 증가 + totalFeeds 증가
+    // 상대(또는 자기) XP 증가 + totalFeeds 증가
     const updatedTo = await Character.findByIdAndUpdate(
       toCharacterId,
       { $inc: { xp: FEED_GIVE, totalFeeds: 1 } },
       { new: true }
     );
 
+    // 남은 횟수 계산 (다른 캐릭터 기준)
+    let remainingFeeds = 3;
+    if (!isSelf) {
+      const fromCharacter = await Character.findOne({ userId: fromUserId });
+      const othersCount = await Feed.countDocuments({
+        fromUserId,
+        date: today,
+        toCharacterId: { $ne: fromCharacter?._id },
+      });
+      remainingFeeds = Math.max(0, 3 - othersCount);
+    }
+
     return res.json({
       fed: true,
-      myXp: fromCharacter.xp,
+      isSelf,
+      myXp: isSelf ? (updatedTo?.xp || 0) : ((await Character.findOne({ userId: fromUserId }))?.xp || 0),
       theirXp: updatedTo?.xp || 0,
       totalFeeds: updatedTo?.totalFeeds || 0,
-      remainingFeeds: MAX_DAILY_FEEDS - todayCount - 1,
+      remainingFeeds,
       cost: FEED_COST,
       given: FEED_GIVE,
     });
   } catch (err: any) {
     if (err.code === 11000) {
-      return res.status(400).json({ error: '오늘 이미 이 캐릭터에게 밥을 줬습니다', alreadyFed: true });
+      return res.status(400).json({ error: '오늘 이미 밥을 줬습니다', alreadyFed: true });
     }
-    return res.status(500).json({ error: String(err) });
-  }
-});
-
-// ★ GET /api/characters/:id/feed-status — 오늘 밥줬는지 + 남은 횟수
-charactersRouter.get('/:id/feed-status', authenticateUser, async (req: Request, res: Response) => {
-  try {
-    const fromUserId = req.user!.userId;
-    const toCharacterId = req.params.id;
-    const today = todayKST();
-
-    const [alreadyFed, todayCount] = await Promise.all([
-      Feed.findOne({ fromUserId, toCharacterId, date: today }).lean(),
-      Feed.countDocuments({ fromUserId, date: today }),
-    ]);
-
-    return res.json({
-      fed: !!alreadyFed,
-      remainingFeeds: Math.max(0, 3 - todayCount),
-    });
-  } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
 });
