@@ -13,7 +13,7 @@ export interface ICharacter extends Document {
   earnedAchievements: string[];
   teamAchievements: Array<{ teamId: string; tier: string; count: number }>;
   tutorialCompleted: boolean;
-  totalLikes: number;
+  totalLikes: number;  // ★ 추가
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,8 +36,8 @@ const characterSchema = new Schema<ICharacter>(
       count:  { type: Number },
     }],
     tutorialCompleted:  { type: Boolean, default: false },
+    totalLikes:         { type: Number, default: 0 },  // ★ 추가
   },
-   totalLikes:         { type: Number, default: 0 },
   { timestamps: true }
 );
 
