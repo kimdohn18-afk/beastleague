@@ -14,8 +14,9 @@ import {
 const router = Router();
 
 const VALID_ANIMALS = [
-  'bear', 'tiger', 'eagle', 'dragon', 'wolf',
-  'fox', 'lion', 'shark', 'phoenix', 'unicorn',
+  'turtle', 'eagle', 'lion', 'dinosaur', 'dog',
+  'fox', 'penguin', 'shark', 'bear', 'tiger',
+  'seagull', 'dragon', 'cat', 'rabbit', 'gorilla', 'elephant',
 ];
 
 function todayKST(): string {
