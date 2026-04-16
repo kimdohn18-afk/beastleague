@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useSession } from '@/lib/hooks/useSession';
+import { useSession } from 'next-auth/react';
 
 /* ───── 상수 ───── */
 
