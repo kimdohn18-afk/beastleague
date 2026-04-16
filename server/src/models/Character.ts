@@ -13,7 +13,8 @@ export interface ICharacter extends Document {
   earnedAchievements: string[];
   teamAchievements: Array<{ teamId: string; tier: string; count: number }>;
   tutorialCompleted: boolean;
-  totalLikes: number;  // ★ 추가
+  totalLikes: number;
+  totalFeeds: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,13 +31,14 @@ const characterSchema = new Schema<ICharacter>(
     activeTrait:        { type: String, default: null },
     earnedBadges:       [{ type: String }],
     earnedAchievements: [{ type: String }],
-    teamAchievements:   [{
+    teamAchievements: [{
       teamId: { type: String },
-      tier:   { type: String },
-      count:  { type: Number },
+      tier: { type: String },
+      count: { type: Number },
     }],
-    tutorialCompleted:  { type: Boolean, default: false },
-    totalLikes:         { type: Number, default: 0 },  // ★ 추가
+    tutorialCompleted: { type: Boolean, default: false },
+    totalLikes: { type: Number, default: 0 },
+    totalFeeds: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
