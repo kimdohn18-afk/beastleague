@@ -17,7 +17,7 @@ function todayKST(): string {
 async function getRanking(type: RankingType, limit: number) {
   if (type === 'level') {
     const characters = await Character.find().sort({ xp: -1 }).limit(limit)
-      .select('userId name animalType level xp stats').lean();
+      .select('_id userId name animalType level xp stats activeTrait').lean();
 
     // 오늘 배치한 유저 목록 조회
     const today = todayKST();
