@@ -15,8 +15,7 @@ interface AllRankItem { _id?: string; name: string; animalType: string; xp: numb
 export default function RankingPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('league');
-
+  const [tab, setTab] = useState<Tab>('all');
   const [leagues, setLeagues] = useState<League[]>([]);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [ranking, setRanking] = useState<RankItem[]>([]);
@@ -39,10 +38,13 @@ export default function RankingPage() {
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
   const headers: Record<string, string> = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  useEffect(() => {
-    if (status === 'unauthenticated') router.push('/login');
-    if (token) fetchLeagues();
-  }, [token, status]);
+ useEffect(() => {
+  if (status === 'unauthenticated') router.push('/login');
+  if (token) {
+    fetchLeagues();
+    loadAllRanking();
+  }
+}, [token, status]);
 
   function showToast(msg: string) {
     setToast(msg);
