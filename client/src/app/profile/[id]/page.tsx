@@ -64,19 +64,23 @@ export default function PublicProfilePage() {
   }, [characterId]);
 
   async function fetchProfile() {
-    try {
-      const res = await fetch(`${apiUrl}/api/characters/${characterId}/public`);
-      if (res.ok) {
-        setProfile(await res.json());
-      } else {
-        setError(true);
-      }
-    } catch (e) {
-      console.error(e);
+  try {
+    const res = await fetch(`${apiUrl}/api/characters/${characterId}/public`, {
+      cache: 'no-store',
+    });
+    if (res.ok) {
+      setProfile(await res.json());
+    } else {
+      const data = await res.json().catch(() => ({}));
+      console.error('프로필 로드 실패:', res.status, data);
       setError(true);
     }
-    setLoading(false);
+  } catch (e) {
+    console.error('프로필 fetch 에러:', e);
+    setError(true);
   }
+  setLoading(false);
+}
 
   if (loading) {
     return (
