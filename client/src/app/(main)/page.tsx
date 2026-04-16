@@ -27,6 +27,7 @@ interface Character {
   earnedachievements?: string[];
   totalPlacements?: number;
   tutorialCompleted?: boolean;
+  totalLikes?: number;
 }
 
 // 상한 없는 캐릭터 크기: 1000 XP ≈ 390px (모바일 화면 꽉 참)
@@ -490,18 +491,29 @@ useEffect(() => {
         emoji={emoji}
       />
 
-      {/* ──── 캐릭터 정보 ──── */}
+           {/* ──── 캐릭터 정보 ──── */}
       <div className="flex flex-col items-center justify-center pt-8 pb-4 relative z-10">
         <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
         <p className="text-sm text-gray-400 mt-1">
           {animalName} · {character.xp.toLocaleString()} XP
         </p>
         {character.activeTrait && (
-  <div className="mt-3 bg-white/80 backdrop-blur rounded-xl px-4 py-2 border border-orange-100 shadow-sm">
-    <p className="text-sm text-gray-700 font-medium">{getTraitDisplay(character.activeTrait)}</p>
-  </div>
-)}
+          <div className="mt-3 bg-white/80 backdrop-blur rounded-xl px-4 py-2 border border-orange-100 shadow-sm">
+            <p className="text-sm text-gray-700 font-medium">{getTraitDisplay(character.activeTrait)}</p>
+          </div>
+        )}
+
+        {/* ★ 좋아요 카운트 */}
+        {(character.totalLikes ?? 0) > 0 && (
+          <div className="mt-3 flex items-center gap-1.5 bg-pink-50 rounded-full px-3 py-1">
+            <span className="text-sm">❤️</span>
+            <span className="text-xs font-bold text-pink-400">
+              {(character.totalLikes ?? 0).toLocaleString()}
+            </span>
+          </div>
+        )}
       </div>
+
 
       {/* ──── FAB 메뉴 ──── */}
       <div className="fixed bottom-24 right-4 z-50">
