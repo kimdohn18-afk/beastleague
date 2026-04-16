@@ -42,6 +42,7 @@ interface PublicProfile {
     totalPlacements: number;
     streak: number;
     totalLikes: number;
+    totalFeeds: number;
     createdAt: string;
   };
   todayPlacement: TodayPlacement | null;
@@ -82,6 +83,14 @@ export default function PublicProfilePage() {
   const [totalLikes, setTotalLikes] = useState(0);
   const [likeLoading, setLikeLoading] = useState(false);
   const [likeAnimation, setLikeAnimation] = useState(false);
+
+  // 밥주기
+  const [fed, setFed] = useState(false);
+  const [totalFeeds, setTotalFeeds] = useState(0);
+  const [remainingFeeds, setRemainingFeeds] = useState(3);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [feedAnimation, setFeedAnimation] = useState(false);
+
   const [toast, setToast] = useState<string | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -91,7 +100,10 @@ export default function PublicProfilePage() {
   useEffect(() => {
     if (!characterId) return;
     fetchProfile();
-    if (token) fetchLikeStatus();
+    if (token) {
+      fetchLikeStatus();
+      fetchFeedStatus();
+    }
   }, [characterId, token]);
 
   function showToast(msg: string) {
@@ -101,13 +113,12 @@ export default function PublicProfilePage() {
 
   async function fetchProfile() {
     try {
-      const res = await fetch(`${apiUrl}/api/characters/${characterId}/public`, {
-        cache: 'no-store',
-      });
+      const res = await fetch(`${apiUrl}/api/characters/${characterId}/public`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setProfile(data);
         setTotalLikes(data.character.totalLikes || 0);
+        setTotalFeeds(data.character.totalFeeds || 0);
       } else {
         setError(true);
       }
@@ -127,26 +138,31 @@ export default function PublicProfilePage() {
         const data = await res.json();
         setLiked(data.liked);
       }
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
+  }
+
+  async function fetchFeedStatus() {
+    try {
+      const res = await fetch(`${apiUrl}/api/characters/${characterId}/feed-status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFed(data.fed);
+        setRemainingFeeds(data.remainingFeeds);
+      }
+    } catch (e) { console.error(e); }
   }
 
   async function handleLike() {
-    if (!token) {
-      showToast('로그인이 필요합니다');
-      return;
-    }
+    if (!token) { showToast('로그인이 필요합니다'); return; }
     if (liked || likeLoading) return;
 
     setLikeLoading(true);
     try {
       const res = await fetch(`${apiUrl}/api/characters/${characterId}/like`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
       const data = await res.json();
       if (res.ok) {
@@ -158,10 +174,35 @@ export default function PublicProfilePage() {
         showToast(data.error || '좋아요 실패');
         if (data.alreadyLiked) setLiked(true);
       }
-    } catch (e) {
-      showToast('서버 오류');
-    }
+    } catch (e) { showToast('서버 오류'); }
     setLikeLoading(false);
+  }
+
+  async function handleFeed() {
+    if (!token) { showToast('로그인이 필요합니다'); return; }
+    if (fed || feedLoading || remainingFeeds <= 0) return;
+
+    setFeedLoading(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/characters/${characterId}/feed`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setFed(true);
+        setTotalFeeds(data.totalFeeds);
+        setRemainingFeeds(data.remainingFeeds);
+        setFeedAnimation(true);
+        setTimeout(() => setFeedAnimation(false), 800);
+        showToast(`🍖 밥을 줬어요! (-${data.cost} XP → +${data.given} XP)`);
+      } else {
+        showToast(data.error || '밥주기 실패');
+        if (data.alreadyFed) setFed(true);
+        if (data.limitReached) setRemainingFeeds(0);
+      }
+    } catch (e) { showToast('서버 오류'); }
+    setFeedLoading(false);
   }
 
   if (loading) {
@@ -177,10 +218,7 @@ export default function PublicProfilePage() {
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
         <div className="text-5xl mb-4">🔍</div>
         <p className="text-gray-500 mb-4">캐릭터를 찾을 수 없습니다</p>
-        <button
-          onClick={() => router.back()}
-          className="px-4 py-2 bg-orange-400 text-white rounded-xl text-sm font-bold"
-        >
+        <button onClick={() => router.back()} className="px-4 py-2 bg-orange-400 text-white rounded-xl text-sm font-bold">
           돌아가기
         </button>
       </div>
@@ -209,6 +247,13 @@ export default function PublicProfilePage() {
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white px-4 py-2 rounded-2xl text-sm shadow-lg">
           {toast}
+        </div>
+      )}
+
+      {/* 밥주기 애니메이션 */}
+      {feedAnimation && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
+          <div className="text-7xl animate-bounce">🍖</div>
         </div>
       )}
 
@@ -248,8 +293,9 @@ export default function PublicProfilePage() {
         )}
       </div>
 
-      {/* ★ 좋아요 버튼 */}
-      <div className="flex justify-center mt-4 relative z-10">
+      {/* ★ 좋아요 + 밥주기 버튼 */}
+      <div className="flex justify-center gap-3 mt-4 relative z-10">
+        {/* 좋아요 */}
         <button
           onClick={handleLike}
           disabled={liked || likeLoading}
@@ -264,9 +310,39 @@ export default function PublicProfilePage() {
           </span>
           <span>{totalLikes.toLocaleString()}</span>
         </button>
+
+        {/* 밥주기 */}
+        <button
+          onClick={handleFeed}
+          disabled={fed || feedLoading || remainingFeeds <= 0}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-bold shadow-sm transition-all ${
+            fed
+              ? 'bg-amber-50 text-amber-400 border-2 border-amber-200'
+              : remainingFeeds <= 0
+              ? 'bg-gray-50 text-gray-300 border-2 border-gray-100'
+              : 'bg-white text-gray-600 border-2 border-gray-200 active:scale-95 hover:border-amber-300 hover:text-amber-500'
+          } ${feedAnimation ? 'scale-110' : ''}`}
+        >
+          <span className={`text-xl transition-transform ${feedAnimation ? 'scale-150' : ''}`}>
+            {fed ? '🍖' : '🦴'}
+          </span>
+          <span>
+            {fed ? '밥 줬어요' : remainingFeeds <= 0 ? '소진' : `밥주기`}
+          </span>
+          {!fed && remainingFeeds > 0 && (
+            <span className="text-[10px] text-gray-400 font-normal">-5XP</span>
+          )}
+        </button>
       </div>
 
-      {/* ★ 오늘의 배치 — 토글 버튼 */}
+      {/* 밥 받은 횟수 */}
+      {totalFeeds > 0 && (
+        <p className="text-center text-[11px] text-amber-400 mt-2">
+          🍖 지금까지 {totalFeeds}번 밥을 받았어요
+        </p>
+      )}
+
+      {/* 오늘의 배치 토글 */}
       <div className="px-4 mt-6">
         <button
           onClick={() => setShowPlacement(!showPlacement)}
@@ -295,10 +371,9 @@ export default function PublicProfilePage() {
           )}
         </button>
 
-        {/* ★ 배치 상세 (펼침) */}
+        {/* 배치 상세 */}
         {showPlacement && todayPlacement && todayPlacement.game && (
-          <div className="mt-2 bg-white rounded-2xl p-4 shadow-sm border border-gray-100 animate-in slide-in-from-top-2">
-            {/* 상태 뱃지 */}
+          <div className="mt-2 bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <div className="flex justify-end mb-3">
               {(() => {
                 const badge = getStatusBadge(todayPlacement.status, todayPlacement.isCorrect);
@@ -310,7 +385,6 @@ export default function PublicProfilePage() {
               })()}
             </div>
 
-            {/* 경기 스코어 */}
             <div className="flex items-center justify-center gap-4 mb-4">
               <div className="text-center">
                 <p className="text-2xl mb-1">{TEAM_EMOJI[todayPlacement.game.awayTeam] || '⚾'}</p>
@@ -334,7 +408,6 @@ export default function PublicProfilePage() {
               </div>
             </div>
 
-            {/* 배치 상세 */}
             <div className="bg-gray-50 rounded-xl p-3 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-400">배치 팀</span>
@@ -372,13 +445,6 @@ export default function PublicProfilePage() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* 하단 예고 */}
-      <div className="px-4 mt-6">
-        <div className="bg-gray-100 rounded-2xl p-4 text-center">
-          <p className="text-xs text-gray-300">🚧 곧 방명록, 밥주기 기능이 추가됩니다</p>
-        </div>
       </div>
     </div>
   );
