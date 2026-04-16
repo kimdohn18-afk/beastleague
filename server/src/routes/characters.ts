@@ -446,5 +446,95 @@ router.get('/:id/feed-status', authenticateUser, async (req: Request, res: Respo
   }
 });
 
+/* ───── GET /me/evolution — 내 진화 정보 ───── */
+router.get('/me/evolution', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const character = await Character.findOne({ userId });
+    if (!character) {
+      return res.status(404).json({ error: '캐릭터가 없습니다' });
+    }
+
+    const STAGES = [
+      { stage: 1, name: '아기',  minXp: 0,     badge: '🥚' },
+      { stage: 2, name: '성장',  minXp: 300,   badge: '⭐' },
+      { stage: 3, name: '성숙',  minXp: 1000,  badge: '🔥' },
+      { stage: 4, name: '전설',  minXp: 3000,  badge: '👑' },
+      { stage: 5, name: '신화',  minXp: 10000, badge: '💎' },
+    ];
+
+    let current = STAGES[0];
+    for (const s of STAGES) {
+      if (character.xp >= s.minXp) current = s;
+    }
+    const next = STAGES.find(s => character.xp < s.minXp) || null;
+
+    res.json({
+      xp: character.xp,
+      currentStage: current,
+      nextStage: next,
+      xpToNext: next ? next.minXp - character.xp : 0,
+    });
+  } catch (err) {
+    console.error('Evolution info error:', err);
+    res.status(500).json({ error: '진화 정보 조회 실패' });
+  }
+});
+
+/* ───── PUT /me/animal — 캐릭터 동물 변경 (XP 소모) ───── */
+router.put('/me/animal', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { animalType } = req.body;
+
+    const ALL_ANIMALS = [
+      'turtle', 'eagle', 'lion', 'dinosaur', 'dog',
+      'fox', 'penguin', 'shark', 'bear', 'tiger',
+      'seagull', 'dragon', 'cat', 'rabbit', 'gorilla', 'elephant',
+    ];
+
+    if (!animalType || !ALL_ANIMALS.includes(animalType)) {
+      return res.status(400).json({ error: '유효하지 않은 동물 타입입니다' });
+    }
+
+    const character = await Character.findOne({ userId });
+    if (!character) {
+      return res.status(404).json({ error: '캐릭터가 없습니다' });
+    }
+
+    if (character.animalType === animalType) {
+      return res.status(400).json({ error: '이미 같은 동물입니다' });
+    }
+
+    const COST = 100;
+    if (character.xp < COST) {
+      return res.status(400).json({
+        error: `XP가 부족합니다 (${COST} XP 필요, 현재 ${character.xp} XP)`,
+        code: 'insufficientXp',
+      });
+    }
+
+    await Character.findByIdAndUpdate(character._id, {
+      animalType,
+      $inc: { xp: -COST },
+    });
+
+    const updated = await Character.findById(character._id);
+
+    res.json({
+      success: true,
+      cost: COST,
+      character: {
+        animalType: updated?.animalType,
+        xp: updated?.xp,
+        name: updated?.name,
+      },
+    });
+  } catch (err) {
+    console.error('Animal change error:', err);
+    res.status(500).json({ error: '캐릭터 변경 실패' });
+  }
+});
+
 export default router;
 export { router as charactersRouter };
