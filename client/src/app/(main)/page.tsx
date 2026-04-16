@@ -266,6 +266,24 @@ const [showShareMenu, setShowShareMenu] = useState(false);
     }
   };
 
+// 다른 페이지(업적 등)에서 돌아왔을 때 캐릭터 데이터 갱신
+useEffect(() => {
+  const handleFocus = () => {
+    if (token && !loading) {
+      fetchCharacter();
+    }
+  };
+  window.addEventListener('focus', handleFocus);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') handleFocus();
+  });
+  return () => {
+    window.removeEventListener('focus', handleFocus);
+    document.removeEventListener('visibilitychange', handleFocus);
+  };
+}, [token, loading]);
+
+  
   const handleDelete = async () => {
     setDeleting(true);
     try {
