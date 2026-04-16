@@ -13,8 +13,13 @@ import {
   PIXEL_ART_ANIMALS,
   TRAIT_DISPLAY,
   getTraitDisplay,
+  getEvolutionStage,      
+  getNextEvolutionStage,  
+  EVOLUTION_STAGES,        
+  CHANGE_ANIMAL_COST,      
 } from '@/lib/constants';
 import WalkingCharacter from '@/components/WalkingCharacter';
+
 
 interface Character {
   _id: string;
@@ -195,6 +200,13 @@ export default function MainPage() {
   const [feedAnimation, setFeedAnimation] = useState(false);
   const [feedToast, setFeedToast] = useState('');
 
+  // ★ 진화 & 캐릭터 변경 state
+  const [showEvolution, setShowEvolution] = useState(false);
+  const [showAnimalChange, setShowAnimalChange] = useState(false);
+  const [selectedNewAnimal, setSelectedNewAnimal] = useState<string | null>(null);
+  const [animalChanging, setAnimalChanging] = useState(false);
+  const [evolutionToast, setEvolutionToast] = useState('');
+  
   const apiUrl =
     process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token =
@@ -396,6 +408,46 @@ export default function MainPage() {
     }
   };
 
+  // ★ 캐릭터 동물 변경
+  const handleAnimalChange = async () => {
+    if (!character || !token || !selectedNewAnimal || animalChanging) return;
+    if (character.xp < CHANGE_ANIMAL_COST) {
+      setEvolutionToast(`XP가 부족합니다 (${CHANGE_ANIMAL_COST} XP 필요)`);
+      setTimeout(() => setEvolutionToast(''), 2500);
+      return;
+    }
+    setAnimalChanging(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/characters/me/animal`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ animalType: selectedNewAnimal }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCharacter(prev =>
+          prev ? { ...prev, animalType: data.character.animalType, xp: data.character.xp } : prev
+        );
+        setEvolutionToast(`✨ ${ANIMAL_NAMES[data.character.animalType] || data.character.animalType}(으)로 변신! -${data.cost} XP`);
+        setTimeout(() => setEvolutionToast(''), 3000);
+        setShowAnimalChange(false);
+        setSelectedNewAnimal(null);
+      } else {
+        setEvolutionToast(data.error || '변경 실패');
+        setTimeout(() => setEvolutionToast(''), 2500);
+      }
+    } catch {
+      setEvolutionToast('네트워크 오류');
+      setTimeout(() => setEvolutionToast(''), 2500);
+    } finally {
+      setAnimalChanging(false);
+    }
+  };
+
+  
   const handleDelete = async () => {
     setDeleting(true);
     try {
@@ -664,6 +716,14 @@ export default function MainPage() {
         </div>
       )}
 
+{/* ★ 진화/변경 토스트 */}
+{evolutionToast && (
+  <div className="fixed top-28 left-1/2 -translate-x-1/2 bg-indigo-600/90 text-white px-5 py-2.5 rounded-full text-sm font-medium z-[60] animate-bounce">
+    {evolutionToast}
+  </div>
+)}
+
+      
       {/* 카카오 브라우저 안내 */}
       {typeof navigator !== 'undefined' &&
         /KAKAOTALK/i.test(navigator.userAgent) && (
@@ -711,12 +771,54 @@ export default function MainPage() {
 
       {/* ──── 캐릭터 정보 ──── */}
       <div className="flex flex-col items-center justify-center pt-8 pb-4 relative z-10">
-        <h1 className="text-2xl font-bold text-gray-800">
-          {character.name}
-        </h1>
-        <p className="text-sm text-gray-400 mt-1">
-          {animalName} · {character.xp.toLocaleString()} XP
-        </p>
+        {/* 진화 단계 표시 */}
+{(() => {
+  const evo = getEvolutionStage(character.xp);
+  const nextEvo = getNextEvolutionStage(character.xp);
+  return (
+    <>
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-lg">{evo.badge}</span>
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${evo.bgColor} ${evo.color}`}>
+          {evo.stage}단계 · {evo.name}
+        </span>
+      </div>
+      <h1 className="text-2xl font-bold text-gray-800">
+        {character.name}
+      </h1>
+      <p className="text-sm text-gray-400 mt-1">
+        {animalName} · {character.xp.toLocaleString()} XP
+      </p>
+      {/* 진화 진행 바 */}
+      {nextEvo && (
+        <button
+          onClick={() => setShowEvolution(true)}
+          className="mt-2 w-full max-w-[220px]"
+        >
+          <div className="flex items-center justify-between text-[10px] text-gray-400 mb-0.5">
+            <span>다음: {nextEvo.badge} {nextEvo.name}</span>
+            <span>{nextEvo.minXp - character.xp} XP 남음</span>
+          </div>
+          <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.min(100, ((character.xp - (EVOLUTION_STAGES[evo.stage - 1]?.minXp ?? 0)) / (nextEvo.minXp - (EVOLUTION_STAGES[evo.stage - 1]?.minXp ?? 0))) * 100)}%`,
+                backgroundColor: evo.glowColor === 'transparent' ? '#9ca3af' : evo.glowColor,
+              }}
+            />
+          </div>
+        </button>
+      )}
+      {!nextEvo && (
+        <div className="mt-2 flex items-center gap-1">
+          <span className="text-xs font-bold text-cyan-400">💎 최고 단계 달성!</span>
+        </div>
+      )}
+    </>
+  );
+})()}
+
         {character.activeTrait && (
           <div className="mt-3 bg-white/80 backdrop-blur rounded-xl px-4 py-2 border border-orange-100 shadow-sm">
             <p className="text-sm text-gray-700 font-medium">
@@ -762,6 +864,18 @@ export default function MainPage() {
         </button>
       </div>
 
+{/* ★ 캐릭터 변경 버튼 */}
+<button
+  onClick={() => {
+    setShowAnimalChange(true);
+    setSelectedNewAnimal(null);
+  }}
+  className="mt-2 px-5 py-2 rounded-full text-xs font-medium bg-indigo-50 text-indigo-500 hover:bg-indigo-100 active:scale-95 transition-all border border-indigo-100"
+>
+  🔄 캐릭터 변경 ({CHANGE_ANIMAL_COST} XP)
+</button>
+
+      
       {/* ──── FAB 메뉴 ──── */}
       <div className="fixed bottom-24 right-4 z-50">
         {menuOpen && (
@@ -985,6 +1099,148 @@ export default function MainPage() {
         </div>
       )}
 
+{/* ★ 진화 정보 모달 */}
+{showEvolution && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+    onClick={() => setShowEvolution(false)}
+  >
+    <div
+      className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6"
+      onClick={e => e.stopPropagation()}
+    >
+      <h2 className="text-lg font-bold text-gray-800 mb-5 text-center">🧬 진화 단계</h2>
+      <div className="space-y-3">
+        {EVOLUTION_STAGES.map(stage => {
+          const isCurrent = getEvolutionStage(character.xp).stage === stage.stage;
+          const isReached = character.xp >= stage.minXp;
+          return (
+            <div
+              key={stage.stage}
+              className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+                isCurrent
+                  ? `${stage.borderColor} ${stage.bgColor} shadow-md`
+                  : isReached
+                    ? 'border-gray-200 bg-white'
+                    : 'border-gray-100 bg-gray-50 opacity-50'
+              }`}
+            >
+              <span className="text-2xl">{stage.badge}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-bold ${isCurrent ? stage.color : isReached ? 'text-gray-700' : 'text-gray-400'}`}>
+                    {stage.stage}단계 · {stage.name}
+                  </span>
+                  {isCurrent && (
+                    <span className="text-[10px] bg-orange-400 text-white px-1.5 py-0.5 rounded-full font-bold">현재</span>
+                  )}
+                </div>
+                <span className="text-xs text-gray-400">
+                  {stage.minXp === 0 ? '시작' : `${stage.minXp.toLocaleString()} XP 이상`}
+                </span>
+              </div>
+              {isReached && <span className="text-green-400 text-lg">✓</span>}
+            </div>
+          );
+        })}
+      </div>
+      <button
+        onClick={() => setShowEvolution(false)}
+        className="w-full mt-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
+      >
+        닫기
+      </button>
+    </div>
+  </div>
+)}
+
+      {/* ★ 캐릭터 변경 모달 */}
+{showAnimalChange && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+    onClick={() => setShowAnimalChange(false)}
+  >
+    <div
+      className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 max-h-[80vh] overflow-y-auto"
+      onClick={e => e.stopPropagation()}
+    >
+      <h2 className="text-lg font-bold text-gray-800 mb-1 text-center">🔄 캐릭터 변경</h2>
+      <p className="text-xs text-gray-400 text-center mb-1">
+        동물을 변경합니다. 이름과 XP는 유지됩니다.
+      </p>
+      <p className="text-xs text-center mb-4">
+        <span className="text-orange-500 font-bold">비용: {CHANGE_ANIMAL_COST} XP</span>
+        <span className="text-gray-400 ml-2">(보유: {character.xp.toLocaleString()} XP)</span>
+      </p>
+
+      {character.xp < CHANGE_ANIMAL_COST && (
+        <div className="bg-red-50 text-red-500 text-xs text-center py-2 px-3 rounded-lg mb-4 font-medium">
+          XP가 부족합니다! {CHANGE_ANIMAL_COST - character.xp} XP 더 필요해요.
+        </div>
+      )}
+
+      <div className="grid grid-cols-4 gap-2 mb-5">
+        {Object.entries(ANIMAL_EMOJI).map(([type, emo]) => {
+          const isCurrent = type === character.animalType;
+          const isSelected = type === selectedNewAnimal;
+          return (
+            <button
+              key={type}
+              onClick={() => !isCurrent && setSelectedNewAnimal(type)}
+              disabled={isCurrent}
+              className={`flex flex-col items-center gap-1 p-2 rounded-xl border-2 transition-all ${
+                isCurrent
+                  ? 'border-gray-200 bg-gray-100 opacity-50 cursor-not-allowed'
+                  : isSelected
+                    ? 'border-indigo-400 bg-indigo-50 shadow-md scale-105'
+                    : 'border-gray-100 bg-white hover:border-gray-300 active:scale-95'
+              }`}
+            >
+              <span className="text-2xl">{emo}</span>
+              <span className={`text-[10px] font-medium ${isCurrent ? 'text-gray-400' : isSelected ? 'text-indigo-600' : 'text-gray-500'}`}>
+                {ANIMAL_NAMES[type] || type}
+              </span>
+              {isCurrent && <span className="text-[9px] text-gray-400">현재</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {selectedNewAnimal && (
+        <div className="bg-indigo-50 rounded-xl p-3 mb-4 text-center">
+          <span className="text-3xl">{ANIMAL_EMOJI[selectedNewAnimal]}</span>
+          <p className="text-sm font-bold text-indigo-600 mt-1">
+            {ANIMAL_NAMES[selectedNewAnimal]}(으)로 변경
+          </p>
+          <p className="text-xs text-indigo-400 mt-0.5">
+            {character.xp.toLocaleString()} → {(character.xp - CHANGE_ANIMAL_COST).toLocaleString()} XP
+          </p>
+        </div>
+      )}
+
+      <div className="flex gap-3">
+        <button
+          onClick={() => {
+            setShowAnimalChange(false);
+            setSelectedNewAnimal(null);
+          }}
+          className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
+        >
+          취소
+        </button>
+        <button
+          onClick={handleAnimalChange}
+          disabled={!selectedNewAnimal || animalChanging || character.xp < CHANGE_ANIMAL_COST}
+          className="flex-1 py-2.5 bg-indigo-500 text-white rounded-xl text-sm font-bold hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {animalChanging ? '변경 중...' : '변경하기'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+      
       {/* 삭제 확인 */}
       {showDelete && (
         <div
