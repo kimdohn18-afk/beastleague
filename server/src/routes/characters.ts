@@ -118,10 +118,8 @@ charactersRouter.post('/me/share-reward', authenticateUser, async (req: Request,
     const character = await Character.findOne({ userId });
     if (!character) return res.status(404).json({ error: '캐릭터가 없습니다' });
 
-    // 오늘 날짜 (KST)
     const todayKST = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
-    // 이미 오늘 보상 받았는지 체크
     const existing = await StatLog.findOne({
       userId: character.userId,
       source: 'training',
@@ -136,13 +134,11 @@ charactersRouter.post('/me/share-reward', authenticateUser, async (req: Request,
       });
     }
 
-    // 10 XP 부여
     const SHARE_XP = 10;
     const xpBefore = character.xp;
     character.xp += SHARE_XP;
     await character.save();
 
-    // 로그 기록
     await StatLog.create({
       userId: character.userId,
       characterId: character._id,
@@ -168,7 +164,7 @@ charactersRouter.post('/me/share-reward', authenticateUser, async (req: Request,
   }
 });
 
-// PUT /api/characters/me/active-trait — 대표 업적 선택
+// ★ PUT /api/characters/me/active-trait — 대표 업적 선택 (수정됨)
 charactersRouter.put('/me/active-trait', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -177,33 +173,30 @@ charactersRouter.put('/me/active-trait', authenticateUser, async (req: Request, 
     const character = await Character.findOne({ userId });
     if (!character) return res.status(404).json({ error: '캐릭터가 없습니다' });
 
-    // null이면 해제
+    // null이면 해제 — findByIdAndUpdate 사용
     if (!traitId) {
-      character.activeTrait = null;
-      await character.save();
+      await Character.findByIdAndUpdate(character._id, { activeTrait: null });
       return res.json({ activeTrait: null });
     }
 
     // 달성한 업적인지 검증 — skipTraitUpdate로 activeTrait 덮어쓰기 방지
     const { earned, teamAchievements } = await calculateAchievements(
-      userId, 
+      userId,
       String(character._id),
       { skipTraitUpdate: true }
     );
-    
-    // 일반 업적에서 찾기
+
     const isGeneralEarned = earned.includes(traitId);
-    
-    // 팀 업적에서 찾기
     const isTeamEarned = teamAchievements.some(ta => ta.teamId === traitId);
-    
+
     if (!isGeneralEarned && !isTeamEarned) {
       return res.status(400).json({ error: '아직 달성하지 않은 업적입니다' });
     }
 
-    // 검증 통과 후 저장
-    character.activeTrait = traitId;
-    await character.save();
+    // ★ 핵심 수정: character.save() 대신 findByIdAndUpdate 사용
+    // calculateAchievements 내부에서 이미 findByIdAndUpdate로 문서를 수정했기 때문에
+    // 기존 Mongoose 문서 인스턴스의 save()는 충돌(VersionError)을 일으킬 수 있음
+    await Character.findByIdAndUpdate(character._id, { activeTrait: traitId });
 
     return res.json({ activeTrait: traitId });
   } catch (err) {
@@ -239,7 +232,8 @@ charactersRouter.get('/:id/public', async (req: Request, res: Response) => {
         activeTrait,
         earnedCount,
         totalCount,
-        earned: earned.map(id => {
+        // ★ 수정: earned → topAchievements (클라이언트 인터페이스와 일치)
+        topAchievements: earned.slice(0, 6).map(id => {
           const def = allDefs.find(d => d.id === id);
           return def ? { id: def.id, emoji: def.emoji, name: def.name } : null;
         }).filter(Boolean),
