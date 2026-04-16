@@ -521,3 +521,4 @@ router.get('/:id/feed-status', async (req: any, res) => {
 });
 
 export default router;
+export { router as charactersRouter };
