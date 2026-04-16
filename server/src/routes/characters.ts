@@ -210,3 +210,48 @@ charactersRouter.put('/me/active-trait', authenticateUser, async (req: Request, 
     return res.status(500).json({ error: String(err) });
   }
 });
+
+// GET /api/characters/:id/public — 공개 프로필 (인증 불필요)
+charactersRouter.get('/:id/public', async (req: Request, res: Response) => {
+  try {
+    const character = await Character.findById(req.params.id)
+      .select('userId name animalType xp activeTrait totalPlacements createdAt')
+      .lean();
+    if (!character) return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
+
+    const { activeTrait, earned, teamAchievements, earnedCount } =
+      await calculateAchievements(String(character.userId), String(character._id), { skipTraitUpdate: true });
+
+    const allDefs = getAllAchievements();
+    const totalCount = allDefs.length + KBO_TEAMS.length;
+
+    return res.json({
+      character: {
+        _id: character._id,
+        name: character.name,
+        animalType: character.animalType,
+        xp: character.xp,
+        activeTrait: character.activeTrait,
+        totalPlacements: character.totalPlacements,
+        createdAt: character.createdAt,
+      },
+      achievements: {
+        activeTrait,
+        earnedCount,
+        totalCount,
+        earned: earned.map(id => {
+          const def = allDefs.find(d => d.id === id);
+          return def ? { id: def.id, emoji: def.emoji, name: def.name } : null;
+        }).filter(Boolean),
+        teamAchievements: teamAchievements.map(ta => ({
+          teamId: ta.teamId,
+          teamName: ta.teamName,
+          teamEmoji: ta.teamEmoji,
+          tier: ta.tier.tier,
+        })),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
