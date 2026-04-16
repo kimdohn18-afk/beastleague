@@ -16,33 +16,27 @@ export interface ICharacter extends Document {
   totalLikes: number;
   totalFeeds: number;
   createdAt: Date;
-  totalFeeds: number;
   updatedAt: Date;
 }
 
 const characterSchema = new Schema<ICharacter>(
   {
-    userId:             { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    name:               { type: String, required: true },
-    animalType:         { type: String, required: true },
-    xp:                 { type: Number, default: 0 },
-    streak:             { type: Number, default: 0 },
-    lastPlacementDate:  { type: String, default: null },
-    totalPlacements:    { type: Number, default: 0 },
-    activeTrait:        { type: String, default: null },
-    earnedBadges:       [{ type: String }],
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    name: { type: String, required: true },
+    animalType: { type: String, required: true },
+    xp: { type: Number, default: 0 },
+    streak: { type: Number, default: 0 },
+    lastPlacementDate: { type: String, default: null },
+    totalPlacements: { type: Number, default: 0 },
+    activeTrait: { type: String, default: null },
+    earnedBadges: [{ type: String }],
     earnedAchievements: [{ type: String }],
-    teamAchievements: [{
-      teamId: { type: String },
-      tier: { type: String },
-      count: { type: Number },
-    }],
+    teamAchievements: [{ teamId: String, tier: String, count: Number }],
     tutorialCompleted: { type: Boolean, default: false },
     totalLikes: { type: Number, default: 0 },
-     totalFeeds: { type: Number, default: 0 },
     totalFeeds: { type: Number, default: 0 },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 characterSchema.index({ userId: 1 }, { unique: true });
