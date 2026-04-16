@@ -4,6 +4,8 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ANIMAL_EMOJI, getTraitDisplay } from '@/lib/constants';
+import { getEvolutionStage } from '@/lib/constants';
+
 
 type Tab = 'league' | 'versus' | 'all';
 
