@@ -1,40 +1,62 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import {
-  ANIMAL_EMOJI,
-  ANIMAL_NAMES,
-  PIXEL_ART_ANIMALS,
-  getTraitDisplay,
-} from '@/lib/constants';
-import WalkingCharacter from '@/components/WalkingCharacter';
+import { useSession } from '@/lib/hooks/useSession';
 
-interface TodayGame {
-  gameId: string;
-  homeTeam: string;
-  awayTeam: string;
-  status: string;
-  homeScore?: number;
-  awayScore?: number;
-  startTime?: string;
+/* ───── 상수 ───── */
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
+const ANIMAL_EMOJI: Record<string, string> = {
+  bear: '🐻',
+  tiger: '🐯',
+  eagle: '🦅',
+  dragon: '🐉',
+  wolf: '🐺',
+  fox: '🦊',
+  lion: '🦁',
+  shark: '🦈',
+  phoenix: '🔥',
+  unicorn: '🦄',
+};
+
+const ANIMAL_NAMES: Record<string, string> = {
+  bear: '곰',
+  tiger: '호랑이',
+  eagle: '독수리',
+  dragon: '드래곤',
+  wolf: '늑대',
+  fox: '여우',
+  lion: '사자',
+  shark: '상어',
+  phoenix: '불사조',
+  unicorn: '유니콘',
+};
+
+const TEAM_EMOJI: Record<string, string> = {
+  LG: '🔴',
+  KT: '⚫',
+  SSG: '🔴',
+  NC: '🟤',
+  두산: '🐻',
+  KIA: '🐯',
+  롯데: '🔵',
+  삼성: '🦁',
+  한화: '🦅',
+  키움: '🟣',
+};
+
+function getCharacterSize(xp: number): number {
+  const size = 60 + Math.pow(xp, 0.55) * 7.5;
+  return Math.round(Math.min(size, 300));
 }
 
-interface TodayPlacement {
-  team: string;
-  battingOrder: number;
-  predictedWinner: string;
-  status: string;
-  isCorrect?: boolean;
-  xpFromPlayer?: number;
-  xpFromPrediction?: number;
-  game: TodayGame | null;
-}
+/* ───── 인터페이스 ───── */
 
 interface PublicProfile {
   character: {
-    _id: string;
+    id: string;
     name: string;
     animalType: string;
     xp: number;
@@ -45,180 +67,222 @@ interface PublicProfile {
     totalFeeds: number;
     createdAt: string;
   };
-  todayPlacement: TodayPlacement | null;
+  todayPlacement: {
+    team: string;
+    battingOrder: number;
+    predictedWinner: string;
+    status: string;
+    isCorrect: boolean | null;
+    xpFromPlayer: number | null;
+    xpFromPrediction: number | null;
+    game: {
+      gameId: string;
+      homeTeam: string;
+      awayTeam: string;
+      status: string;
+      scores: any;
+      startTime: string;
+    } | null;
+  } | null;
 }
 
-function getCharacterSize(xp: number): number {
-  const minPx = 60;
-  if (xp <= 0) return minPx;
-  const size = minPx + Math.pow(xp, 0.55) * 7.5;
-  return Math.max(minPx, Math.round(size));
-}
-
-const TEAM_EMOJI: Record<string, string> = {
-  '삼성 라이온즈': '🦁', '기아 타이거즈': '🐯', 'LG 트윈스': '🤞',
-  '두산 베어스': '🐻', 'KT 위즈': '🧙', 'SSG 랜더스': '🛬',
-  '롯데 자이언츠': '🦅', '한화 이글스': '🦅', 'NC 다이노스': '🦕',
-  '키움 히어로즈': '🦸',
-};
-
-function getTeamShort(name: string): string {
-  if (!name) return '?';
-  return name.split(' ')[0];
-}
+/* ───── 컴포넌트 ───── */
 
 export default function PublicProfilePage() {
   const params = useParams();
   const router = useRouter();
-  const { data: session } = useSession();
+  const { session } = useSession();
+  const characterId = params.id as string;
+
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  // 배치 토글
-  const [showPlacement, setShowPlacement] = useState(false);
-
-  // 좋아요
+  // 좋아요 상태
   const [liked, setLiked] = useState(false);
   const [totalLikes, setTotalLikes] = useState(0);
   const [likeLoading, setLikeLoading] = useState(false);
-  const [likeAnimation, setLikeAnimation] = useState(false);
 
-  // 밥주기
+  // 밥주기 상태
   const [fed, setFed] = useState(false);
+  const [feedAnimation, setFeedAnimation] = useState(false);
+  const [feedLoading, setFeedLoading] = useState(false);
   const [totalFeeds, setTotalFeeds] = useState(0);
   const [remainingFeeds, setRemainingFeeds] = useState(3);
-  const [feedLoading, setFeedLoading] = useState(false);
-  const [feedAnimation, setFeedAnimation] = useState(false);
 
-  const [toast, setToast] = useState<string | null>(null);
+  // 배치 토글
+  const [showPlacement, setShowPlacement] = useState(false);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-  const characterId = params.id as string;
-  const token = (session as any)?.backendToken || (session as any)?.accessToken;
+  // 토스트
+  const [toast, setToast] = useState('');
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 2500);
+  };
+
+  /* ───── 프로필 불러오기 ───── */
 
   useEffect(() => {
-    if (!characterId) return;
-    fetchProfile();
-    if (token) {
-      fetchLikeStatus();
-      fetchFeedStatus();
-    }
-  }, [characterId, token]);
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  }
-
-  async function fetchProfile() {
-    try {
-      const res = await fetch(`${apiUrl}/api/characters/${characterId}/public`, { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch(
+          `${API_URL}/api/characters/${characterId}/public`,
+        );
+        if (!res.ok) {
+          setError(true);
+          return;
+        }
+        const data: PublicProfile = await res.json();
         setProfile(data);
-        setTotalLikes(data.character.totalLikes || 0);
-        setTotalFeeds(data.character.totalFeeds || 0);
-      } else {
+        setTotalLikes(data.character.totalLikes);
+        setTotalFeeds(data.character.totalFeeds);
+      } catch (e) {
+        console.error('Profile fetch error:', e);
         setError(true);
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      console.error(e);
-      setError(true);
-    }
-    setLoading(false);
-  }
+    };
+    fetchProfile();
+  }, [characterId]);
 
-  async function fetchLikeStatus() {
-    try {
-      const res = await fetch(`${apiUrl}/api/characters/${characterId}/like-status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setLiked(data.liked);
+  /* ───── 좋아요 상태 확인 ───── */
+
+  useEffect(() => {
+    if (!session || !characterId) return;
+    const checkLikeStatus = async () => {
+      try {
+        const res = await fetch(
+          `${API_URL}/api/characters/${characterId}/like-status`,
+          {
+            headers: { Authorization: `Bearer ${session.token}` },
+          },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setLiked(data.liked);
+        }
+      } catch (e) {
+        console.error('Like status error:', e);
       }
-    } catch (e) { console.error(e); }
-  }
+    };
+    checkLikeStatus();
+  }, [session, characterId]);
 
-  async function fetchFeedStatus() {
-    try {
-      const res = await fetch(`${apiUrl}/api/characters/${characterId}/feed-status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setFed(data.fed);
-        setRemainingFeeds(data.remainingFeeds);
+  /* ───── 밥주기 상태 확인 ───── */
+
+  useEffect(() => {
+    if (!session || !characterId) return;
+    const checkFeedStatus = async () => {
+      try {
+        const res = await fetch(
+          `${API_URL}/api/characters/${characterId}/feed-status`,
+          {
+            headers: { Authorization: `Bearer ${session.token}` },
+          },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setFed(data.fed);
+          setRemainingFeeds(data.remainingFeeds);
+        }
+      } catch (e) {
+        console.error('Feed status error:', e);
       }
-    } catch (e) { console.error(e); }
-  }
+    };
+    checkFeedStatus();
+  }, [session, characterId]);
 
-  async function handleLike() {
-    if (!token) { showToast('로그인이 필요합니다'); return; }
-    if (liked || likeLoading) return;
+  /* ───── 좋아요 클릭 ───── */
 
+  const handleLike = async () => {
+    if (!session || liked || likeLoading) return;
     setLikeLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/api/characters/${characterId}/like`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
+      const res = await fetch(
+        `${API_URL}/api/characters/${characterId}/like`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.token}`,
+          },
+        },
+      );
       const data = await res.json();
       if (res.ok) {
         setLiked(true);
         setTotalLikes(data.totalLikes);
-        setLikeAnimation(true);
-        setTimeout(() => setLikeAnimation(false), 600);
+        showToast('❤️ 좋아요를 보냈어요!');
       } else {
+        if (data.code === 'alreadyLiked') setLiked(true);
         showToast(data.error || '좋아요 실패');
-        if (data.alreadyLiked) setLiked(true);
       }
-    } catch (e) { showToast('서버 오류'); }
-    setLikeLoading(false);
-  }
+    } catch (e) {
+      showToast('네트워크 오류');
+    } finally {
+      setLikeLoading(false);
+    }
+  };
 
-  async function handleFeed() {
-    if (!token) { showToast('로그인이 필요합니다'); return; }
-    if (fed || feedLoading || remainingFeeds <= 0) return;
+  /* ───── 밥주기 클릭 ───── */
 
+  const handleFeed = async () => {
+    if (!session || fed || feedLoading) return;
     setFeedLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/api/characters/${characterId}/feed`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
+      const res = await fetch(
+        `${API_URL}/api/characters/${characterId}/feed`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.token}`,
+          },
+        },
+      );
       const data = await res.json();
       if (res.ok) {
         setFed(true);
         setTotalFeeds(data.totalFeeds);
-        setRemainingFeeds(data.remainingFeeds);
+        setRemainingFeeds(data.remainingFeeds ?? remainingFeeds);
+        // 애니메이션 시작
         setFeedAnimation(true);
-        setTimeout(() => setFeedAnimation(false), 800);
+        setTimeout(() => setFeedAnimation(false), 1800);
         showToast(`🍖 밥을 줬어요! (-${data.cost} XP → +${data.given} XP)`);
       } else {
+        if (data.code === 'alreadyFed') setFed(true);
+        if (data.code === 'limitReached') setRemainingFeeds(0);
         showToast(data.error || '밥주기 실패');
-        if (data.alreadyFed) setFed(true);
-        if (data.limitReached) setRemainingFeeds(0);
       }
-    } catch (e) { showToast('서버 오류'); }
-    setFeedLoading(false);
-  }
+    } catch (e) {
+      showToast('네트워크 오류');
+    } finally {
+      setFeedLoading(false);
+    }
+  };
+
+  /* ───── 렌더링 ───── */
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-400" />
       </div>
     );
   }
 
   if (error || !profile) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div className="text-5xl mb-4">🔍</div>
-        <p className="text-gray-500 mb-4">캐릭터를 찾을 수 없습니다</p>
-        <button onClick={() => router.back()} className="px-4 py-2 bg-orange-400 text-white rounded-xl text-sm font-bold">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-6">
+        <p className="text-gray-500 text-lg mb-4">
+          캐릭터를 찾을 수 없습니다
+        </p>
+        <button
+          onClick={() => router.back()}
+          className="px-4 py-2 bg-orange-400 text-white rounded-lg"
+        >
           돌아가기
         </button>
       </div>
@@ -228,224 +292,320 @@ export default function PublicProfilePage() {
   const { character, todayPlacement } = profile;
   const emoji = ANIMAL_EMOJI[character.animalType] || '🐾';
   const animalName = ANIMAL_NAMES[character.animalType] || character.animalType;
-  const characterSize = getCharacterSize(character.xp);
-  const isPixelArt = PIXEL_ART_ANIMALS.includes(character.animalType);
+  const size = getCharacterSize(character.xp);
 
-  function getStatusBadge(status: string, isCorrect?: boolean) {
-    if (status === 'settled') {
-      return isCorrect
-        ? { text: '적중!', color: 'bg-emerald-100 text-emerald-600' }
-        : { text: '정산완료', color: 'bg-gray-100 text-gray-500' };
+  const statusLabel = (status: string) => {
+    switch (status) {
+      case 'settled':
+        return '정산 완료';
+      case 'active':
+        return '진행 중';
+      case 'pending':
+        return '대기 중';
+      default:
+        return status;
     }
-    if (status === 'active') return { text: '진행중', color: 'bg-amber-100 text-amber-600' };
-    return { text: '대기중', color: 'bg-blue-100 text-blue-500' };
-  }
+  };
+
+  const statusColor = (status: string) => {
+    switch (status) {
+      case 'settled':
+        return 'bg-green-100 text-green-700';
+      case 'active':
+        return 'bg-blue-100 text-blue-700';
+      default:
+        return 'bg-gray-100 text-gray-600';
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 relative">
+    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-50 pb-20">
       {/* 토스트 */}
       {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white px-4 py-2 rounded-2xl text-sm shadow-lg">
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-black/80 text-white px-4 py-2 rounded-full text-sm z-50 animate-bounce">
           {toast}
         </div>
       )}
 
-      {/* 밥주기 애니메이션 */}
+      {/* 밥 먹는 애니메이션 */}
       {feedAnimation && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
-          <div className="text-7xl animate-bounce">🍖</div>
+        <div className="fixed inset-0 pointer-events-none z-50">
+          {['🍖', '🥩', '🍗'].map((food, i) => (
+            <div
+              key={i}
+              className="absolute text-3xl"
+              style={{
+                left: `${30 + i * 20}%`,
+                animation: `feedFly${i} 1.5s ease-in forwards`,
+              }}
+            >
+              {food}
+            </div>
+          ))}
+          <div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 text-2xl font-bold text-orange-500"
+            style={{ animation: 'nomnom 1.5s ease-out forwards' }}
+          >
+            냠냠!
+          </div>
         </div>
       )}
 
       {/* 헤더 */}
-      <div className="px-4 pt-5 pb-2 flex items-center justify-between relative z-10">
-        <button onClick={() => router.back()} className="text-gray-400 text-sm">
-          ← 돌아가기
+      <div className="sticky top-0 bg-white/80 backdrop-blur border-b border-orange-100 px-4 py-3 flex items-center z-40">
+        <button
+          onClick={() => router.back()}
+          className="text-gray-500 text-lg mr-3"
+        >
+          ←
         </button>
-        <span className="text-xs text-gray-300">프로필</span>
+        <h1 className="text-lg font-bold text-gray-800">
+          {character.name}의 프로필
+        </h1>
       </div>
 
-      {/* 걸어다니는 캐릭터 */}
-      <WalkingCharacter
-        animalType={character.animalType}
-        characterSize={characterSize}
-        isPixelArt={isPixelArt}
-        emoji={emoji}
-      />
-
-      {/* 캐릭터 정보 */}
-      <div className="flex flex-col items-center justify-center pt-8 pb-2 relative z-10">
-        <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
+      {/* 캐릭터 영역 */}
+      <div className="flex flex-col items-center pt-10 pb-6">
+        <div
+          className="flex items-center justify-center"
+          style={{ fontSize: `${size}px`, lineHeight: 1 }}
+        >
+          {emoji}
+        </div>
+        <h2 className="text-xl font-bold text-gray-800 mt-4">
+          {character.name}
+        </h2>
         <p className="text-sm text-gray-400 mt-1">
           {animalName} · {character.xp.toLocaleString()} XP
         </p>
-        {character.activeTrait && (
-          <div className="mt-3 bg-white/80 backdrop-blur rounded-xl px-4 py-2 border border-orange-100 shadow-sm">
-            <p className="text-sm text-gray-700 font-medium">
-              {getTraitDisplay(character.activeTrait)}
-            </p>
-          </div>
-        )}
         {character.streak > 0 && (
-          <p className="text-xs text-orange-400 mt-2 font-medium">
-            🔥 {character.streak}일 연속 배치중
+          <p className="text-xs text-orange-400 mt-1">
+            🔥 {character.streak}일 연속
           </p>
         )}
-      </div>
+        {character.activeTrait && (
+          <div className="mt-2 bg-white/80 backdrop-blur rounded-xl px-3 py-1.5 border border-orange-100 shadow-sm">
+            <p className="text-sm text-gray-700">{character.activeTrait}</p>
+          </div>
+        )}
 
-      {/* ★ 좋아요 + 밥주기 버튼 */}
-      <div className="flex justify-center gap-3 mt-4 relative z-10">
-        {/* 좋아요 */}
-        <button
-          onClick={handleLike}
-          disabled={liked || likeLoading}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-bold shadow-sm transition-all ${
-            liked
-              ? 'bg-pink-50 text-pink-400 border-2 border-pink-200'
-              : 'bg-white text-gray-600 border-2 border-gray-200 active:scale-95 hover:border-pink-300 hover:text-pink-500'
-          } ${likeAnimation ? 'scale-110' : ''}`}
-        >
-          <span className={`text-xl transition-transform ${likeAnimation ? 'scale-150' : ''}`}>
-            {liked ? '❤️' : '🤍'}
-          </span>
-          <span>{totalLikes.toLocaleString()}</span>
-        </button>
-
-        {/* 밥주기 */}
-        <button
-          onClick={handleFeed}
-          disabled={fed || feedLoading || remainingFeeds <= 0}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-bold shadow-sm transition-all ${
-            fed
-              ? 'bg-amber-50 text-amber-400 border-2 border-amber-200'
-              : remainingFeeds <= 0
-              ? 'bg-gray-50 text-gray-300 border-2 border-gray-100'
-              : 'bg-white text-gray-600 border-2 border-gray-200 active:scale-95 hover:border-amber-300 hover:text-amber-500'
-          } ${feedAnimation ? 'scale-110' : ''}`}
-        >
-          <span className={`text-xl transition-transform ${feedAnimation ? 'scale-150' : ''}`}>
-            {fed ? '🍖' : '🦴'}
-          </span>
-          <span>
-            {fed ? '밥 줬어요' : remainingFeeds <= 0 ? '소진' : `밥주기`}
-          </span>
-          {!fed && remainingFeeds > 0 && (
-            <span className="text-[10px] text-gray-400 font-normal">-5XP</span>
+        {/* 좋아요 & 밥 카운트 */}
+        <div className="flex items-center gap-4 mt-3">
+          {totalLikes > 0 && (
+            <span className="text-sm text-pink-400">❤️ {totalLikes}</span>
           )}
-        </button>
+          {totalFeeds > 0 && (
+            <span className="text-sm text-orange-400">🍖 {totalFeeds}</span>
+          )}
+        </div>
       </div>
 
-      {/* 밥 받은 횟수 */}
-      {totalFeeds > 0 && (
-        <p className="text-center text-[11px] text-amber-400 mt-2">
-          🍖 지금까지 {totalFeeds}번 밥을 받았어요
-        </p>
+      {/* 액션 버튼 */}
+      {session && (
+        <div className="flex justify-center gap-3 px-6 mb-6">
+          {/* 좋아요 버튼 */}
+          <button
+            onClick={handleLike}
+            disabled={liked || likeLoading}
+            className={`flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-bold transition-all ${
+              liked
+                ? 'bg-pink-100 text-pink-400 cursor-not-allowed'
+                : 'bg-white text-pink-500 border-2 border-pink-300 hover:bg-pink-50 active:scale-95 shadow-sm'
+            }`}
+          >
+            {liked ? '❤️' : '🤍'} {liked ? '좋아요 완료' : '좋아요'}
+          </button>
+
+          {/* 밥주기 버튼 */}
+          <button
+            onClick={handleFeed}
+            disabled={fed || feedLoading}
+            className={`flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-bold transition-all ${
+              fed
+                ? 'bg-orange-100 text-orange-400 cursor-not-allowed'
+                : 'bg-orange-400 text-white hover:bg-orange-500 active:scale-95 shadow-md'
+            }`}
+          >
+            🍖 {fed ? '밥 완료' : '밥주기'}
+            {!fed && <span className="text-xs opacity-70">(-5 XP)</span>}
+          </button>
+        </div>
       )}
 
       {/* 오늘의 배치 토글 */}
-      <div className="px-4 mt-6">
+      <div className="px-6">
         <button
           onClick={() => setShowPlacement(!showPlacement)}
-          className={`w-full flex items-center justify-between p-4 rounded-2xl shadow-sm border transition-all ${
-            todayPlacement
-              ? 'bg-white border-gray-100 active:scale-[0.99]'
-              : 'bg-gray-50 border-gray-100'
-          }`}
+          className="w-full bg-white rounded-2xl p-4 shadow-sm border border-orange-100 flex items-center justify-between"
         >
-          <div className="flex items-center gap-3">
-            <span className="text-xl">{todayPlacement ? '⚾' : '😴'}</span>
-            <div className="text-left">
-              <p className="text-sm font-bold text-gray-700">오늘의 배치</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">
-                {todayPlacement
-                  ? `${todayPlacement.game?.awayTeam ? getTeamShort(todayPlacement.game.awayTeam) : '?'} vs ${todayPlacement.game?.homeTeam ? getTeamShort(todayPlacement.game.homeTeam) : '?'}`
-                  : '아직 배치하지 않았어요'
-                }
-              </p>
-            </div>
-          </div>
-          {todayPlacement && (
-            <span className={`text-gray-300 text-sm transition-transform ${showPlacement ? 'rotate-180' : ''}`}>
-              ▼
-            </span>
-          )}
+          <span className="text-sm font-bold text-gray-700">
+            📋 오늘의 배치
+          </span>
+          <span className="text-gray-400 text-lg">
+            {showPlacement ? '▲' : '▼'}
+          </span>
         </button>
 
-        {/* 배치 상세 */}
-        {showPlacement && todayPlacement && todayPlacement.game && (
-          <div className="mt-2 bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <div className="flex justify-end mb-3">
-              {(() => {
-                const badge = getStatusBadge(todayPlacement.status, todayPlacement.isCorrect);
-                return (
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${badge.color}`}>
-                    {badge.text}
-                  </span>
-                );
-              })()}
-            </div>
+        {showPlacement && (
+          <div className="mt-2 bg-white rounded-2xl p-5 shadow-sm border border-orange-100">
+            {todayPlacement ? (
+              <div className="space-y-3">
+                {/* 경기 정보 */}
+                {todayPlacement.game && (
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-3 text-lg font-bold">
+                      <span>
+                        {TEAM_EMOJI[todayPlacement.game.homeTeam] || '⚾'}{' '}
+                        {todayPlacement.game.homeTeam}
+                      </span>
+                      <span className="text-gray-300">vs</span>
+                      <span>
+                        {todayPlacement.game.awayTeam}{' '}
+                        {TEAM_EMOJI[todayPlacement.game.awayTeam] || '⚾'}
+                      </span>
+                    </div>
+                    {todayPlacement.game.scores && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        {todayPlacement.game.scores.home ?? '?'} :{' '}
+                        {todayPlacement.game.scores.away ?? '?'}
+                      </p>
+                    )}
+                  </div>
+                )}
 
-            <div className="flex items-center justify-center gap-4 mb-4">
-              <div className="text-center">
-                <p className="text-2xl mb-1">{TEAM_EMOJI[todayPlacement.game.awayTeam] || '⚾'}</p>
-                <p className="text-xs font-bold text-gray-700">{getTeamShort(todayPlacement.game.awayTeam)}</p>
-                {todayPlacement.game.status === 'finished' && (
-                  <p className="text-lg font-bold text-gray-800 mt-1">{todayPlacement.game.awayScore ?? '-'}</p>
-                )}
-              </div>
-              <div className="text-center px-3">
-                <p className="text-xs text-gray-400 font-medium">VS</p>
-                {todayPlacement.game.startTime && todayPlacement.game.status === 'scheduled' && (
-                  <p className="text-[10px] text-gray-300 mt-1">{todayPlacement.game.startTime}</p>
-                )}
-              </div>
-              <div className="text-center">
-                <p className="text-2xl mb-1">{TEAM_EMOJI[todayPlacement.game.homeTeam] || '⚾'}</p>
-                <p className="text-xs font-bold text-gray-700">{getTeamShort(todayPlacement.game.homeTeam)}</p>
-                {todayPlacement.game.status === 'finished' && (
-                  <p className="text-lg font-bold text-gray-800 mt-1">{todayPlacement.game.homeScore ?? '-'}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-xl p-3 space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-400">배치 팀</span>
-                <span className="text-xs font-bold text-gray-700">
-                  {todayPlacement.team === 'home'
-                    ? todayPlacement.game.homeTeam
-                    : todayPlacement.team === 'away'
-                    ? todayPlacement.game.awayTeam
-                    : todayPlacement.team}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-400">타순</span>
-                <span className="text-xs font-bold text-gray-700">{todayPlacement.battingOrder}번</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-400">승리 예측</span>
-                <span className="text-xs font-bold text-gray-700">
-                  {todayPlacement.predictedWinner}
-                  {todayPlacement.status === 'settled' && (
-                    <span className={`ml-1 ${todayPlacement.isCorrect ? 'text-emerald-500' : 'text-red-400'}`}>
-                      {todayPlacement.isCorrect ? '✓' : '✗'}
+                {/* 배치 상세 */}
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="bg-gray-50 rounded-lg p-2 text-center">
+                    <p className="text-gray-400 text-xs">배치 팀</p>
+                    <p className="font-bold">
+                      {TEAM_EMOJI[todayPlacement.team] || ''}{' '}
+                      {todayPlacement.team}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-2 text-center">
+                    <p className="text-gray-400 text-xs">타순</p>
+                    <p className="font-bold">{todayPlacement.battingOrder}번</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-2 text-center">
+                    <p className="text-gray-400 text-xs">예측 승리</p>
+                    <p className="font-bold">
+                      {TEAM_EMOJI[todayPlacement.predictedWinner] || ''}{' '}
+                      {todayPlacement.predictedWinner}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-2 text-center">
+                    <p className="text-gray-400 text-xs">상태</p>
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${statusColor(todayPlacement.status)}`}
+                    >
+                      {statusLabel(todayPlacement.status)}
                     </span>
-                  )}
-                </span>
-              </div>
-              {todayPlacement.status === 'settled' && (
-                <div className="flex justify-between items-center pt-1 border-t border-gray-200">
-                  <span className="text-xs text-gray-400">획득 XP</span>
-                  <span className="text-xs font-bold text-orange-500">
-                    +{(todayPlacement.xpFromPlayer ?? 0) + (todayPlacement.xpFromPrediction ?? 0)} XP
-                  </span>
+                  </div>
                 </div>
-              )}
-            </div>
+
+                {/* XP (정산 완료 시) */}
+                {todayPlacement.status === 'settled' && (
+                  <div className="bg-orange-50 rounded-lg p-3 text-center">
+                    <p className="text-xs text-gray-400">획득 XP</p>
+                    <p className="text-lg font-bold text-orange-500">
+                      +
+                      {(
+                        (todayPlacement.xpFromPlayer || 0) +
+                        (todayPlacement.xpFromPrediction || 0)
+                      ).toLocaleString()}{' '}
+                      XP
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-center text-gray-400 text-sm py-4">
+                오늘 아직 배치하지 않았어요
+              </p>
+            )}
           </div>
         )}
       </div>
+
+      {/* 향후 확장 영역 */}
+      <div className="px-6 mt-4 space-y-3">
+        <div className="bg-white/50 rounded-2xl p-4 border border-dashed border-orange-200 text-center">
+          <p className="text-sm text-gray-400">📝 방명록 (곧 추가 예정)</p>
+        </div>
+      </div>
+
+      {/* CSS 애니메이션 */}
+      <style jsx global>{`
+        @keyframes feedFly0 {
+          0% {
+            top: 80%;
+            opacity: 1;
+            transform: scale(1);
+          }
+          80% {
+            top: 40%;
+            opacity: 1;
+            transform: scale(1.3);
+          }
+          100% {
+            top: 35%;
+            opacity: 0;
+            transform: scale(0.5);
+          }
+        }
+        @keyframes feedFly1 {
+          0% {
+            top: 85%;
+            opacity: 1;
+            transform: scale(1);
+          }
+          80% {
+            top: 42%;
+            opacity: 1;
+            transform: scale(1.2);
+          }
+          100% {
+            top: 37%;
+            opacity: 0;
+            transform: scale(0.5);
+          }
+        }
+        @keyframes feedFly2 {
+          0% {
+            top: 82%;
+            opacity: 1;
+            transform: scale(1);
+          }
+          80% {
+            top: 38%;
+            opacity: 1;
+            transform: scale(1.4);
+          }
+          100% {
+            top: 33%;
+            opacity: 0;
+            transform: scale(0.5);
+          }
+        }
+        @keyframes nomnom {
+          0% {
+            opacity: 0;
+            transform: translate(-50%, 0) scale(0.5);
+          }
+          30% {
+            opacity: 1;
+            transform: translate(-50%, -20px) scale(1.2);
+          }
+          60% {
+            opacity: 1;
+            transform: translate(-50%, -30px) scale(1);
+          }
+          100% {
+            opacity: 0;
+            transform: translate(-50%, -50px) scale(0.8);
+          }
+        }
+      `}</style>
     </div>
   );
 }
