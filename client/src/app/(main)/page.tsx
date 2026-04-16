@@ -492,7 +492,7 @@ useEffect(() => {
         emoji={emoji}
       />
 
-           {/* ──── 캐릭터 정보 ──── */}
+            {/* ──── 캐릭터 정보 ──── */}
       <div className="flex flex-col items-center justify-center pt-8 pb-4 relative z-10">
         <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
         <p className="text-sm text-gray-400 mt-1">
@@ -504,13 +504,21 @@ useEffect(() => {
           </div>
         )}
 
-        {/* ★ 좋아요 카운트 */}
-        {(character.totalLikes ?? 0) > 0 && (
-          <div className="mt-3 flex items-center gap-1.5 bg-pink-50 rounded-full px-3 py-1">
-            <span className="text-sm">❤️</span>
-            <span className="text-xs font-bold text-pink-400">
-              {(character.totalLikes ?? 0).toLocaleString()}
-            </span>
+        {/* 좋아요 & 밥 카운트 */}
+        {((character.totalLikes ?? 0) > 0 || (character.totalFeeds ?? 0) > 0) && (
+          <div className="mt-3 flex items-center gap-3">
+            {(character.totalLikes ?? 0) > 0 && (
+              <div className="flex items-center gap-1.5 bg-pink-50 rounded-full px-3 py-1">
+                <span className="text-sm">❤️</span>
+                <span className="text-xs font-bold text-pink-400">{(character.totalLikes ?? 0).toLocaleString()}</span>
+              </div>
+            )}
+            {(character.totalFeeds ?? 0) > 0 && (
+              <div className="flex items-center gap-1.5 bg-amber-50 rounded-full px-3 py-1">
+                <span className="text-sm">🍖</span>
+                <span className="text-xs font-bold text-amber-400">{(character.totalFeeds ?? 0).toLocaleString()}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
