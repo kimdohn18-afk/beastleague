@@ -89,7 +89,7 @@ charactersRouter.get('/me/achievements', authenticateUser, async (req: Request, 
     if (!character) return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
 
     const { activeTrait, earned, teamAchievements, earnedCount } =
-      await calculateAchievements(userId, String(character._id));
+      await calculateAchievements(userId, String(character._id), { skipTraitUpdate: true });
 
     const allDefs = getAllAchievements();
     const achievements = allDefs.map(d => ({
