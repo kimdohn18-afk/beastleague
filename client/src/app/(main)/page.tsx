@@ -246,7 +246,8 @@ const [showShareMenu, setShowShareMenu] = useState(false);
 
   const fetchCharacter = async () => {
     try {
-      const res = await fetch(`${apiUrl}/api/characters/me`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${apiUrl}/api/characters/me`, { headers: { Authorization: `Bearer ${token}` },
+                                                               cache: 'no-store',});
       if (!res.ok) {
         if (res.status === 404) { router.push('/character'); return; }
         throw new Error('Failed to fetch character');
