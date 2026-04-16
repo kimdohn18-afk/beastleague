@@ -16,6 +16,7 @@ export interface ICharacter extends Document {
   totalLikes: number;
   totalFeeds: number;
   createdAt: Date;
+  totalFeeds: number;
   updatedAt: Date;
 }
 
