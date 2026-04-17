@@ -17,6 +17,8 @@ export interface ICharacter extends Document {
   totalFeeds: number;
   createdAt: Date;
   updatedAt: Date;
+    displayStage: number | null;   // 유저가 선택한 표시 단계 (null = 최고 단계)
+  displaySize: number | null;    // 유저가 선택한 표시 크기 (null = XP 기준 자동)
 }
 
 const characterSchema = new Schema<ICharacter>(
@@ -35,6 +37,8 @@ const characterSchema = new Schema<ICharacter>(
     tutorialCompleted: { type: Boolean, default: false },
     totalLikes: { type: Number, default: 0 },
     totalFeeds: { type: Number, default: 0 },
+        displayStage: { type: Number, default: null },
+    displaySize: { type: Number, default: null },
   },
   { timestamps: true },
 );
