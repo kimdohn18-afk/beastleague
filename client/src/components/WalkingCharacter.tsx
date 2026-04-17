@@ -416,9 +416,10 @@ const WalkingCharacter = forwardRef<WalkingCharacterHandle, WalkingCharacterProp
           transition: 'transform 0.08s linear',
         }}
       >
-        {isPixelArt ? (
-          <img src={`/characters/${animalType}_${stage}.png`} />
-        alt="character"
+            {isPixelArt ? (
+          <img
+            src={`/characters/${animalType}_${stage}.png`}
+            alt="character"
             draggable={false}
             style={{
               width: '100%',
