@@ -1548,10 +1548,10 @@ export default function MainPage() {
       >
         닫기
       </button>
-    </div>
-  </div>
-)}
-
+    </div>   {/* ← bg-white rounded-2xl (모달 내용 div) 닫기 */}
+  </div>     {/* ← fixed inset-0 (오버레이 div) 닫기 */}
+)}           {/* ← showEvolution && character && ( 닫기 */}
+      
       {/* 단계 목록 */}
       <div className="space-y-2 mb-6">
         {EVOLUTION_STAGES.map(evo => {
