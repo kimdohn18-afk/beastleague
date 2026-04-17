@@ -1,7 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 
+export interface WalkingCharacterHandle {
+  walkTo: (x: number, y: number) => Promise<void>;
+  getPosition: () => { x: number; y: number };
+}
 interface WalkingCharacterProps {
   animalType: string;
   characterSize: number;
@@ -12,12 +16,12 @@ interface WalkingCharacterProps {
 type Direction = 'left' | 'right';
 type State = 'walking' | 'idle' | 'looking' | 'sleepy' | 'stretch' | 'jump';
 
-export default function WalkingCharacter({
+const WalkingCharacter = forwardRef<WalkingCharacterHandle, WalkingCharacterProps>(function WalkingCharacter({
   animalType,
   characterSize,
   isPixelArt,
   emoji,
-}: WalkingCharacterProps) {
+}, ref) {
   const [displaySize, setDisplaySize] = useState(60);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [direction, setDirection] = useState<Direction>('right');
