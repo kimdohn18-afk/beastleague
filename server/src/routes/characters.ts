@@ -351,9 +351,9 @@ router.get('/me/evolution', authenticateUser, async (req: Request, res: Response
 });
 
 /* ───── PUT /me/display — 표시 단계 & 크기 변경 ───── */
-router.put('/me/display', authenticateUser, async (req: AuthRequest, res) => {
+router.put('/me/display', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const character = await Character.findOne({ userId: req.user!._id });
+    const character = await Character.findOne({ userId: req.user!.userId });
     if (!character) return res.status(404).json({ error: '캐릭터 없음' });
 
     const { displayStage, displaySize } = req.body;
