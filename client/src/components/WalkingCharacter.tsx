@@ -11,6 +11,7 @@ interface WalkingCharacterProps {
   characterSize: number;
   isPixelArt: boolean;
   emoji: string;
+   stage?: number;
 }
 
 type Direction = 'left' | 'right';
@@ -21,6 +22,7 @@ const WalkingCharacter = forwardRef<WalkingCharacterHandle, WalkingCharacterProp
   characterSize,
   isPixelArt,
   emoji,
+  stage = 1,
 }, ref) {
   const [displaySize, setDisplaySize] = useState(60);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -415,9 +417,8 @@ const WalkingCharacter = forwardRef<WalkingCharacterHandle, WalkingCharacterProp
         }}
       >
         {isPixelArt ? (
-          <img
-            src={`/characters/${animalType}1.png`}
-            alt="character"
+          <img src={`/characters/${animalType}_${stage}.png`} />
+        alt="character"
             draggable={false}
             style={{
               width: '100%',
