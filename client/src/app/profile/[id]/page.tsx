@@ -101,19 +101,6 @@ export default function PublicProfilePage() {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-
-{(() => {
-  const evo = getEvolutionStage(character.xp);
-  return (
-    <div className="flex items-center gap-2 mb-1 justify-center">
-      <span className="text-lg">{evo.badge}</span>
-      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${evo.bgColor} ${evo.color}`}>
-        {evo.stage}단계 · {evo.name}
-      </span>
-    </div>
-  );
-})()}
-
   
   // 좋아요 상태
   const [liked, setLiked] = useState(false);
