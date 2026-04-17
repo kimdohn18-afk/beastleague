@@ -1022,6 +1022,7 @@ export default function MainPage() {
         characterSize={characterSize}
         isPixelArt={PIXEL_ART_ANIMALS.includes(character.animalType)}
         emoji={emoji}
+        stage={displayStage} 
       />
 
       {/* ──── 캐릭터 정보 ──── */}
