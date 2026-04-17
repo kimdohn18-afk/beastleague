@@ -326,7 +326,7 @@ export default function MainPage() {
     checkSub();
   }, [character, token]);
 
-  const fetchCharacter = async () => {
+  const fetchCharacter = async (retry = 0) => {
     try {
       const res = await fetch(`${apiUrl}/api/characters/me`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -337,7 +337,12 @@ export default function MainPage() {
           router.push('/character');
           return;
         }
-        throw new Error('Failed to fetch character');
+        // 401이면 세션 만료 → 로그인으로
+        if (res.status === 401) {
+          router.push('/login');
+          return;
+        }
+        throw new Error(`Failed: ${res.status}`);
       }
       const data = await res.json();
       setCharacter(data);
@@ -352,8 +357,15 @@ export default function MainPage() {
       }
     } catch (error) {
       console.error('Error fetching character:', error);
+      // 최대 2번 재시도
+      if (retry < 2) {
+        setTimeout(() => fetchCharacter(retry + 1), 1000 * (retry + 1));
+        return;
+      }
     } finally {
-      setLoading(false);
+      if (retry === 0 || retry >= 2) {
+        setLoading(false);
+      }
     }
   };
 
