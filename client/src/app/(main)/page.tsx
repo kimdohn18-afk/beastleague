@@ -941,54 +941,29 @@ export default function MainPage() {
       
       {/* ──── FAB 메뉴 ──── */}
       <div className="fixed bottom-24 right-4 z-50">
-        {menuOpen && (
+               {menuOpen && (
           <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
             <button
               onClick={handlePushSetup}
               disabled={pushStatus === 'loading'}
               className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 border-b border-gray-50 ${pushStatus === 'denied' ? 'text-red-400' : 'text-gray-700'}`}
             >
-              {pushStatus === 'granted'
-                ? '✅ 알림 설정됨'
-                : pushStatus === 'loading'
-                  ? '⏳ 설정 중...'
-                  : pushStatus === 'denied'
-                    ? '🔕 알림 차단됨'
-                    : '🔔 알림 설정'}
+              {pushStatus === 'granted' ? '✅ 알림 설정됨' : pushStatus === 'loading' ? '⏳ 설정 중...' : pushStatus === 'denied' ? '🔕 알림 차단됨' : '🔔 알림 설정'}
             </button>
             <button
-              onClick={() => {
-                setShowHelp(true);
-                setHelpPage(0);
-                setMenuOpen(false);
-              }}
+              onClick={() => { setShowHelp(true); setHelpPage(0); setMenuOpen(false); }}
               className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
             >
               ❓ 도움말
             </button>
             <button
-              onClick={() => {
-                router.push('/achievements');
-                setMenuOpen(false);
-              }}
+              onClick={() => { router.push('/achievements'); setMenuOpen(false); }}
               className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
             >
               🏆 내 업적
             </button>
             <button
-              onClick={() => {
-                setShowShareMenu(true);
-                setMenuOpen(false);
-              }}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
-            >
-
-            {/* ★ 진화 단계 */}
-            <button
-              onClick={() => {
-                setShowEvolution(true);
-                setMenuOpen(false);
-              }}
+              onClick={() => { setShowEvolution(true); setMenuOpen(false); }}
               className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
             >
               {(() => {
@@ -999,32 +974,27 @@ export default function MainPage() {
                   : `💎 신화 · ${character.xp.toLocaleString()} XP`;
               })()}
             </button>
-            {/* ★ 캐릭터 변경 */}
             <button
-              onClick={() => {
-                setShowAnimalChange(true);
-                setSelectedNewAnimal(null);
-                setMenuOpen(false);
-              }}
+              onClick={() => { setShowAnimalChange(true); setSelectedNewAnimal(null); setMenuOpen(false); }}
               className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
             >
               🔄 캐릭터 변경 ({CHANGE_ANIMAL_COST} XP)
             </button>
-
-              
+            <button
+              onClick={() => { setShowShareMenu(true); setMenuOpen(false); }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
               📢 공유하기
             </button>
             <button
-              onClick={() => {
-                setShowDelete(true);
-                setMenuOpen(false);
-              }}
+              onClick={() => { setShowDelete(true); setMenuOpen(false); }}
               className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50"
             >
               🗑️ 캐릭터 삭제
             </button>
           </div>
         )}
+
         <button
           onClick={() => {
             setMenuOpen(!menuOpen);
