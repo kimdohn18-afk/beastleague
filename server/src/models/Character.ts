@@ -38,8 +38,9 @@ const characterSchema = new Schema<ICharacter>(
     tutorialCompleted: { type: Boolean, default: false },
     totalLikes: { type: Number, default: 0 },
     totalFeeds: { type: Number, default: 0 },
-        displayStage: { type: Number, default: null },
+         displayStage: { type: Number, default: null },
     displaySize: { type: Number, default: null },
+    evolvedStage: { type: Number, default: 1 },
   },
   { timestamps: true },
 );
