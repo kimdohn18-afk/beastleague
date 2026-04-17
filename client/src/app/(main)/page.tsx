@@ -27,11 +27,15 @@ interface Character {
   xp: number;
   userId: string;
   activeTrait?: string | null;
-  earnedachievements?: string[];
+  earnedAchievements?: string[];
+  teamAchievements?: Array<{ teamId: string; tier: string; count: number }>;
   totalPlacements?: number;
   tutorialCompleted?: boolean;
   totalLikes?: number;
   totalFeeds?: number;
+  displayStage?: number | null;
+  displaySize?: number | null;
+  evolvedStage?: number;
 }
 
 interface XpOrb {
@@ -217,6 +221,7 @@ export default function MainPage() {
   const [selectedNewAnimal, setSelectedNewAnimal] = useState<string | null>(null);
   const [animalChanging, setAnimalChanging] = useState(false);
   const [evolutionToast, setEvolutionToast] = useState('');
+  const [evolving, setEvolving] = useState(false);
   
   // ★ XP 수확 state
   const [xpOrbs, setXpOrbs] = useState<XpOrb[]>([]);
@@ -841,8 +846,9 @@ export default function MainPage() {
   const emoji = ANIMAL_EMOJI[character.animalType] || '🐾';
   const animalName =
     ANIMAL_NAMES[character.animalType] || character.animalType;
-  const characterSize = (character as any).displaySize ?? getCharacterSize(character.xp);
-    const displayStage = (character as any).displayStage ?? getEvolutionStage(character.xp).stage;
+    const characterSize = character.displaySize ?? getCharacterSize(character.xp);
+  const evolvedStage = character.evolvedStage ?? 1;
+  const displayStage = character.displayStage ?? evolvedStage;
 
   const initialPx = getEmojiPx(0);
   const emojiPx = getEmojiPx(character.xp);
@@ -1104,16 +1110,15 @@ export default function MainPage() {
             >
               🏆 내 업적
             </button>
-            <button
+                        <button
               onClick={() => { setShowEvolution(true); setMenuOpen(false); }}
               className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
             >
               {(() => {
-                const evo = getEvolutionStage(character.xp);
-                const nextEvo = getNextEvolutionStage(character.xp);
-                return nextEvo
-                  ? `${evo.badge} ${evo.stage}단계 · ${character.xp.toLocaleString()} XP`
-                  : `💎 신화 · ${character.xp.toLocaleString()} XP`;
+                const evo = EVOLUTION_STAGES[evolvedStage - 1];
+                return evolvedStage >= 5
+                  ? `💎 신화 · ${character.xp.toLocaleString()} XP`
+                  : `${evo.badge} ${evo.stage}단계 · ${character.xp.toLocaleString()} XP`;
               })()}
             </button>
             <button
@@ -1305,12 +1310,250 @@ export default function MainPage() {
       )}
 
 {/* ──── 진화 단계 모달 ──── */}
-{showEvolution && character && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-    onClick={() => setShowEvolution(false)}>
-    <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6"
-      onClick={e => e.stopPropagation()}>
-      <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">진화 단계</h3>
+{showEvolution && character && (() => {
+  const earnedCount = (character.earnedAchievements || []).length
+    + (character.teamAchievements || []).length;
+  const nextEvo = evolvedStage < 5 ? EVOLUTION_STAGES[evolvedStage] : null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+      onClick={() => setShowEvolution(false)}>
+      <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm max-h-[85vh] overflow-y-auto p-6"
+        onClick={e => e.stopPropagation()}>
+        <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">진화 단계</h3>
+
+        {/* 현재 상태 */}
+        <div className="text-center mb-4 p-3 bg-gray-50 rounded-xl">
+          <span className="text-3xl">{EVOLUTION_STAGES[evolvedStage - 1].badge}</span>
+          <p className="text-sm font-bold text-gray-700 mt-1">
+            {evolvedStage}단계 · {EVOLUTION_STAGES[evolvedStage - 1].name}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            보유 XP: {character.xp.toLocaleString()} · 업적: {earnedCount}개
+          </p>
+        </div>
+
+        {/* 다음 진화 */}
+        {nextEvo ? (
+          <div className={`mb-4 p-4 rounded-xl border-2 ${
+            character.xp >= nextEvo.xpCost && earnedCount >= nextEvo.requiredAchievements
+              ? `${nextEvo.borderColor} ${nextEvo.bgColor}`
+              : 'border-gray-200 bg-gray-50'
+          }`}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-2xl">{nextEvo.badge}</span>
+              <div>
+                <p className={`text-sm font-bold ${nextEvo.color}`}>
+                  {nextEvo.stage}단계 · {nextEvo.name}
+                </p>
+                <p className="text-xs text-gray-400">다음 진화</p>
+              </div>
+            </div>
+
+            {/* 조건 표시 */}
+            <div className="space-y-1.5 mb-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">XP 소모</span>
+                <span className={character.xp >= nextEvo.xpCost ? 'text-emerald-500 font-bold' : 'text-red-400 font-bold'}>
+                  {character.xp >= nextEvo.xpCost ? '✓' : '✗'} {nextEvo.xpCost.toLocaleString()} XP
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full ${character.xp >= nextEvo.xpCost ? 'bg-emerald-400' : 'bg-orange-400'}`}
+                  style={{ width: `${Math.min(100, (character.xp / nextEvo.xpCost) * 100)}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-xs mt-2">
+                <span className="text-gray-500">업적</span>
+                <span className={earnedCount >= nextEvo.requiredAchievements ? 'text-emerald-500 font-bold' : 'text-red-400 font-bold'}>
+                  {earnedCount >= nextEvo.requiredAchievements ? '✓' : '✗'} {earnedCount} / {nextEvo.requiredAchievements}개
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full ${earnedCount >= nextEvo.requiredAchievements ? 'bg-emerald-400' : 'bg-orange-400'}`}
+                  style={{ width: `${Math.min(100, (earnedCount / nextEvo.requiredAchievements) * 100)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* 진화 버튼 */}
+            <button
+              onClick={async () => {
+                if (evolving) return;
+                setEvolving(true);
+                try {
+                  const res = await fetch(`${apiUrl}/api/characters/me/evolve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                  });
+                  const data = await res.json();
+                  if (res.ok) {
+                    setCharacter(prev => prev ? {
+                      ...prev,
+                      xp: data.remainingXp,
+                      evolvedStage: data.evolvedStage,
+                      displayStage: null,
+                    } : prev);
+                    setShowEvolution(false);
+                    setEvolutionToast(`${data.badge} ${data.stageName} 단계로 진화! -${data.xpSpent} XP`);
+                    setTimeout(() => setEvolutionToast(''), 3000);
+                  } else {
+                    setEvolutionToast(data.error || '진화 실패');
+                    setTimeout(() => setEvolutionToast(''), 2500);
+                  }
+                } catch {
+                  setEvolutionToast('네트워크 오류');
+                  setTimeout(() => setEvolutionToast(''), 2500);
+                } finally {
+                  setEvolving(false);
+                }
+              }}
+              disabled={evolving || character.xp < nextEvo.xpCost || earnedCount < nextEvo.requiredAchievements}
+              className={`w-full py-2.5 rounded-xl text-sm font-bold transition ${
+                character.xp >= nextEvo.xpCost && earnedCount >= nextEvo.requiredAchievements
+                  ? 'bg-orange-400 text-white hover:bg-orange-500 active:scale-95 shadow-md'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {evolving ? '진화 중...' : character.xp >= nextEvo.xpCost && earnedCount >= nextEvo.requiredAchievements
+                ? `진화하기 (-${nextEvo.xpCost.toLocaleString()} XP)`
+                : '조건 미달'}
+            </button>
+          </div>
+        ) : (
+          <div className="mb-4 p-4 rounded-xl bg-cyan-50 border-2 border-cyan-300 text-center">
+            <p className="text-cyan-500 font-bold">최고 단계 달성!</p>
+          </div>
+        )}
+
+        {/* 전체 단계 목록 */}
+        <p className="text-xs text-gray-400 mb-2">전체 단계</p>
+        <div className="space-y-1.5 mb-4">
+          {EVOLUTION_STAGES.map(evo => {
+            const isEvolved = evolvedStage >= evo.stage;
+            const isCurrent = evolvedStage === evo.stage;
+            return (
+              <div
+                key={evo.stage}
+                className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm ${
+                  isCurrent
+                    ? `${evo.bgColor} ${evo.borderColor} border-2 font-bold`
+                    : isEvolved
+                      ? 'bg-gray-50 border border-gray-100'
+                      : 'bg-gray-100 opacity-50 border border-gray-100'
+                }`}
+              >
+                <span className="text-xl">{evo.badge}</span>
+                <div className="flex-1">
+                  <span className={isEvolved ? evo.color : 'text-gray-400'}>
+                    {evo.stage}단계 · {evo.name}
+                  </span>
+                  {evo.stage > 1 && (
+                    <p className="text-[10px] text-gray-400">
+                      {evo.xpCost.toLocaleString()} XP + 업적 {evo.requiredAchievements}개
+                    </p>
+                  )}
+                </div>
+                {isCurrent && <span className="text-xs text-orange-500 font-bold">현재</span>}
+                {isEvolved && !isCurrent && <span className="text-xs text-gray-400">완료</span>}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 크기 조절 슬라이더 */}
+        <div className="border-t border-gray-100 pt-4 mb-4">
+          <p className="text-sm font-bold text-gray-700 mb-2">캐릭터 크기</p>
+          <input
+            type="range"
+            min={60}
+            max={getCharacterSize(character.xp)}
+            value={character.displaySize ?? getCharacterSize(character.xp)}
+            onChange={e => {
+              const val = parseInt(e.target.value);
+              setCharacter(prev => prev ? { ...prev, displaySize: val } : prev);
+            }}
+            onMouseUp={async e => {
+              const val = parseInt((e.target as HTMLInputElement).value);
+              const value = val === getCharacterSize(character.xp) ? null : val;
+              try {
+                await fetch(`${apiUrl}/api/characters/me/display`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({ displaySize: value }),
+                });
+              } catch {}
+            }}
+            onTouchEnd={async e => {
+              const val = parseInt((e.target as HTMLInputElement).value);
+              const value = val === getCharacterSize(character.xp) ? null : val;
+              try {
+                await fetch(`${apiUrl}/api/characters/me/display`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({ displaySize: value }),
+                });
+              } catch {}
+            }}
+            className="w-full accent-orange-400"
+          />
+          <div className="flex justify-between text-xs text-gray-400 mt-1">
+            <span>최소 (60px)</span>
+            <span>최대 ({getCharacterSize(character.xp)}px)</span>
+          </div>
+        </div>
+
+        {/* 외형 단계 선택 (진화한 단계 이하만) */}
+        {evolvedStage > 1 && (
+          <div className="border-t border-gray-100 pt-4 mb-4">
+            <p className="text-sm font-bold text-gray-700 mb-2">외형 단계 선택</p>
+            <p className="text-xs text-gray-400 mb-2">진화한 단계 이하로 외형을 변경할 수 있어요</p>
+            <div className="flex gap-2 flex-wrap">
+              {EVOLUTION_STAGES.filter(evo => evo.stage <= evolvedStage).map(evo => {
+                const isSelected = displayStage === evo.stage;
+                return (
+                  <button
+                    key={evo.stage}
+                    onClick={async () => {
+                      const value = evo.stage === evolvedStage ? null : evo.stage;
+                      try {
+                        const res = await fetch(`${apiUrl}/api/characters/me/display`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                          body: JSON.stringify({ displayStage: value }),
+                        });
+                        if (res.ok) {
+                          setCharacter(prev => prev ? { ...prev, displayStage: value } : prev);
+                        }
+                      } catch {}
+                    }}
+                    className={`px-3 py-2 rounded-xl text-sm transition ${
+                      isSelected
+                        ? `${evo.bgColor} ${evo.borderColor} border-2 font-bold`
+                        : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    {evo.badge} {evo.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => setShowEvolution(false)}
+          className="w-full py-2.5 bg-gray-100 rounded-xl text-sm text-gray-500 font-medium"
+        >
+          닫기
+        </button>
+      </div>
+    </div>
+  );
+})()}
 
       {/* 단계 목록 */}
       <div className="space-y-2 mb-6">
