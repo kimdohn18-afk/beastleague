@@ -1061,51 +1061,6 @@ export default function MainPage() {
           {selfFed ? '🍖 오늘 밥 완료!' : '🍖 밥주기 (+3 XP)'}
         </button>
       </div>
-
-                        <button
-              onClick={() => {
-                setShowEvolution(true);
-                setMenuOpen(false);
-              }}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
-            >
-              {(() => {
-                const evo = getEvolutionStage(character.xp);
-                const nextEvo = getNextEvolutionStage(character.xp);
-                return nextEvo
-                  ? `${evo.badge} ${evo.stage}단계 · ${character.xp.toLocaleString()} XP`
-                  : `💎 신화 · ${character.xp.toLocaleString()} XP`;
-              })()}
-            </button>
-            <button
-              onClick={() => {
-                setShowAnimalChange(true);
-                setSelectedNewAnimal(null);
-                setMenuOpen(false);
-              }}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
-            >
-              🔄 캐릭터 변경 ({CHANGE_ANIMAL_COST} XP)
-            </button>
-            <button
-              onClick={() => {
-                setShowShareMenu(true);
-                setMenuOpen(false);
-              }}
-              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
-            >
-              📢 공유하기
-            </button>
-            <button
-              onClick={() => {
-                setShowDelete(true);
-                setMenuOpen(false);
-              }}
-              className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50"
-            >
-              🗑️ 캐릭터 삭제
-            </button>
-
       
       {/* ──── FAB 메뉴 ──── */}
       <div className="fixed bottom-24 right-4 z-50">
@@ -1150,6 +1105,36 @@ export default function MainPage() {
               }}
               className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
             >
+
+            {/* ★ 진화 단계 */}
+            <button
+              onClick={() => {
+                setShowEvolution(true);
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
+              {(() => {
+                const evo = getEvolutionStage(character.xp);
+                const nextEvo = getNextEvolutionStage(character.xp);
+                return nextEvo
+                  ? `${evo.badge} ${evo.stage}단계 · ${character.xp.toLocaleString()} XP`
+                  : `💎 신화 · ${character.xp.toLocaleString()} XP`;
+              })()}
+            </button>
+            {/* ★ 캐릭터 변경 */}
+            <button
+              onClick={() => {
+                setShowAnimalChange(true);
+                setSelectedNewAnimal(null);
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
+              🔄 캐릭터 변경 ({CHANGE_ANIMAL_COST} XP)
+            </button>
+
+              
               📢 공유하기
             </button>
             <button
