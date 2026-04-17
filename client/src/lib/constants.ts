@@ -157,22 +157,27 @@ export interface EvolutionStage {
   stage: number;
   name: string;
   minXp: number;
+  xpCost: number;          // 진화에 소모되는 XP
+  requiredAchievements: number; // 필요 업적 수
   badge: string;
-  color: string;       // tailwind 텍스트 색상
-  borderColor: string; // tailwind 보더 색상
-  bgColor: string;     // tailwind 배경 색상
-  glowColor: string;   // CSS 글로우 색상
+  color: string;
+  borderColor: string;
+  bgColor: string;
+  glowColor: string;
 }
 
 export const EVOLUTION_STAGES: EvolutionStage[] = [
-  { stage: 1, name: '아기',  minXp: 0,     badge: '🥚', color: 'text-gray-500',   borderColor: 'border-gray-200', bgColor: 'bg-gray-50',   glowColor: 'transparent' },
-  { stage: 2, name: '성장',  minXp: 300,   badge: '⭐', color: 'text-yellow-500', borderColor: 'border-yellow-300', bgColor: 'bg-yellow-50', glowColor: '#fbbf24' },
-  { stage: 3, name: '성숙',  minXp: 1000,  badge: '🔥', color: 'text-orange-500', borderColor: 'border-orange-300', bgColor: 'bg-orange-50', glowColor: '#f97316' },
-  { stage: 4, name: '전설',  minXp: 3000,  badge: '👑', color: 'text-purple-500', borderColor: 'border-purple-300', bgColor: 'bg-purple-50', glowColor: '#a855f7' },
-  { stage: 5, name: '신화',  minXp: 10000, badge: '💎', color: 'text-cyan-400',   borderColor: 'border-cyan-300',   bgColor: 'bg-cyan-50',   glowColor: '#22d3ee' },
+  { stage: 1, name: '아기',  minXp: 0,     xpCost: 0,     requiredAchievements: 0,  badge: '🥚', color: 'text-gray-500',   borderColor: 'border-gray-200', bgColor: 'bg-gray-50',   glowColor: 'transparent' },
+  { stage: 2, name: '성장',  minXp: 200,   xpCost: 200,   requiredAchievements: 3,  badge: '⭐', color: 'text-yellow-500', borderColor: 'border-yellow-300', bgColor: 'bg-yellow-50', glowColor: '#fbbf24' },
+  { stage: 3, name: '성숙',  minXp: 500,   xpCost: 500,   requiredAchievements: 8,  badge: '🔥', color: 'text-orange-500', borderColor: 'border-orange-300', bgColor: 'bg-orange-50', glowColor: '#f97316' },
+  { stage: 4, name: '전설',  minXp: 1500,  xpCost: 1500,  requiredAchievements: 15, badge: '👑', color: 'text-purple-500', borderColor: 'border-purple-300', bgColor: 'bg-purple-50', glowColor: '#a855f7' },
+  { stage: 5, name: '신화',  minXp: 5000,  xpCost: 5000,  requiredAchievements: 25, badge: '💎', color: 'text-cyan-400',   borderColor: 'border-cyan-300',   bgColor: 'bg-cyan-50',   glowColor: '#22d3ee' },
 ];
 
 export function getEvolutionStage(xp: number): EvolutionStage {
+  // 주의: 이제 자동 진화가 아니라 수동 진화이므로,
+  // 이 함수는 "XP 기준 최대 가능 단계"를 반환합니다.
+  // 실제 표시 단계는 서버의 evolvedStage 필드를 사용합니다.
   let current = EVOLUTION_STAGES[0];
   for (const stage of EVOLUTION_STAGES) {
     if (xp >= stage.minXp) current = stage;
@@ -184,7 +189,7 @@ export function getNextEvolutionStage(xp: number): EvolutionStage | null {
   for (const stage of EVOLUTION_STAGES) {
     if (xp < stage.minXp) return stage;
   }
-  return null; // 최고 단계
+  return null;
 }
 
 export const CHANGE_ANIMAL_COST = 100; // 캐릭터 변경 비용 (XP)
