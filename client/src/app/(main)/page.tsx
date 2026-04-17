@@ -3,7 +3,7 @@
 import { requestFcmToken } from '@/lib/firebase';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
 import ShareCard from '@/components/ShareCard';
 import { captureCardAsBlob, shareToInstagramStory } from '@/lib/shareUtils';
@@ -19,8 +19,6 @@ import {
   CHANGE_ANIMAL_COST,      
 } from '@/lib/constants';
 import WalkingCharacter, { WalkingCharacterHandle } from '@/components/WalkingCharacter';
-import { useRouter, useSearchParams } from 'next/navigation';
-
 
 interface Character {
   _id: string;
