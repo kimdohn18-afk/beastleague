@@ -841,7 +841,7 @@ export default function MainPage() {
   const emoji = ANIMAL_EMOJI[character.animalType] || '🐾';
   const animalName =
     ANIMAL_NAMES[character.animalType] || character.animalType;
-  const characterSize = getCharacterSize(character.xp);
+  const characterSize = (character as any).displaySize ?? getCharacterSize(character.xp);
   const initialPx = getEmojiPx(0);
   const emojiPx = getEmojiPx(character.xp);
   const card = HELP_CARDS[helpPage];
@@ -1301,54 +1301,107 @@ export default function MainPage() {
         </div>
       )}
 
-{/* ★ 진화 정보 모달 */}
-{showEvolution && (
-  <div
-    className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-    onClick={() => setShowEvolution(false)}
-  >
-    <div
-      className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6"
-      onClick={e => e.stopPropagation()}
-    >
-      <h2 className="text-lg font-bold text-gray-800 mb-5 text-center">🧬 진화 단계</h2>
-      <div className="space-y-3">
-        {EVOLUTION_STAGES.map(stage => {
-          const isCurrent = getEvolutionStage(character.xp).stage === stage.stage;
-          const isReached = character.xp >= stage.minXp;
+{/* ──── 진화 단계 모달 ──── */}
+{showEvolution && character && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+    onClick={() => setShowEvolution(false)}>
+    <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6"
+      onClick={e => e.stopPropagation()}>
+      <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">진화 단계</h3>
+
+      {/* 단계 목록 */}
+      <div className="space-y-2 mb-6">
+        {EVOLUTION_STAGES.map(evo => {
+          const unlocked = character.xp >= evo.minXp;
+          const currentDisplay = (character as any).displayStage ?? getEvolutionStage(character.xp).stage;
+          const isSelected = currentDisplay === evo.stage;
           return (
-            <div
-              key={stage.stage}
-              className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
-                isCurrent
-                  ? `${stage.borderColor} ${stage.bgColor} shadow-md`
-                  : isReached
-                    ? 'border-gray-200 bg-white'
-                    : 'border-gray-100 bg-gray-50 opacity-50'
+            <button
+              key={evo.stage}
+              disabled={!unlocked}
+              onClick={async () => {
+                const value = evo.stage === getEvolutionStage(character.xp).stage ? null : evo.stage;
+                try {
+                  const res = await fetch(`${apiUrl}/api/characters/me/display`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ displayStage: value }),
+                  });
+                  if (res.ok) {
+                    setCharacter(prev => prev ? { ...prev, displayStage: value } as any : prev);
+                    setEvolutionToast(`${evo.badge} ${evo.name} 단계로 변경!`);
+                    setTimeout(() => setEvolutionToast(''), 2000);
+                  }
+                } catch {}
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition ${
+                isSelected
+                  ? `${evo.bgColor} ${evo.borderColor} border-2 font-bold`
+                  : unlocked
+                    ? 'bg-gray-50 hover:bg-gray-100 border border-gray-100'
+                    : 'bg-gray-100 opacity-40 cursor-not-allowed border border-gray-100'
               }`}
             >
-              <span className="text-2xl">{stage.badge}</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm font-bold ${isCurrent ? stage.color : isReached ? 'text-gray-700' : 'text-gray-400'}`}>
-                    {stage.stage}단계 · {stage.name}
-                  </span>
-                  {isCurrent && (
-                    <span className="text-[10px] bg-orange-400 text-white px-1.5 py-0.5 rounded-full font-bold">현재</span>
-                  )}
-                </div>
-                <span className="text-xs text-gray-400">
-                  {stage.minXp === 0 ? '시작' : `${stage.minXp.toLocaleString()} XP 이상`}
-                </span>
+              <span className="text-2xl">{evo.badge}</span>
+              <div className="flex-1 text-left">
+                <p className={`text-sm font-bold ${unlocked ? evo.color : 'text-gray-400'}`}>
+                  {evo.stage}단계 · {evo.name}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {unlocked ? '해금됨' : `${evo.minXp.toLocaleString()} XP 필요`}
+                </p>
               </div>
-              {isReached && <span className="text-green-400 text-lg">✓</span>}
-            </div>
+              {isSelected && <span className="text-orange-500 text-sm font-bold">선택됨</span>}
+            </button>
           );
         })}
       </div>
+
+      {/* 크기 조절 슬라이더 */}
+      <div className="border-t border-gray-100 pt-4">
+        <p className="text-sm font-bold text-gray-700 mb-2">캐릭터 크기</p>
+        <input
+          type="range"
+          min={60}
+          max={getCharacterSize(character.xp)}
+          value={(character as any).displaySize ?? getCharacterSize(character.xp)}
+          onChange={e => {
+            const val = parseInt(e.target.value);
+            setCharacter(prev => prev ? { ...prev, displaySize: val } as any : prev);
+          }}
+          onMouseUp={async e => {
+            const val = parseInt((e.target as HTMLInputElement).value);
+            const value = val === getCharacterSize(character.xp) ? null : val;
+            try {
+              await fetch(`${apiUrl}/api/characters/me/display`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ displaySize: value }),
+              });
+            } catch {}
+          }}
+          onTouchEnd={async e => {
+            const val = parseInt((e.target as HTMLInputElement).value);
+            const value = val === getCharacterSize(character.xp) ? null : val;
+            try {
+              await fetch(`${apiUrl}/api/characters/me/display`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ displaySize: value }),
+              });
+            } catch {}
+          }}
+          className="w-full accent-orange-400"
+        />
+        <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <span>최소 (60px)</span>
+          <span>최대 ({getCharacterSize(character.xp)}px)</span>
+        </div>
+      </div>
+
       <button
         onClick={() => setShowEvolution(false)}
-        className="w-full mt-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200"
+        className="w-full mt-4 py-2.5 bg-gray-100 rounded-xl text-sm text-gray-500 font-medium"
       >
         닫기
       </button>
