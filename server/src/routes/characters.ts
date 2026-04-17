@@ -350,6 +350,81 @@ router.get('/me/evolution', authenticateUser, async (req: Request, res: Response
   }
 });
 
+/* ───── POST /me/evolve — 진화 (XP 소모 + 업적 조건) ───── */
+router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const character = await Character.findOne({ userId });
+    if (!character) {
+      return res.status(404).json({ error: '캐릭터가 없습니다' });
+    }
+
+    const currentStage = character.evolvedStage || 1;
+    if (currentStage >= 5) {
+      return res.status(400).json({ error: '이미 최고 단계입니다' });
+    }
+
+    // 다음 단계 조건
+    const EVOLVE_REQUIREMENTS = [
+      null, // 0 (사용 안함)
+      null, // 1→2 는 index 1
+      { xpCost: 200,  requiredAchievements: 3 },   // 1→2
+      { xpCost: 500,  requiredAchievements: 8 },   // 2→3
+      { xpCost: 1500, requiredAchievements: 15 },  // 3→4
+      { xpCost: 5000, requiredAchievements: 25 },  // 4→5
+    ];
+
+    const nextStage = currentStage + 1;
+    const req_data = EVOLVE_REQUIREMENTS[nextStage];
+    if (!req_data) {
+      return res.status(400).json({ error: '진화 조건을 찾을 수 없습니다' });
+    }
+
+    // 업적 수 계산 (일반 업적 + 팀 업적)
+    const earnedCount = (character.earnedAchievements || []).length 
+      + (character.teamAchievements || []).length;
+
+    // 조건 체크
+    if (character.xp < req_data.xpCost) {
+      return res.status(400).json({ 
+        error: `XP가 부족합니다 (${req_data.xpCost} XP 필요, 현재 ${character.xp} XP)`,
+        code: 'insufficientXp',
+      });
+    }
+
+    if (earnedCount < req_data.requiredAchievements) {
+      return res.status(400).json({ 
+        error: `업적이 부족합니다 (${req_data.requiredAchievements}개 필요, 현재 ${earnedCount}개)`,
+        code: 'insufficientAchievements',
+      });
+    }
+
+    // 진화 실행: XP 차감 + 단계 업그레이드
+    character.xp -= req_data.xpCost;
+    character.evolvedStage = nextStage;
+    
+    // displayStage도 새 단계로 자동 업데이트
+    character.displayStage = null;
+    
+    await character.save();
+
+    const STAGE_NAMES = ['', '아기', '성장', '성숙', '전설', '신화'];
+    const STAGE_BADGES = ['', '🥚', '⭐', '🔥', '👑', '💎'];
+
+    res.json({
+      success: true,
+      evolvedStage: nextStage,
+      stageName: STAGE_NAMES[nextStage],
+      badge: STAGE_BADGES[nextStage],
+      xpSpent: req_data.xpCost,
+      remainingXp: character.xp,
+    });
+  } catch (err) {
+    console.error('Evolve error:', err);
+    res.status(500).json({ error: '진화 실패' });
+  }
+});
+
 /* ───── PUT /me/display — 표시 단계 & 크기 변경 ───── */
 router.put('/me/display', authenticateUser, async (req: Request, res: Response) => {
   try {
@@ -360,7 +435,7 @@ router.put('/me/display', authenticateUser, async (req: Request, res: Response) 
 
     // 진화 단계 검증: null이거나, 해금된 단계 이하만 허용
     if (displayStage !== null && displayStage !== undefined) {
-      const maxStage = getEvolutionStage(character.xp).stage;
+      const maxStage = character.evolvedStage || 1;
       if (displayStage < 1 || displayStage > maxStage) {
         return res.status(400).json({ error: '해금되지 않은 단계입니다' });
       }
