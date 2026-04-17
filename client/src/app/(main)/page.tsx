@@ -35,6 +35,17 @@ interface Character {
   totalFeeds?: number;
 }
 
+interface XpOrb {
+  id: number;
+  label: string;
+  emoji: string;
+  xp: number;
+  x: number;
+  y: number;
+  floatOffset: number;
+  eaten: boolean;
+}
+
 function getCharacterSize(xp: number): number {
   const minPx = 60;
   if (xp <= 0) return minPx;
@@ -207,6 +218,17 @@ export default function MainPage() {
   const [animalChanging, setAnimalChanging] = useState(false);
   const [evolutionToast, setEvolutionToast] = useState('');
   
+  // ★ XP 수확 state
+  const [xpOrbs, setXpOrbs] = useState<XpOrb[]>([]);
+  const [harvestMode, setHarvestMode] = useState(false);
+  const [eatingOrbId, setEatingOrbId] = useState<number | null>(null);
+  const [charPos, setCharPos] = useState<{ x: number; y: number }>({ x: 50, y: 75 });
+  const [harvestToast, setHarvestToast] = useState('');
+  const [totalHarvestXp, setTotalHarvestXp] = useState(0);
+  const [harvestComplete, setHarvestComplete] = useState(false);
+  const orbIdCounter = useRef(0);
+
+  
   const apiUrl =
     process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token =
@@ -371,6 +393,50 @@ export default function MainPage() {
     checkFeedStatus();
   }, [character?._id, token]);
 
+    // ★ 미수확 XP 확인
+  useEffect(() => {
+    if (!character?._id || !token) return;
+
+    const checkUnclaimed = async () => {
+      const harvestKey = `xp-harvested-${character._id}`;
+      const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      if (localStorage.getItem(harvestKey) === today) return;
+
+      try {
+        const res = await fetch(`${apiUrl}/api/characters/me/unclaimed-xp`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.hasUnclaimed || data.orbs.length === 0) return;
+
+        const orbs: XpOrb[] = data.orbs
+          .filter((o: any) => o.xp !== 0)
+          .map((o: any) => ({
+            id: orbIdCounter.current++,
+            label: o.label,
+            emoji: o.emoji,
+            xp: o.xp,
+            x: 15 + Math.random() * 70,
+            y: 20 + Math.random() * 40,
+            floatOffset: Math.random() * Math.PI * 2,
+            eaten: false,
+          }));
+
+        if (orbs.length > 0) {
+          setXpOrbs(orbs);
+          setTotalHarvestXp(data.totalXp);
+          setHarvestMode(true);
+          setCharPos({ x: 50, y: 75 });
+        }
+      } catch (e) {
+        console.error('Unclaimed XP check failed:', e);
+      }
+    };
+
+    checkUnclaimed();
+  }, [character?._id, token]);
+
   // ★ 자기 밥주기 함수 — token 변수 사용
   const handleSelfFeed = async () => {
     if (!character || !token || selfFed) return;
@@ -447,6 +513,48 @@ export default function MainPage() {
     }
   };
 
+    // ★ XP 구슬 클릭
+  const handleOrbClick = useCallback((orbId: number) => {
+    if (eatingOrbId !== null) return;
+
+    const orb = xpOrbs.find(o => o.id === orbId);
+    if (!orb || orb.eaten) return;
+
+    setEatingOrbId(orbId);
+    setCharPos({ x: orb.x, y: orb.y });
+
+    setTimeout(() => {
+      setXpOrbs(prev => {
+        const updated = prev.map(o =>
+          o.id === orbId ? { ...o, eaten: true } : o
+        );
+        const remaining = updated.filter(o => !o.eaten);
+
+        if (remaining.length === 0) {
+          setTimeout(() => {
+            setHarvestComplete(true);
+            if (character) {
+              const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+              localStorage.setItem(`xp-harvested-${character._id}`, today);
+            }
+            setTimeout(() => {
+              setHarvestMode(false);
+              setHarvestComplete(false);
+              setXpOrbs([]);
+            }, 2500);
+          }, 600);
+        }
+
+        return updated;
+      });
+
+      const sign = orb.xp > 0 ? '+' : '';
+      setHarvestToast(`${orb.emoji} ${orb.label} ${sign}${orb.xp} XP`);
+      setTimeout(() => setHarvestToast(''), 1200);
+
+      setEatingOrbId(null);
+    }, 600);
+  }, [eatingOrbId, xpOrbs, character]);
   
   const handleDelete = async () => {
     setDeleting(true);
@@ -685,6 +793,137 @@ export default function MainPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24 relative">
+            {/* ★ XP 수확 모드 */}
+      {harvestMode && (
+        <div className="fixed inset-0 z-[70] bg-gradient-to-b from-indigo-950/80 via-purple-950/70 to-black/80">
+          {/* 배경 별 */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <div
+                key={i}
+                className="absolute w-1 h-1 bg-white rounded-full opacity-40"
+                style={{
+                  left: `${Math.random() * 100}%`,
+                  top: `${Math.random() * 100}%`,
+                  animation: `twinkle ${2 + Math.random() * 3}s ease-in-out infinite`,
+                  animationDelay: `${Math.random() * 2}s`,
+                }}
+              />
+            ))}
+          </div>
+
+          {/* 안내 */}
+          <div className="absolute top-8 left-0 right-0 text-center z-10">
+            <p className="text-white/60 text-xs mb-1">어제의 경기 결과</p>
+            <p className="text-white text-lg font-bold">
+              ✨ XP 구슬을 터치해서 수확하세요!
+            </p>
+            <p className="text-yellow-300 text-sm mt-1 font-medium">
+              총 {totalHarvestXp > 0 ? '+' : ''}{totalHarvestXp} XP
+            </p>
+          </div>
+
+          {/* 수확 토스트 */}
+          {harvestToast && (
+            <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-white/20 backdrop-blur text-white px-5 py-2 rounded-full text-sm font-bold z-20 animate-bounce">
+              {harvestToast}
+            </div>
+          )}
+
+          {/* 수확 완료 */}
+          {harvestComplete && (
+            <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
+              <div className="text-center" style={{ animation: 'harvestComplete 2s ease-out forwards' }}>
+                <div className="text-6xl mb-3">🎉</div>
+                <p className="text-white text-2xl font-black">수확 완료!</p>
+                <p className="text-yellow-300 text-lg font-bold mt-1">
+                  {totalHarvestXp > 0 ? '+' : ''}{totalHarvestXp} XP 획득!
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 구슬들 */}
+          {xpOrbs.map(orb => (
+            <button
+              key={orb.id}
+              onClick={() => handleOrbClick(orb.id)}
+              disabled={orb.eaten || eatingOrbId !== null}
+              className={`absolute transition-all duration-300 ${
+                orb.eaten
+                  ? 'scale-0 opacity-0'
+                  : eatingOrbId === orb.id
+                    ? 'scale-150 opacity-50'
+                    : 'hover:scale-110 active:scale-95'
+              }`}
+              style={{
+                left: `${orb.x}%`,
+                top: `${orb.y}%`,
+                transform: 'translate(-50%, -50%)',
+                animation: orb.eaten ? 'none' : `orbFloat 3s ease-in-out infinite`,
+                animationDelay: `${orb.floatOffset}s`,
+              }}
+            >
+              <div className={`relative flex flex-col items-center ${
+                orb.xp > 0
+                  ? 'drop-shadow-[0_0_12px_rgba(250,204,21,0.8)]'
+                  : 'drop-shadow-[0_0_12px_rgba(239,68,68,0.8)]'
+              }`}>
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center text-2xl ${
+                  orb.xp > 0
+                    ? 'bg-gradient-to-br from-yellow-300 to-amber-500 shadow-[0_0_20px_rgba(250,204,21,0.6)]'
+                    : 'bg-gradient-to-br from-red-400 to-red-600 shadow-[0_0_20px_rgba(239,68,68,0.6)]'
+                }`}>
+                  {orb.emoji}
+                </div>
+                <div className={`mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  orb.xp > 0
+                    ? 'bg-yellow-400/90 text-yellow-900'
+                    : 'bg-red-400/90 text-white'
+                }`}>
+                  {orb.xp > 0 ? '+' : ''}{orb.xp}
+                </div>
+                <span className="text-[9px] text-white/70 mt-0.5 font-medium">
+                  {orb.label}
+                </span>
+              </div>
+            </button>
+          ))}
+
+          {/* 캐릭터 (수확 모드) */}
+          <div
+            className="absolute transition-all duration-500 ease-out z-10"
+            style={{
+              left: `${charPos.x}%`,
+              top: `${charPos.y}%`,
+              transform: 'translate(-50%, -50%)',
+            }}
+          >
+            <div className="text-center">
+              <div
+                className="leading-none"
+                style={{
+                  fontSize: `${Math.min(getEmojiPx(character.xp), 80)}px`,
+                  animation: eatingOrbId !== null ? 'nomnom 0.6s ease-in-out' : 'none',
+                }}
+              >
+                {emoji}
+              </div>
+              <p className="text-white text-xs font-bold mt-1 drop-shadow">
+                {character.name}
+              </p>
+            </div>
+          </div>
+
+          {/* 남은 카운터 */}
+          <div className="absolute bottom-8 left-0 right-0 text-center">
+            <p className="text-white/50 text-xs">
+              남은 구슬: {xpOrbs.filter(o => !o.eaten).length} / {xpOrbs.length}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ★ 밥 먹는 애니메이션 */}
       {feedAnimation && (
         <div className="fixed inset-0 pointer-events-none z-[60]">
@@ -1572,6 +1811,24 @@ export default function MainPage() {
             transform: translate(-50%, -50px) scale(0.8);
           }
         }
+          @keyframes orbFloat {
+    0%, 100% { transform: translate(-50%, -50%) translateY(0px); }
+    50% { transform: translate(-50%, -50%) translateY(-12px); }
+  }
+
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.8; }
+  }
+
+  @keyframes harvestComplete {
+    0% { transform: scale(0.5); opacity: 0; }
+    30% { transform: scale(1.2); opacity: 1; }
+    50% { transform: scale(1); }
+    80% { opacity: 1; }
+    100% { opacity: 0; transform: scale(1) translateY(-20px); }
+  }
+
       `}</style>
     </div>
   );
