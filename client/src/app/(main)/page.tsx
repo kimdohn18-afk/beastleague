@@ -1010,53 +1010,12 @@ export default function MainPage() {
 
       {/* ──── 캐릭터 정보 ──── */}
       <div className="flex flex-col items-center justify-center pt-8 pb-4 relative z-10">
-        {/* 진화 단계 표시 */}
-{(() => {
-  const evo = getEvolutionStage(character.xp);
-  const nextEvo = getNextEvolutionStage(character.xp);
-  return (
-    <>
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-lg">{evo.badge}</span>
-        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${evo.bgColor} ${evo.color}`}>
-          {evo.stage}단계 · {evo.name}
-        </span>
-      </div>
-      <h1 className="text-2xl font-bold text-gray-800">
-        {character.name}
-      </h1>
-      <p className="text-sm text-gray-400 mt-1">
-        {animalName} · {character.xp.toLocaleString()} XP
-      </p>
-      {/* 진화 진행 바 */}
-      {nextEvo && (
-        <button
-          onClick={() => setShowEvolution(true)}
-          className="mt-2 w-full max-w-[220px]"
-        >
-          <div className="flex items-center justify-between text-[10px] text-gray-400 mb-0.5">
-            <span>다음: {nextEvo.badge} {nextEvo.name}</span>
-            <span>{nextEvo.minXp - character.xp} XP 남음</span>
-          </div>
-          <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${Math.min(100, ((character.xp - (EVOLUTION_STAGES[evo.stage - 1]?.minXp ?? 0)) / (nextEvo.minXp - (EVOLUTION_STAGES[evo.stage - 1]?.minXp ?? 0))) * 100)}%`,
-                backgroundColor: evo.glowColor === 'transparent' ? '#9ca3af' : evo.glowColor,
-              }}
-            />
-          </div>
-        </button>
-      )}
-      {!nextEvo && (
-        <div className="mt-2 flex items-center gap-1">
-          <span className="text-xs font-bold text-cyan-400">💎 최고 단계 달성!</span>
-        </div>
-      )}
-    </>
-  );
-})()}
+                <h1 className="text-2xl font-bold text-gray-800">
+          {character.name}
+        </h1>
+        <p className="text-sm text-gray-400 mt-1">
+          {animalName} · {character.xp.toLocaleString()} XP
+        </p>
 
         {character.activeTrait && (
           <div className="mt-3 bg-white/80 backdrop-blur rounded-xl px-4 py-2 border border-orange-100 shadow-sm">
@@ -1103,16 +1062,49 @@ export default function MainPage() {
         </button>
       </div>
 
-{/* ★ 캐릭터 변경 버튼 */}
-<button
-  onClick={() => {
-    setShowAnimalChange(true);
-    setSelectedNewAnimal(null);
-  }}
-  className="mt-2 px-5 py-2 rounded-full text-xs font-medium bg-indigo-50 text-indigo-500 hover:bg-indigo-100 active:scale-95 transition-all border border-indigo-100"
->
-  🔄 캐릭터 변경 ({CHANGE_ANIMAL_COST} XP)
-</button>
+                        <button
+              onClick={() => {
+                setShowEvolution(true);
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
+              {(() => {
+                const evo = getEvolutionStage(character.xp);
+                const nextEvo = getNextEvolutionStage(character.xp);
+                return nextEvo
+                  ? `${evo.badge} ${evo.stage}단계 · ${character.xp.toLocaleString()} XP`
+                  : `💎 신화 · ${character.xp.toLocaleString()} XP`;
+              })()}
+            </button>
+            <button
+              onClick={() => {
+                setShowAnimalChange(true);
+                setSelectedNewAnimal(null);
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
+              🔄 캐릭터 변경 ({CHANGE_ANIMAL_COST} XP)
+            </button>
+            <button
+              onClick={() => {
+                setShowShareMenu(true);
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50"
+            >
+              📢 공유하기
+            </button>
+            <button
+              onClick={() => {
+                setShowDelete(true);
+                setMenuOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50"
+            >
+              🗑️ 캐릭터 삭제
+            </button>
 
       
       {/* ──── FAB 메뉴 ──── */}
