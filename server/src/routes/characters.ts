@@ -223,6 +223,75 @@ router.post('/me/share-reward', authenticateUser, async (req: Request, res: Resp
   }
 });
 
+/* ───── GET /me/unclaimed-xp — 미수확 XP (어제 정산 결과) ───── */
+router.get('/me/unclaimed-xp', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const character = await Character.findOne({ userId });
+    if (!character) {
+      return res.status(404).json({ error: '캐릭터가 없습니다' });
+    }
+
+    // 어제 날짜 (KST)
+    const now = new Date();
+    const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    kst.setDate(kst.getDate() - 1);
+    const yesterday = kst.toISOString().split('T')[0];
+
+    // 어제 정산 완료된 배치를 찾음
+    const placement = await Placement.findOne({
+      userId,
+      date: yesterday,
+      status: 'settled',
+    }).lean();
+
+    if (!placement) {
+      return res.json({ hasUnclaimed: false, orbs: [], totalXp: 0, date: yesterday });
+    }
+
+    const totalXp = (placement.xpFromPlayer || 0) + (placement.xpFromPrediction || 0);
+    const breakdown = placement.xpBreakdown;
+
+    // XP 내역을 개별 "구슬"로 변환
+    const orbs: Array<{ label: string; emoji: string; xp: number }> = [];
+
+    if (breakdown) {
+      if (breakdown.hits > 0)           orbs.push({ label: '안타', emoji: '⚾', xp: breakdown.hits });
+      if (breakdown.double > 0)         orbs.push({ label: '2루타', emoji: '💫', xp: breakdown.double });
+      if (breakdown.triple > 0)         orbs.push({ label: '3루타', emoji: '🌟', xp: breakdown.triple });
+      if (breakdown.homeRun > 0)        orbs.push({ label: '홈런', emoji: '💥', xp: breakdown.homeRun });
+      if (breakdown.rbi > 0)            orbs.push({ label: '타점', emoji: '🎯', xp: breakdown.rbi });
+      if (breakdown.runs > 0)           orbs.push({ label: '득점', emoji: '🏃', xp: breakdown.runs });
+      if (breakdown.stolenBase > 0)     orbs.push({ label: '도루', emoji: '💨', xp: breakdown.stolenBase });
+      if (breakdown.walkOff > 0)        orbs.push({ label: '끝내기', emoji: '🎬', xp: breakdown.walkOff });
+      if (breakdown.teamResult > 0)     orbs.push({ label: '팀 승리', emoji: '🏆', xp: breakdown.teamResult });
+      if (breakdown.noHitPenalty < 0)    orbs.push({ label: '무안타', emoji: '😢', xp: breakdown.noHitPenalty });
+      if (breakdown.caughtStealing < 0)  orbs.push({ label: '도루실패', emoji: '⚠️', xp: breakdown.caughtStealing });
+    }
+
+    // 예측 적중 보너스
+    const predXp = placement.xpFromPrediction || 0;
+    if (predXp > 0) orbs.push({ label: '예측 적중', emoji: '🔮', xp: predXp });
+    if (predXp < 0) orbs.push({ label: '예측 실패', emoji: '❌', xp: predXp });
+
+    // breakdown이 없으면 총 XP를 하나의 구슬로
+    if (orbs.length === 0 && totalXp !== 0) {
+      orbs.push({ label: 'XP', emoji: '✨', xp: totalXp });
+    }
+
+    res.json({
+      hasUnclaimed: true,
+      orbs,
+      totalXp,
+      date: yesterday,
+      gameId: placement.gameId,
+    });
+  } catch (err) {
+    console.error('Unclaimed XP error:', err);
+    res.status(500).json({ error: '미수확 XP 조회 실패' });
+  }
+});
+
 /* ───── GET /me/evolution — 내 진화 정보 ───── */
 router.get('/me/evolution', authenticateUser, async (req: Request, res: Response) => {
   try {
