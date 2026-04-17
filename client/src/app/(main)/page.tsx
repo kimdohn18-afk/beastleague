@@ -19,6 +19,7 @@ import {
   CHANGE_ANIMAL_COST,      
 } from '@/lib/constants';
 import WalkingCharacter, { WalkingCharacterHandle } from '@/components/WalkingCharacter';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 
 interface Character {
@@ -190,6 +191,7 @@ function usePinchZoom() {
 export default function MainPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [character, setCharacter] = useState<Character | null>(null);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -395,6 +397,43 @@ export default function MainPage() {
     checkFeedStatus();
   }, [character?._id, token]);
 
+  // ★ 연습배치 직후 구슬 연출
+  useEffect(() => {
+    const tutorialXp = searchParams.get('tutorialXp');
+    if (!tutorialXp || !character?._id) return;
+
+    // 이미 처리했으면 스킵
+    const tutorialHarvestKey = `tutorial-harvest-${character._id}`;
+    if (sessionStorage.getItem(tutorialHarvestKey)) return;
+
+    const xpAmount = parseInt(tutorialXp, 10);
+    if (isNaN(xpAmount) || xpAmount <= 0) return;
+
+    // 구슬 생성
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const orb: XpOrb = {
+      id: orbIdCounter.current++,
+      label: '연습배치 보너스',
+      emoji: '⚾',
+      xp: xpAmount,
+      x: 40 + Math.random() * (vw - 80),
+      y: 120 + Math.random() * (vh - 300),
+      floatOffset: 0,
+      eaten: false,
+    };
+
+    setXpOrbs([orb]);
+    setTotalHarvestXp(xpAmount);
+    setHarvestMode(true);
+
+    // 중복 방지
+    sessionStorage.setItem(tutorialHarvestKey, 'true');
+
+    // URL에서 쿼리 파라미터 제거 (뒤로가기 시 재실행 방지)
+    window.history.replaceState({}, '', '/');
+  }, [searchParams, character?._id]);
+  
     // ★ 미수확 XP 확인
   useEffect(() => {
     if (!character?._id || !token) return;
