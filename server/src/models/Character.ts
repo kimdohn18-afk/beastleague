@@ -17,8 +17,9 @@ export interface ICharacter extends Document {
   totalFeeds: number;
   createdAt: Date;
   updatedAt: Date;
-    displayStage: number | null;   // 유저가 선택한 표시 단계 (null = 최고 단계)
-  displaySize: number | null;    // 유저가 선택한 표시 크기 (null = XP 기준 자동)
+  displayStage: number | null;
+  displaySize: number | null;
+  evolvedStage: number;  // 실제 진화 완료한 단계 (1~5, 기본 1)
 }
 
 const characterSchema = new Schema<ICharacter>(
