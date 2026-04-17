@@ -842,6 +842,8 @@ export default function MainPage() {
   const animalName =
     ANIMAL_NAMES[character.animalType] || character.animalType;
   const characterSize = (character as any).displaySize ?? getCharacterSize(character.xp);
+    const displayStage = (character as any).displayStage ?? getEvolutionStage(character.xp).stage;
+
   const initialPx = getEmojiPx(0);
   const emojiPx = getEmojiPx(character.xp);
   const card = HELP_CARDS[helpPage];
