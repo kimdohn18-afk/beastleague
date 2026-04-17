@@ -376,7 +376,19 @@ export default function PublicProfilePage() {
         emoji={emoji}
       />
 
-      <div className="flex flex-col items-center pt-10 pb-6">
+       <div className="flex flex-col items-center pt-10 pb-6">
+        {/* ★ 진화 뱃지 */}
+        {(() => {
+          const evo = getEvolutionStage(character.xp);
+          return (
+            <div className="flex items-center gap-2 mb-1 justify-center">
+              <span className="text-lg">{evo.badge}</span>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${evo.bgColor} ${evo.color}`}>
+                {evo.stage}단계 · {evo.name}
+              </span>
+            </div>
+          );
+        })()}
         <h2 className="text-xl font-bold text-gray-800 mt-4">
           {character.name}
         </h2>
