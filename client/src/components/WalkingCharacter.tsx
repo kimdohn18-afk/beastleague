@@ -29,6 +29,30 @@ const WalkingCharacter = forwardRef<WalkingCharacterHandle, WalkingCharacterProp
   const [transform, setTransform] = useState('');
   const [mounted, setMounted] = useState(false);
 
+  // ★ 외부에서 명령을 내릴 수 있는 핸들
+  const walkResolveRef = useRef<(() => void) | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    getPosition: () => ({ ...posRef.current }),
+    walkTo: (x: number, y: number) => {
+      return new Promise<void>((resolve) => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        const bounds = getBounds();
+        const half = displaySizeRef.current / 2;
+        targetRef.current = {
+          x: Math.max(bounds.minX, Math.min(bounds.maxX, x - half)),
+          y: Math.max(bounds.minY, Math.min(bounds.maxY, y - half)),
+        };
+        dirRef.current = targetRef.current.x >= posRef.current.x ? 'right' : 'left';
+        setDirection(dirRef.current);
+        stateRef.current = 'walking';
+        setState('walking');
+        walkResolveRef.current = resolve;
+      });
+    },
+  }), [getBounds]);
+
+  
   const stateRef = useRef<State>('idle');
   const dirRef = useRef<Direction>('right');
   const posRef = useRef({ x: 0, y: 0 });
@@ -190,9 +214,13 @@ const WalkingCharacter = forwardRef<WalkingCharacterHandle, WalkingCharacterProp
           posRef.current.x = Math.max(bounds.minX, Math.min(bounds.maxX, posRef.current.x));
           posRef.current.y = Math.max(bounds.minY, Math.min(bounds.maxY, posRef.current.y));
           setPos({ ...posRef.current });
-        } else {
+            } else {
           stateRef.current = 'idle';
           setState('idle');
+          if (walkResolveRef.current) {
+            walkResolveRef.current();
+            walkResolveRef.current = null;
+          }
         }
       }
 
@@ -479,3 +507,4 @@ const WalkingCharacter = forwardRef<WalkingCharacterHandle, WalkingCharacterProp
     </div>
   );
 }
+export default WalkingCharacter;
