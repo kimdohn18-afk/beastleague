@@ -25,6 +25,29 @@ function todayKST(): string {
   return kst.toISOString().split('T')[0];
 }
 
+function getCharacterSize(xp: number): number {
+  const minPx = 60;
+  if (xp <= 0) return minPx;
+  const size = minPx + Math.pow(xp, 0.55) * 7.5;
+  return Math.max(minPx, Math.round(size));
+}
+
+function getEvolutionStage(xp: number) {
+  const stages = [
+    { stage: 1, minXp: 0 },
+    { stage: 2, minXp: 300 },
+    { stage: 3, minXp: 1000 },
+    { stage: 4, minXp: 3000 },
+    { stage: 5, minXp: 10000 },
+  ];
+  let current = stages[0];
+  for (const s of stages) {
+    if (xp >= s.minXp) current = s;
+  }
+  return current;
+}
+
+
 /* ───── POST / — 캐릭터 생성 ───── */
 router.post('/', authenticateUser, async (req: Request, res: Response) => {
   try {
@@ -324,6 +347,46 @@ router.get('/me/evolution', authenticateUser, async (req: Request, res: Response
   } catch (err) {
     console.error('Evolution info error:', err);
     res.status(500).json({ error: '진화 정보 조회 실패' });
+  }
+});
+
+/* ───── PUT /me/display — 표시 단계 & 크기 변경 ───── */
+router.put('/me/display', authenticateUser, async (req: AuthRequest, res) => {
+  try {
+    const character = await Character.findOne({ userId: req.user!._id });
+    if (!character) return res.status(404).json({ error: '캐릭터 없음' });
+
+    const { displayStage, displaySize } = req.body;
+
+    // 진화 단계 검증: null이거나, 해금된 단계 이하만 허용
+    if (displayStage !== null && displayStage !== undefined) {
+      const maxStage = getEvolutionStage(character.xp).stage;
+      if (displayStage < 1 || displayStage > maxStage) {
+        return res.status(400).json({ error: '해금되지 않은 단계입니다' });
+      }
+      character.displayStage = displayStage;
+    } else if (displayStage === null) {
+      character.displayStage = null;
+    }
+
+    // 크기 검증: null이거나, 현재 XP 기준 크기 이하만 허용
+    if (displaySize !== null && displaySize !== undefined) {
+      const maxSize = getCharacterSize(character.xp);
+      if (displaySize < 60 || displaySize > maxSize) {
+        return res.status(400).json({ error: '현재 크기보다 클 수 없습니다' });
+      }
+      character.displaySize = displaySize;
+    } else if (displaySize === null) {
+      character.displaySize = null;
+    }
+
+    await character.save();
+    res.json({
+      displayStage: character.displayStage,
+      displaySize: character.displaySize,
+    });
+  } catch (e) {
+    res.status(500).json({ error: '서버 오류' });
   }
 });
 
