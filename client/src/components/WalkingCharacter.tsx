@@ -505,7 +505,7 @@ const WalkingCharacter = forwardRef<WalkingCharacterHandle, WalkingCharacterProp
           50% { opacity: 1; transform: translateY(-10px) scale(1.1); }
         }
       `}</style>
-    </div>
+     </div>
   );
-}
+});
 export default WalkingCharacter;
