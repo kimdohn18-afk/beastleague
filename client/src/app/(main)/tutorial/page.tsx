@@ -155,7 +155,7 @@ export default function TutorialPage() {
       } else {
         const err = await res.json();
         if (err.error === '이미 튜토리얼을 완료했습니다') {
-          router.push('/');
+          router.push('/?tutorialXp=15');
           return;
         }
       }
