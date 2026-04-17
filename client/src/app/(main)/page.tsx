@@ -854,16 +854,14 @@ export default function MainPage() {
   const emojiPx = getEmojiPx(character.xp);
   const card = HELP_CARDS[helpPage];
 
-   const earnedCount = (character.earnedAchievements || []).length
-    + (character.teamAchievements || []).length;
+   const earnedCount = (character.earnedAchievements || []).length + (character.teamAchievements || []).length;
   const nextEvo = evolvedStage < 5 ? EVOLUTION_STAGES[evolvedStage] : null;
 
-  return (<div className="min-h-screen bg-gray-50 pb-24 relative">
-            {/* ★ XP 수확 모드 — 메인 화면 위에 구슬만 띄움 */}
+  return (
+    <div className="min-h-screen bg-gray-50 pb-24 relative">
+      {/* XP 수확 모드 */}
       {harvestMode && (
-        <>
-       
-          {/* 안내 텍스트 */}
+        <React.Fragment>
           <div className="fixed top-16 left-0 right-0 text-center z-[35] pointer-events-none">
             <p className="text-gray-500 text-xs mb-0.5">어제의 경기 결과</p>
             <p className="text-gray-800 text-base font-bold">
@@ -873,7 +871,7 @@ export default function MainPage() {
               총 {totalHarvestXp > 0 ? '+' : ''}{totalHarvestXp} XP
             </p>
           </div>
-
+          
           {/* 수확 토스트 */}
           {harvestToast && (
             <div className="fixed top-32 left-1/2 -translate-x-1/2 bg-black/70 text-white px-5 py-2 rounded-full text-sm font-bold z-[35] animate-bounce">
