@@ -839,9 +839,7 @@ export default function MainPage() {
             {/* ★ XP 수확 모드 — 메인 화면 위에 구슬만 띄움 */}
       {harvestMode && (
         <>
-          {/* 반투명 배경 */}
-          <div className="fixed inset-0 z-[25] bg-black/20 pointer-events-none" />
-
+       
           {/* 안내 텍스트 */}
           <div className="fixed top-16 left-0 right-0 text-center z-[35] pointer-events-none">
             <p className="text-gray-500 text-xs mb-0.5">어제의 경기 결과</p>
