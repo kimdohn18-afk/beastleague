@@ -374,8 +374,8 @@ export default function TutorialPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => router.push('/')}
+               <button
+          onClick={() => router.push('/?tutorialXp=15')}
           className="w-full bg-orange-400 text-white py-3.5 rounded-2xl font-bold shadow-md transition active:scale-[0.98]"
         >
           시작하기
