@@ -858,8 +858,7 @@ export default function MainPage() {
     + (character.teamAchievements || []).length;
   const nextEvo = evolvedStage < 5 ? EVOLUTION_STAGES[evolvedStage] : null;
 
-  return (
-    <div className="min-h-screen bg-gray-50 pb-24 relative">
+  return (<div className="min-h-screen bg-gray-50 pb-24 relative">
             {/* ★ XP 수확 모드 — 메인 화면 위에 구슬만 띄움 */}
       {harvestMode && (
         <>
