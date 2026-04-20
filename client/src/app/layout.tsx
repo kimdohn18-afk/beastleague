@@ -4,7 +4,7 @@ import Providers from './providers';
 
 export const metadata: Metadata = {
   title: '비스트리그',
-  description: 'KBO 경기 결과로 동물 캐릭터가 성장하는 육성형 웹앱',
+  description: '야구 경기 결과를 예측하고 동물 캐릭터를 키우는 육성형 웹앱',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
