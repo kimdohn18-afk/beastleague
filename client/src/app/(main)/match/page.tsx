@@ -2,11 +2,7 @@
 
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
-import { requestFcmToken } from '@/lib/firebase';
-import { sharePlacement } from '@/lib/kakaoShare';
-import { ANIMAL_EMOJI, ANIMAL_NAMES, TRAIT_DISPLAY } from '@/lib/constants';
-
-// ──────────── 인터페이스 ────────────
+import { getDisplayName } from '@beastleague/shared';
 
 interface Game {
   gameId: string;
@@ -19,21 +15,22 @@ interface Game {
   awayScore?: number;
 }
 
-interface Selection {
+interface Prediction {
+  _id: string;
   gameId: string;
   predictedWinner: string;
-  selectedTeam: string;
-  selectedOrder: number;
+  scoreDiffRange?: string;
+  xpBetOnDiff?: number;
+  totalRunsRange?: string;
+  xpBetOnTotal?: number;
+  status: string;
+  result?: any;
+  game?: Game;
 }
 
 interface CharacterInfo {
-  name: string;
-  animalType: string;
   xp: number;
-  activeTrait?: string | null;
 }
-
-// ──────────── 유틸 ────────────
 
 function isGameStartedByTime(game: Game): boolean {
   if (game.status === 'finished' || game.status === 'live') return true;
@@ -52,269 +49,143 @@ function isGameStartedByTime(game: Game): boolean {
   return false;
 }
 
-// ──────────── 컴포넌트 ────────────
-
 export default function MatchPage() {
   const { data: session } = useSession();
   const [games, setGames] = useState<Game[]>([]);
+  const [predictions, setPredictions] = useState<Prediction[]>([]);
+  const [character, setCharacter] = useState<CharacterInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedGame, setExpandedGame] = useState<string | null>(null);
-  const [selection, setSelection] = useState<Selection | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [placementLocked, setPlacementLocked] = useState(false);
-  const [showPushPrompt, setShowPushPrompt] = useState(false);
-  const [pushLoading, setPushLoading] = useState(false);
-  const [showSharePrompt, setShowSharePrompt] = useState(false);
-  const [characterInfo, setCharacterInfo] = useState<CharacterInfo | null>(null);
+
+  // 선택 상태 (경기별)
+  const [selections, setSelections] = useState<Record<string, {
+    predictedWinner: string;
+    scoreDiffRange?: string;
+    xpBetOnDiff?: number;
+    totalRunsRange?: string;
+    xpBetOnTotal?: number;
+  }>>({});
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken;
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  const todayKST = () => {
-    const now = new Date(Date.now() + 9 * 3600 * 1000);
-    return now.toISOString().slice(0, 10);
-  };
-
-  // ──────────── 데이터 로드 ────────────
+  const todayKST = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
   useEffect(() => {
     if (!token) return;
-    fetchGames();
-    fetchMyPlacement();
-    fetchCharacterInfo();
+    fetchAll();
   }, [token]);
 
-  async function fetchGames() {
+  async function fetchAll() {
     setLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/api/games?date=${todayKST()}`, { headers });
-      if (res.ok) setGames(await res.json());
+      const [gamesRes, predsRes, charRes] = await Promise.all([
+        fetch(`${apiUrl}/api/games?date=${todayKST()}`, { headers }),
+        fetch(`${apiUrl}/api/predictions/today`, { headers }),
+        fetch(`${apiUrl}/api/characters/me`, { headers }),
+      ]);
+      if (gamesRes.ok) setGames(await gamesRes.json());
+      if (predsRes.ok) {
+        const preds = await predsRes.json();
+        setPredictions(preds);
+        // 기존 예측을 selections에 반영
+        const sel: typeof selections = {};
+        for (const p of preds) {
+          sel[p.gameId] = {
+            predictedWinner: p.predictedWinner,
+            scoreDiffRange: p.scoreDiffRange,
+            xpBetOnDiff: p.xpBetOnDiff,
+            totalRunsRange: p.totalRunsRange,
+            xpBetOnTotal: p.xpBetOnTotal,
+          };
+        }
+        setSelections(sel);
+      }
+      if (charRes.ok) {
+        const c = await charRes.json();
+        setCharacter({ xp: c.xp });
+      }
     } catch (e) { console.error(e); }
     setLoading(false);
   }
 
-  async function fetchMyPlacement() {
-    try {
-      const res = await fetch(`${apiUrl}/api/placements/today`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        if (data) {
-          setSelection({
-            gameId: data.gameId,
-            predictedWinner: data.predictedWinner || '',
-            selectedTeam: data.team,
-            selectedOrder: data.battingOrder || 0,
-          });
-          if (data.status === 'settled') setPlacementLocked(true);
-        }
-      }
-    } catch (e) { console.error(e); }
+  function getPrediction(gameId: string): Prediction | undefined {
+    return predictions.find(p => p.gameId === gameId);
   }
 
-  async function fetchCharacterInfo() {
-    try {
-      const res = await fetch(`${apiUrl}/api/characters/me`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        setCharacterInfo({
-          name: data.name,
-          animalType: data.animalType,
-          xp: data.xp,
-          activeTrait: data.activeTrait,
-        });
-      }
-    } catch (e) { console.error(e); }
+  // 현재 총 베팅 XP (active 상태만)
+  function getTotalBettedXp(): number {
+    return predictions
+      .filter(p => p.status === 'active')
+      .reduce((sum, p) => sum + (p.xpBetOnDiff || 0) + (p.xpBetOnTotal || 0), 0);
   }
 
-  // ──────────── 경기 시작 감지 ────────────
-
-  useEffect(() => {
-    if (selection && games.length > 0) {
-      const placedGame = games.find(g => g.gameId === selection.gameId);
-      if (placedGame && isGameStartedByTime(placedGame)) {
-        setPlacementLocked(true);
-      }
-    }
-  }, [selection, games]);
-
-  // ──────────── 선택 핸들러 ────────────
-
-  function handleExpand(gameId: string) {
-    if (placementLocked) return;
-    setExpandedGame(expandedGame === gameId ? null : gameId);
+  function getAvailableXp(): number {
+    return (character?.xp || 0) - getTotalBettedXp();
   }
 
-  function handlePrediction(gameId: string, team: string) {
-    if (placementLocked) return;
-    setSelection((prev) => ({
-      gameId,
-      predictedWinner: team,
-      selectedTeam: prev?.gameId === gameId ? prev.selectedTeam : '',
-      selectedOrder: prev?.gameId === gameId ? prev.selectedOrder : 0,
-    }));
-  }
-
-  function handleBattingOrder(gameId: string, team: string, order: number) {
-    if (placementLocked) return;
-    setSelection((prev) => ({
-      gameId,
-      predictedWinner: prev?.gameId === gameId ? prev.predictedWinner : '',
-      selectedTeam: team,
-      selectedOrder: order,
-    }));
-  }
-
-  // ──────────── 푸시 알림 ────────────
-
-  async function shouldShowPushPrompt(): Promise<boolean> {
-    if (typeof window === 'undefined' || !('Notification' in window)) return false;
-    if (Notification.permission === 'denied') return false;
-    const dismissedDate = localStorage.getItem('push-prompt-dismissed');
-    if (dismissedDate === todayKST()) return false;
-    if (Notification.permission === 'default') return true;
-    try {
-      const res = await fetch(`${apiUrl}/api/push/status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return !data.subscribed;
-      }
-    } catch {}
-    return false;
-  }
-
-  // ──────────── 공유 ────────────
-
-  async function handleShareAccept() {
-    if (selection && characterInfo) {
-      const game = games.find(g => g.gameId === selection.gameId);
-      if (game) {
-        const traitInfo = characterInfo.activeTrait
-          ? TRAIT_DISPLAY[characterInfo.activeTrait]
-          : null;
-        sharePlacement({
-          characterName: characterInfo.name,
-          animalType: characterInfo.animalType,
-          xp: characterInfo.xp,
-          traitName: traitInfo ? `${traitInfo.emoji} ${traitInfo.name}` : undefined,
-          team: selection.selectedTeam,
-          battingOrder: selection.selectedOrder,
-          predictedWinner: selection.predictedWinner,
-          awayTeam: game.awayTeam,
-          homeTeam: game.homeTeam,
-          date: todayKST(),
-        });
-
-        // 공유 보상 요청
-        if (token) {
-          try {
-            const res = await fetch(`${apiUrl}/api/characters/me/share-reward`, {
-              method: 'POST',
-              headers,
-            });
-            if (res.ok) {
-              const data = await res.json();
-              if (data.rewarded) {
-                setToast(`🎉 공유 보상 +${data.added} XP!`);
-                setTimeout(() => setToast(null), 2500);
-              }
-            }
-          } catch (e) {
-            console.error('Share reward failed:', e);
-          }
-        }
-      }
-    }
-    setShowSharePrompt(false);
-    const shouldShow = await shouldShowPushPrompt();
-    if (shouldShow) {
-      setTimeout(() => setShowPushPrompt(true), 500);
-    }
-  }
-
-  async function handleShareDismiss() {
-    setShowSharePrompt(false);
-    const shouldShow = await shouldShowPushPrompt();
-    if (shouldShow) {
-      setTimeout(() => setShowPushPrompt(true), 500);
-    }
-  }
-
-  async function handlePushAccept() {
-    setPushLoading(true);
-    try {
-      const fcmToken = await requestFcmToken();
-      if (fcmToken) {
-        await fetch(`${apiUrl}/api/push/subscribe`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ fcmToken }),
-        });
-        setToast('알림이 설정되었습니다!');
-      } else {
-        setToast('알림 권한이 필요합니다');
-      }
-    } catch {
-      setToast('알림 설정 중 오류가 발생했습니다');
-    }
-    setPushLoading(false);
-    setShowPushPrompt(false);
-    setTimeout(() => setToast(null), 2000);
-  }
-
-  function handlePushDismiss() {
-    localStorage.setItem('push-prompt-dismissed', todayKST());
-    setShowPushPrompt(false);
-  }
-
-  // ──────────── 배치 제출 ────────────
-
-  async function handleSubmit() {
-    if (placementLocked) {
-      setToast('이미 경기가 시작되어 수정할 수 없습니다');
-      setTimeout(() => setToast(null), 2000);
-      return;
-    }
-    if (!selection || !selection.predictedWinner || !selection.selectedOrder) {
-      setToast('모든 항목을 선택해주세요');
-      setTimeout(() => setToast(null), 2000);
+  async function handleSubmit(gameId: string) {
+    const sel = selections[gameId];
+    if (!sel?.predictedWinner) {
+      showToast('승리팀을 선택해주세요');
       return;
     }
     setSubmitting(true);
     try {
-      const res = await fetch(`${apiUrl}/api/placements`, {
+      const res = await fetch(`${apiUrl}/api/predictions`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          gameId: selection.gameId,
-          team: selection.selectedTeam,
-          battingOrder: selection.selectedOrder,
-          predictedWinner: selection.predictedWinner,
+          gameId,
+          predictedWinner: sel.predictedWinner,
+          scoreDiffRange: sel.scoreDiffRange || undefined,
+          xpBetOnDiff: sel.xpBetOnDiff || undefined,
+          totalRunsRange: sel.totalRunsRange || undefined,
+          xpBetOnTotal: sel.xpBetOnTotal || undefined,
         }),
       });
       if (res.ok) {
-        setToast('배치 완료!');
+        showToast('예측 완료!');
         setExpandedGame(null);
-        setTimeout(() => {
-          setShowSharePrompt(true);
-        }, 500);
+        await fetchAll();
       } else {
         const err = await res.json();
-        setToast(err.error || '배치 실패');
+        showToast(err.error || '예측 실패');
       }
-    } catch (e) { setToast('배치 중 오류 발생'); }
+    } catch { showToast('오류 발생'); }
     setSubmitting(false);
+  }
+
+  async function handleCancel(gameId: string) {
+    try {
+      const res = await fetch(`${apiUrl}/api/predictions/${gameId}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (res.ok) {
+        showToast('예측 취소됨');
+        await fetchAll();
+      } else {
+        const err = await res.json();
+        showToast(err.error || '취소 실패');
+      }
+    } catch { showToast('오류 발생'); }
+  }
+
+  function showToast(msg: string) {
+    setToast(msg);
     setTimeout(() => setToast(null), 2000);
   }
 
-  // ──────────── 렌더링 ────────────
-
-  const activeGames = games.filter(g => g.status !== 'cancelled');
-  const cancelledGames = games.filter(g => g.status === 'cancelled');
-  const allCancelled = games.length > 0 && activeGames.length === 0;
+  function updateSelection(gameId: string, updates: Partial<typeof selections[string]>) {
+    setSelections(prev => ({
+      ...prev,
+      [gameId]: { ...prev[gameId], ...updates },
+    }));
+  }
 
   if (loading) {
     return (
@@ -324,6 +195,9 @@ export default function MatchPage() {
     );
   }
 
+  const activeGames = games.filter(g => g.status !== 'cancelled');
+  const predictedCount = predictions.filter(p => p.status === 'active').length;
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 pb-24">
       {toast && (
@@ -332,32 +206,15 @@ export default function MatchPage() {
         </div>
       )}
 
-      <h1 className="text-gray-900 text-lg font-bold mb-1">{todayKST()}</h1>
-      <p className="text-gray-400 text-sm mb-4">
-        {games.length}경기
-        {cancelledGames.length > 0 && (
-          <span className="text-red-400 ml-1">
-            (취소 {cancelledGames.length})
-          </span>
-        )}
-      </p>
-
-      {allCancelled && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4 text-center">
-          <p className="text-2xl mb-2">🌧️</p>
-          <p className="text-red-500 text-sm font-bold">오늘 경기가 모두 취소되었습니다</p>
-          <p className="text-red-400 text-xs mt-1">내일 다시 배치해주세요!</p>
+      <div className="flex justify-between items-center mb-4">
+        <div>
+          <h1 className="text-gray-900 text-lg font-bold">{todayKST()}</h1>
+          <p className="text-gray-400 text-sm">{activeGames.length}경기 · {predictedCount}/5 예측</p>
         </div>
-      )}
-
-      {placementLocked && selection && (
-        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-4">
-          <p className="text-orange-600 text-sm font-bold">배치 완료</p>
-          <p className="text-orange-400 text-xs mt-1">
-            {selection.selectedTeam} {selection.selectedOrder}번 타자 · {selection.predictedWinner} 승리 예측
-          </p>
+        <div className="bg-orange-50 px-3 py-1.5 rounded-full">
+          <span className="text-orange-500 text-sm font-bold">{getAvailableXp()} XP</span>
         </div>
-      )}
+      </div>
 
       {games.length === 0 ? (
         <p className="text-gray-400 text-center mt-20">오늘 경기가 없습니다</p>
@@ -366,158 +223,178 @@ export default function MatchPage() {
           {games.map((game) => {
             const isCancelled = game.status === 'cancelled';
             const isExpanded = expandedGame === game.gameId;
-            const isSelected = selection?.gameId === game.gameId;
-            const isGameLocked = isGameStartedByTime(game);
-            const cannotModify = placementLocked || isGameLocked || isCancelled;
+            const isLocked = isGameStartedByTime(game);
+            const pred = getPrediction(game.gameId);
+            const isSettled = pred?.status === 'settled';
+            const sel = selections[game.gameId];
+            const hasPrediction = !!pred;
+
+            const homeDisplay = getDisplayName(game.homeTeam as any);
+            const awayDisplay = getDisplayName(game.awayTeam as any);
 
             return (
-              <div
-                key={game.gameId}
-                className={`rounded-2xl overflow-hidden transition-all shadow-sm ${
-                  isCancelled ? 'opacity-50' : isSelected ? 'ring-2 ring-orange-400' : ''
-                }`}
-              >
+              <div key={game.gameId} className={`rounded-2xl overflow-hidden shadow-sm ${
+                isCancelled ? 'opacity-50' : hasPrediction ? 'ring-2 ring-orange-400' : ''
+              }`}>
+                {/* 경기 카드 헤더 */}
                 <div
-                  onClick={() => !cannotModify && handleExpand(game.gameId)}
+                  onClick={() => !isCancelled && !isSettled && setExpandedGame(isExpanded ? null : game.gameId)}
                   className={`bg-white p-4 border border-gray-100 ${
-                    cannotModify ? 'opacity-60' : 'cursor-pointer active:bg-gray-50'
+                    isCancelled || isSettled ? 'opacity-60' : 'cursor-pointer active:bg-gray-50'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className={`font-medium flex-1 text-center ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-                      {game.awayTeam}
+                      {awayDisplay}
                     </span>
                     <span className="text-gray-300 text-sm mx-3">
-                      {isCancelled
-                        ? '취소'
-                        : game.status === 'finished'
-                          ? `${game.awayScore} : ${game.homeScore}`
-                          : isGameLocked
-                            ? '진행 중'
-                            : game.startTime
-                              ? `${game.startTime}`
-                              : 'vs'}
+                      {isCancelled ? '취소'
+                        : game.status === 'finished' ? `${game.awayScore} : ${game.homeScore}`
+                        : isLocked ? '진행 중'
+                        : game.startTime || 'vs'}
                     </span>
                     <span className={`font-medium flex-1 text-center ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-                      {game.homeTeam}
+                      {homeDisplay}
                     </span>
                   </div>
-                  {isSelected && !isExpanded && selection && !isCancelled && (
-                    <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between">
-                      <span className="text-orange-500 text-xs">{selection.predictedWinner} 승리 예측</span>
-                      <span className="text-orange-500 text-xs">{selection.selectedTeam} {selection.selectedOrder}번</span>
+
+                  {/* 예측 결과 (정산 완료) */}
+                  {isSettled && pred?.result && (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                      <div className="flex justify-between items-center">
+                        <span className={pred.result.winCorrect ? 'text-emerald-500 text-xs font-bold' : 'text-red-400 text-xs'}>
+                          {pred.result.winCorrect ? '✅ 적중' : '❌ 실패'}
+                        </span>
+                        <span className={`text-sm font-bold ${pred.result.netXp >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                          {pred.result.netXp >= 0 ? '+' : ''}{pred.result.netXp} XP
+                        </span>
+                      </div>
                     </div>
                   )}
-                  {isCancelled && (
-                    <p className="text-red-400 text-xs text-center mt-1">경기 취소</p>
-                  )}
-                  {!isCancelled && isGameLocked && game.status !== 'finished' && (
-                    <p className="text-gray-400 text-xs text-center mt-1">경기 진행 중</p>
-                  )}
-                  {game.status === 'finished' && (
-                    <p className="text-gray-400 text-xs text-center mt-1">경기 종료</p>
+
+                  {/* 예측 요약 (미정산) */}
+                  {hasPrediction && !isSettled && (
+                    <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between items-center">
+                      <span className="text-orange-500 text-xs">
+                        {getDisplayName(pred!.predictedWinner as any)} 승리 예측
+                        {pred!.scoreDiffRange && ` · 점수차 ${pred!.scoreDiffRange}`}
+                        {pred!.totalRunsRange && ` · 총득점 ${pred!.totalRunsRange}`}
+                      </span>
+                      {!isLocked && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleCancel(game.gameId); }}
+                          className="text-xs text-red-400 underline"
+                        >취소</button>
+                      )}
+                    </div>
                   )}
                 </div>
 
-                {isExpanded && !cannotModify && (
+                {/* 예측 입력 패널 */}
+                {isExpanded && !isCancelled && !isSettled && !isLocked && (
                   <div className="bg-white border-t border-gray-100 p-4 space-y-4">
+                    {/* 승리 예측 (무료) */}
                     <div>
-                      <p className="text-gray-400 text-xs mb-2">승리 예측</p>
+                      <p className="text-gray-400 text-xs mb-2">승리 예측 (무료 · 적중 시 +20 XP)</p>
                       <div className="flex gap-3">
                         {[game.awayTeam, game.homeTeam].map((t) => (
                           <button
                             key={t}
-                            onClick={() => handlePrediction(game.gameId, t)}
-                            className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
-                              selection?.predictedWinner === t ? 'bg-orange-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'
+                            onClick={() => updateSelection(game.gameId, { predictedWinner: t })}
+                            className={`flex-1 py-3 rounded-xl text-sm font-medium transition ${
+                              sel?.predictedWinner === t
+                                ? 'bg-orange-400 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-500'
                             }`}
-                          >{t}</button>
+                          >{getDisplayName(t as any)}</button>
                         ))}
                       </div>
                     </div>
 
-                    {[{ label: game.awayTeam, team: game.awayTeam }, { label: game.homeTeam, team: game.homeTeam }].map(({ label, team }) => (
-                      <div key={team}>
-                        <p className="text-gray-400 text-xs mb-2">{label} 타순</p>
-                        <div className="grid grid-cols-9 gap-1">
-                          {[1,2,3,4,5,6,7,8,9].map((n) => (
-                            <button
-                              key={`${team}-${n}`}
-                              onClick={() => handleBattingOrder(game.gameId, team, n)}
-                              className={`py-2 rounded-xl text-xs font-medium transition ${
-                                selection?.selectedTeam === team && selection?.selectedOrder === n
-                                  ? 'bg-orange-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'
-                              }`}
-                            >{n}</button>
-                          ))}
-                        </div>
+                    {/* 점수차 예측 (선택) */}
+                    <div>
+                      <p className="text-gray-400 text-xs mb-2">점수차 예측 (선택 · XP 베팅)</p>
+                      <div className="flex gap-2 mb-2">
+                        {[
+                          { value: '1-2', label: '1~2점', mult: '×1.5' },
+                          { value: '3-4', label: '3~4점', mult: '×2' },
+                          { value: '5+', label: '5점+', mult: '×3' },
+                        ].map(({ value, label, mult }) => (
+                          <button
+                            key={value}
+                            onClick={() => updateSelection(game.gameId, {
+                              scoreDiffRange: sel?.scoreDiffRange === value ? undefined : value,
+                              xpBetOnDiff: sel?.scoreDiffRange === value ? undefined : sel?.xpBetOnDiff,
+                            })}
+                            className={`flex-1 py-2 rounded-xl text-xs font-medium transition ${
+                              sel?.scoreDiffRange === value
+                                ? 'bg-blue-500 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-500'
+                            }`}
+                          >
+                            {label}<br/><span className="text-[10px] opacity-75">{mult}</span>
+                          </button>
+                        ))}
                       </div>
-                    ))}
+                      {sel?.scoreDiffRange && (
+                        <input
+                          type="number"
+                          placeholder="베팅 XP"
+                          value={sel.xpBetOnDiff || ''}
+                          onChange={(e) => updateSelection(game.gameId, { xpBetOnDiff: parseInt(e.target.value) || 0 })}
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                        />
+                      )}
+                    </div>
+
+                    {/* 총득점 예측 (선택) */}
+                    <div>
+                      <p className="text-gray-400 text-xs mb-2">총득점 예측 (선택 · XP 베팅)</p>
+                      <div className="flex gap-2 mb-2">
+                        {[
+                          { value: 'low', label: '로우 0~5', mult: '×2' },
+                          { value: 'normal', label: '보통 6~9', mult: '×1.5' },
+                          { value: 'high', label: '하이 10+', mult: '×2.5' },
+                        ].map(({ value, label, mult }) => (
+                          <button
+                            key={value}
+                            onClick={() => updateSelection(game.gameId, {
+                              totalRunsRange: sel?.totalRunsRange === value ? undefined : value,
+                              xpBetOnTotal: sel?.totalRunsRange === value ? undefined : sel?.xpBetOnTotal,
+                            })}
+                            className={`flex-1 py-2 rounded-xl text-xs font-medium transition ${
+                              sel?.totalRunsRange === value
+                                ? 'bg-purple-500 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-500'
+                            }`}
+                          >
+                            {label}<br/><span className="text-[10px] opacity-75">{mult}</span>
+                          </button>
+                        ))}
+                      </div>
+                      {sel?.totalRunsRange && (
+                        <input
+                          type="number"
+                          placeholder="베팅 XP"
+                          value={sel.xpBetOnTotal || ''}
+                          onChange={(e) => updateSelection(game.gameId, { xpBetOnTotal: parseInt(e.target.value) || 0 })}
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                        />
+                      )}
+                    </div>
 
                     <button
-                      onClick={handleSubmit}
-                      disabled={submitting || !selection?.predictedWinner || !selection?.selectedOrder}
-                      className="w-full bg-orange-400 text-white py-3 rounded-2xl font-bold text-sm disabled:opacity-40 transition shadow-md"
+                      onClick={() => handleSubmit(game.gameId)}
+                      disabled={submitting || !sel?.predictedWinner}
+                      className="w-full bg-orange-400 text-white py-3 rounded-2xl font-bold text-sm disabled:opacity-40 shadow-md"
                     >
-                      {submitting ? '배치 중...' : '배치하기'}
+                      {submitting ? '처리 중...' : hasPrediction ? '예측 수정' : '예측 확정'}
                     </button>
                   </div>
                 )}
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* 공유 프롬프트 */}
-      {showSharePrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={handleShareDismiss}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="text-4xl mb-3">📢</div>
-            <h2 className="text-lg font-bold text-gray-800 mb-2">배치 완료!</h2>
-            <p className="text-sm text-gray-500 mb-6">친구에게 공유할까요?</p>
-            <div className="flex gap-3">
-              <button
-                onClick={handleShareDismiss}
-                className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-sm font-medium hover:bg-gray-200"
-              >
-                다음에
-              </button>
-              <button
-                onClick={handleShareAccept}
-                className="flex-1 py-2.5 bg-yellow-400 text-yellow-900 rounded-xl text-sm font-bold hover:bg-yellow-500"
-              >
-                💬 카카오 공유
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 푸시 프롬프트 */}
-      {showPushPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={handlePushDismiss}>
-          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="text-4xl mb-3">🔔</div>
-            <h2 className="text-lg font-bold text-gray-800 mb-2">알림 설정!</h2>
-            <p className="text-sm text-gray-500 mb-1">정산 결과를 알림으로 받아볼까요?</p>
-            <p className="text-xs text-gray-400 mb-6">경기 끝나면 XP 변동을 바로 확인할 수 있어요</p>
-            <div className="flex gap-3">
-              <button
-                onClick={handlePushDismiss}
-                className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-sm font-medium hover:bg-gray-200"
-              >
-                다음에
-              </button>
-              <button
-                onClick={handlePushAccept}
-                disabled={pushLoading}
-                className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold hover:bg-orange-500 disabled:opacity-50"
-              >
-                {pushLoading ? '설정 중...' : '알림 받기'}
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
