@@ -861,7 +861,7 @@ export default function MainPage() {
     <div className="min-h-screen bg-gray-50 pb-24 relative">
       {/* XP 수확 모드 */}
       {harvestMode && (
-        <React.Fragment>
+        <>
           <div className="fixed top-16 left-0 right-0 text-center z-[35] pointer-events-none">
             <p className="text-gray-500 text-xs mb-0.5">어제의 경기 결과</p>
             <p className="text-gray-800 text-base font-bold">
