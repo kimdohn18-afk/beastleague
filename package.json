@@ -19,3 +19,9 @@
     "tsconfig-paths": "^4.2.0"
   }
 }
+
+{
+  "scripts": {
+    "score": "npx ts-node collector/src/cli/scoreInput.ts"
+  }
+}
