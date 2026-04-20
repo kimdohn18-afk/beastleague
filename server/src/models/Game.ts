@@ -1,27 +1,5 @@
 import { Schema, model, Document } from 'mongoose';
 
-const batterRecordSchema = new Schema(
-  {
-    order: String,
-    position: String,
-    name: String,
-    atBats: String,
-    hits: String,
-    rbi: String,
-    runs: String,
-    avg: String,
-  },
-  { _id: false }
-);
-
-const gameEventSchema = new Schema(
-  {
-    type: String,
-    detail: String,
-  },
-  { _id: false }
-);
-
 export interface IGame extends Document {
   gameId: string;
   date: string;
@@ -31,11 +9,6 @@ export interface IGame extends Document {
   startTime?: string;
   homeScore?: number;
   awayScore?: number;
-  batterRecords?: {
-    away: Array<{ order: string; position: string; name: string; atBats: string; hits: string; rbi: string; runs: string; avg: string }>;
-    home: Array<{ order: string; position: string; name: string; atBats: string; hits: string; rbi: string; runs: string; avg: string }>;
-  };
-  events?: Array<{ type: string; detail: string }>;
 }
 
 const gameSchema = new Schema<IGame>(
