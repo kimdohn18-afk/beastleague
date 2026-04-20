@@ -1075,7 +1075,7 @@ export default function MainPage() {
       )}
 
       <div className="hidden">
-        <ShareCard ref={shareCardRef} character={character} emoji={emoji} animalName={animalName} />
+        <ShareCard ref={shareCardRef} characterName={character.name} animalType={character.animalType} animalName={animalName} xp={character.xp} characterSize={characterSize} traitName={character.activeTrait ? getTraitDisplay(character.activeTrait) || undefined : undefined} />
       </div>
 
       <style jsx global>{`
