@@ -1,20 +1,33 @@
-export const XP_RULES = {
-  // 기본 기록 (타순별 합산)
-  hit: 8,           // 안타 1개당
-  rbi: 12,          // 타점 1개당
-  run: 8,           // 득점 1개당
-  noHitPenalty: -15, // 무안타 (타수 3이상 & 0안타)
-  noHitMinAB: 3,     // 무안타 판정 최소 타수
+// shared/src/config/xpRules.ts
 
-  // 이벤트 보너스 (선수 이름 매칭)
-  homeRun: 40,
-  double: 12,
-  triple: 20,
-  stolenBase: 15,
-  caughtStealing: -10,
-  walkOff: 25,       // 결승타
+// === 승리 예측 (무료) ===
+export const WIN_PREDICT_XP = 20;        // 적중 시 +20
+export const WIN_PREDICT_FAIL_XP = 0;    // 실패 시 0 (손해 없음)
 
-  // 팀 결과
-  teamWin: 25,
-  teamLose: 0,
-};
+// === 점수차 예측 (XP 베팅) ===
+export const DIFF_MULTIPLIER = {
+  '1-2': 1.5,
+  '3-4': 2.0,
+  '5+':  3.0,
+} as const;
+
+// === 총득점 예측 (XP 베팅) ===
+// low: 0~5점, normal: 6~9점, high: 10점+
+export const TOTAL_RUNS_MULTIPLIER = {
+  low:    2.0,
+  normal: 1.5,
+  high:   2.5,
+} as const;
+
+export const TOTAL_RUNS_RANGE = {
+  low:    { min: 0, max: 5 },
+  normal: { min: 6, max: 9 },
+  high:   { min: 10, max: Infinity },
+} as const;
+
+// === 올킬 보너스 ===
+export const ALL_KILL_BONUS = 30;        // 당일 전 경기 승리 예측 적중 시
+
+// === 베팅 제한 ===
+export const MAX_BET_PER_GAME = 500;     // 한 경기당 최대 베팅 XP
+export const MAX_PREDICTIONS_PER_DAY = 5; // 하루 최대 예측 경기 수
