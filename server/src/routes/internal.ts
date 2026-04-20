@@ -156,3 +156,36 @@ internalRouter.post('/recalculate-traits', async (req, res) => {
     res.status(500).json({ error: String(e) });
   }
 });
+
+// server/src/routes/internal.ts 에 추가
+
+// POST /internal/games/:gameId/score — 경기 결과 입력 (수동)
+internalRouter.post('/games/:gameId/score', async (req: Request, res: Response) => {
+  try {
+    const { homeScore, awayScore } = req.body;
+    
+    if (typeof homeScore !== 'number' || typeof awayScore !== 'number') {
+      return res.status(400).json({ error: 'homeScore, awayScore (number) 필수' });
+    }
+    
+    const game = await Game.findOneAndUpdate(
+      { gameId: req.params.gameId },
+      { 
+        $set: { 
+          homeScore, 
+          awayScore, 
+          status: 'finished' 
+        } 
+      },
+      { new: true }
+    );
+    
+    if (!game) {
+      return res.status(404).json({ error: '경기를 찾을 수 없습니다' });
+    }
+    
+    return res.json({ success: true, game });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
