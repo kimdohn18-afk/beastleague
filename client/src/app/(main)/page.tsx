@@ -863,4 +863,230 @@ export default function MainPage() {
    const earnedCount = (character.earnedAchievements || []).length + (character.teamAchievements || []).length;
   const nextEvo = evolvedStage < 5 ? EVOLUTION_STAGES[evolvedStage] : null;
 
-      <div className="min-h-screen bg-gray-50 pb-24 relative">
+  return (
+    <div className="min-h-screen bg-gray-50 pb-24 relative">
+      {harvestMode && (
+        <HarvestOverlay
+          xpOrbs={xpOrbs}
+          totalHarvestXp={totalHarvestXp}
+          harvestToast={harvestToast}
+          harvestComplete={harvestComplete}
+          eatingOrbId={eatingOrbId}
+          onOrbClick={handleOrbClick}
+        />
+      )}
+
+      {feedAnimation && (
+        <div className="fixed inset-0 pointer-events-none z-[60]">
+          {['🍖', '🥩', '🍗'].map((food, i) => (
+            <div key={i} className="absolute text-4xl" style={{ left: `${25 + i * 25}%`, animation: `feedFly${i} 1.5s ease-in forwards` }}>{food}</div>
+          ))}
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 text-3xl font-black text-orange-500" style={{ animation: 'nomnom 1.5s ease-out forwards' }}>냠냠!</div>
+        </div>
+      )}
+
+      {feedToast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-black/80 text-white px-5 py-2.5 rounded-full text-sm font-medium z-[60] animate-bounce">{feedToast}</div>
+      )}
+
+      {evolutionToast && (
+        <div className="fixed top-28 left-1/2 -translate-x-1/2 bg-indigo-600/90 text-white px-5 py-2.5 rounded-full text-sm font-medium z-[60] animate-bounce">{evolutionToast}</div>
+      )}
+
+      {typeof navigator !== 'undefined' && /KAKAOTALK/i.test(navigator.userAgent) && (
+        <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
+          <div className="text-5xl mb-4">🌐</div>
+          <h2 className="text-lg font-bold text-gray-800 mb-2">기본 브라우저에서 열어주세요</h2>
+          <p className="text-sm text-gray-500 mb-6 leading-relaxed">카카오톡 브라우저에서는 알림 등<br />일부 기능이 제한됩니다.</p>
+          {/iPhone|iPad/i.test(navigator.userAgent) ? (
+            <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs"><p className="text-xs text-gray-500 leading-relaxed">우측 하단 <strong>공유(↗) 아이콘</strong> 탭<br />→ <strong>Safari로 열기</strong> 선택</p></div>
+          ) : (
+            <div className="bg-gray-50 rounded-xl p-4 w-full max-w-xs"><p className="text-xs text-gray-500 leading-relaxed">우측 하단 <strong>⋮</strong> 메뉴 탭<br />→ <strong>다른 브라우저로 열기</strong> 선택</p></div>
+          )}
+        </div>
+      )}
+
+      <div className="px-4 pt-5 pb-2 flex items-center justify-between relative z-10">
+        <div />
+        <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
+      </div>
+
+      <WalkingCharacter
+        ref={walkingCharRef}
+        animalType={character.animalType}
+        characterSize={characterSize}
+        isPixelArt={PIXEL_ART_ANIMALS.includes(character.animalType)}
+        emoji={emoji}
+        stage={displayStage}
+      />
+
+      <div className="flex flex-col items-center justify-center pt-8 pb-4 relative z-10">
+        <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
+        <p className="text-sm text-gray-400 mt-1">{animalName} · {character.xp.toLocaleString()} XP</p>
+
+        {character.activeTrait && (
+          <div className="mt-3 bg-white/80 backdrop-blur rounded-xl px-4 py-2 border border-orange-100 shadow-sm">
+            <p className="text-sm text-gray-700 font-medium">{getTraitDisplay(character.activeTrait)}</p>
+          </div>
+        )}
+
+        {((character.totalLikes ?? 0) > 0 || (character.totalFeeds ?? 0) > 0) && (
+          <div className="mt-3 flex items-center gap-3">
+            {(character.totalLikes ?? 0) > 0 && (
+              <div className="flex items-center gap-1.5 bg-pink-50 rounded-full px-3 py-1">
+                <span className="text-sm">❤️</span>
+                <span className="text-xs font-bold text-pink-400">{(character.totalLikes ?? 0).toLocaleString()}</span>
+              </div>
+            )}
+            {(character.totalFeeds ?? 0) > 0 && (
+              <div className="flex items-center gap-1.5 bg-amber-50 rounded-full px-3 py-1">
+                <span className="text-sm">🍖</span>
+                <span className="text-xs font-bold text-amber-400">{(character.totalFeeds ?? 0).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <button
+          onClick={handleSelfFeed}
+          disabled={selfFed}
+          className={`mt-4 px-6 py-2.5 rounded-full text-sm font-bold transition-all ${selfFed ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-orange-400 text-white hover:bg-orange-500 active:scale-95 shadow-md'}`}
+        >
+          {selfFed ? '🍖 오늘 밥 완료!' : '🍖 밥주기 (+3 XP)'}
+        </button>
+      </div>
+
+      {/* FAB 메뉴 */}
+      <div className="fixed bottom-24 right-4 z-50">
+        {menuOpen && (
+          <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
+            <button onClick={handlePushSetup} disabled={pushStatus === 'loading'} className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 border-b border-gray-50 ${pushStatus === 'denied' ? 'text-red-400' : 'text-gray-700'}`}>
+              {pushStatus === 'granted' ? '✅ 알림 설정됨' : pushStatus === 'loading' ? '⏳ 설정 중...' : pushStatus === 'denied' ? '🔕 알림 차단됨' : '🔔 알림 설정'}
+            </button>
+            <button onClick={() => { setShowHelp(true); setHelpPage(0); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">❓ 도움말</button>
+            <button onClick={() => { router.push('/achievements'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">🏆 내 업적</button>
+            <button onClick={() => { setShowEvolution(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
+              {(() => { const evo = EVOLUTION_STAGES[evolvedStage - 1]; return evolvedStage >= 5 ? `💎 신화 · ${character.xp.toLocaleString()} XP` : `${evo.badge} ${evo.stage}단계 · ${character.xp.toLocaleString()} XP`; })()}
+            </button>
+            <button onClick={() => { setShowAnimalChange(true); setSelectedNewAnimal(null); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">🔄 캐릭터 변경 ({CHANGE_ANIMAL_COST} XP)</button>
+            <button onClick={() => { setShowShareMenu(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">📢 공유하기</button>
+            <button onClick={() => { setShowDelete(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50">🗑️ 캐릭터 삭제</button>
+          </div>
+        )}
+        <button onClick={() => { setMenuOpen(!menuOpen); setShowDelete(false); setShowHelp(false); }} className={`w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg flex items-center justify-center text-2xl transition-transform duration-300 hover:bg-orange-600 active:scale-95 ${menuOpen ? 'rotate-45' : ''}`}>+</button>
+      </div>
+
+      {menuOpen && <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />}
+
+      {showHelp && <HelpCards onClose={() => setShowHelp(false)} />}
+
+      {showEvolution && character && (
+        <EvolutionModal
+          character={character}
+          onClose={() => setShowEvolution(false)}
+          onEvolve={async () => {
+            if (!token || evolving) return;
+            setEvolving(true);
+            try {
+              const res = await fetch(`${apiUrl}/api/characters/me/evolve`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+              const data = await res.json();
+              if (res.ok) {
+                setCharacter(prev => prev ? { ...prev, xp: data.character.xp, evolvedStage: data.character.evolvedStage } : prev);
+                setEvolutionToast(`✨ ${data.character.evolvedStage}단계로 진화!`);
+                setTimeout(() => setEvolutionToast(''), 3000);
+                setShowEvolution(false);
+              } else {
+                setEvolutionToast(data.error || '진화 실패');
+                setTimeout(() => setEvolutionToast(''), 2500);
+              }
+            } catch { setEvolutionToast('네트워크 오류'); setTimeout(() => setEvolutionToast(''), 2500); }
+            finally { setEvolving(false); }
+          }}
+          onDisplayStageChange={(stage) => setCharacter(prev => prev ? { ...prev, displayStage: stage } : prev)}
+          onDisplaySizeChange={(size) => setCharacter(prev => prev ? { ...prev, displaySize: size } : prev)}
+          evolving={evolving}
+          getCharacterSize={getCharacterSize}
+          apiUrl={apiUrl}
+          token={token}
+        />
+      )}
+
+      {showAnimalChange && (
+        <AnimalChangeModal
+          currentAnimal={character.animalType}
+          xp={character.xp}
+          onClose={() => setShowAnimalChange(false)}
+          onConfirm={async (animal) => {
+            setSelectedNewAnimal(animal);
+            await handleAnimalChange();
+          }}
+          changing={animalChanging}
+        />
+      )}
+
+      {showDelete && (
+        <DeleteModal
+          characterName={character.name}
+          onConfirm={handleDelete}
+          onClose={() => setShowDelete(false)}
+          deleting={deleting}
+        />
+      )}
+
+      {showShareMenu && (
+        <ShareMenu
+          onShare={handleShare}
+          onClose={() => setShowShareMenu(false)}
+          shareLoading={shareLoading}
+        />
+      )}
+
+      {showPushPrompt && (
+        <div className="fixed bottom-28 left-4 right-4 z-50 bg-white rounded-2xl shadow-lg border border-gray-100 p-4">
+          <p className="text-sm font-bold text-gray-800 mb-1">🔔 알림을 받으시겠어요?</p>
+          <p className="text-xs text-gray-500 mb-3">배치 미완료, 경기 결과 등을 알려드려요.</p>
+          <div className="flex gap-2">
+            <button onClick={handlePushPromptDismiss} className="flex-1 py-2 bg-gray-100 rounded-xl text-xs text-gray-500">다음에</button>
+            <button onClick={handlePushPromptAccept} className="flex-1 py-2 bg-orange-400 text-white rounded-xl text-xs font-bold">허용하기</button>
+          </div>
+        </div>
+      )}
+
+      {showBlockedGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 text-center">
+            <div className="text-4xl mb-3">🔕</div>
+            <h2 className="text-lg font-bold text-gray-800 mb-2">알림이 차단되어 있어요</h2>
+            <p className="text-sm text-gray-500 mb-4 leading-relaxed">브라우저 설정에서 알림을 허용해주세요.<br />설정 → 사이트 설정 → 알림</p>
+            <button onClick={() => setShowBlockedGuide(false)} className="w-full py-2.5 bg-gray-100 rounded-xl text-sm text-gray-500 font-medium">닫기</button>
+          </div>
+        </div>
+      )}
+
+      {showWelcome && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center">
+            <div className="text-5xl mb-3">{emoji}</div>
+            <h2 className="text-xl font-bold text-gray-800 mb-2">환영합니다!</h2>
+            <p className="text-sm text-gray-500 mb-4">{character.name}의 모험이 시작됩니다!</p>
+            <button onClick={() => setShowWelcome(false)} className="w-full py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold">시작하기</button>
+          </div>
+        </div>
+      )}
+
+      <div className="hidden">
+        <ShareCard ref={shareCardRef} character={character} emoji={emoji} animalName={animalName} />
+      </div>
+
+      <style jsx global>{`
+        @keyframes feedFly0 { 0% { top: 20%; opacity: 1; } 100% { top: 50%; opacity: 0; transform: scale(0.3); } }
+        @keyframes feedFly1 { 0% { top: 15%; opacity: 1; } 100% { top: 50%; opacity: 0; transform: scale(0.3); } }
+        @keyframes feedFly2 { 0% { top: 25%; opacity: 1; } 100% { top: 50%; opacity: 0; transform: scale(0.3); } }
+        @keyframes nomnom { 0% { opacity: 0; transform: translate(-50%, 0) scale(0.5); } 30% { opacity: 1; transform: translate(-50%, 0) scale(1.2); } 100% { opacity: 0; transform: translate(-50%, -30px) scale(0.8); } }
+        @keyframes orbFloat { 0%, 100% { transform: translate(-50%, -50%) translateY(0); } 50% { transform: translate(-50%, -50%) translateY(-10px); } }
+        @keyframes twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes harvestComplete { 0% { opacity: 0; transform: scale(0.5); } 30% { opacity: 1; transform: scale(1.1); } 50% { transform: scale(1); } 100% { opacity: 0; transform: scale(0.8) translateY(-20px); } }
+      `}</style>
+    </div>
+  );
+}
