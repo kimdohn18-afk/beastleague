@@ -40,26 +40,6 @@ export function validateGameData(data: unknown): { valid: boolean; errors: strin
     errors.push(`status: 유효하지 않은 값 (${String(data['status'])})`);
   }
 
-  // batterRecords 검증 (선택)
-  if (data['batterRecords'] !== undefined) {
-    if (!isObject(data['batterRecords'])) {
-      errors.push('batterRecords: 객체 필수');
-    } else {
-      const br = data['batterRecords'] as Record<string, unknown>;
-      if (!Array.isArray(br['away'])) {
-        errors.push('batterRecords.away: 배열 필수');
-      }
-      if (!Array.isArray(br['home'])) {
-        errors.push('batterRecords.home: 배열 필수');
-      }
-    }
-  }
-
-  // events 검증 (선택)
-  if (data['events'] !== undefined && !Array.isArray(data['events'])) {
-    errors.push('events: 배열 필수');
-  }
-
   return { valid: errors.length === 0, errors };
 }
 
