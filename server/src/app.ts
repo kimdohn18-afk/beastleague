@@ -38,6 +38,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
   app.use('/api/games', gamesRouter);
   app.use('/api/characters', charactersRouter);
   app.use('/api/placements', placementsRouter);
+  app.use('/api/predictions', predictionsRouter);
   app.use('/api/trainings', trainingsRouter);
   app.use('/api/battles', battlesRouter);
   app.use('/api/rankings', rankingsRouter);
