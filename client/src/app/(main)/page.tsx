@@ -19,6 +19,8 @@ import {
   CHANGE_ANIMAL_COST,      
 } from '@/lib/constants';
 import WalkingCharacter, { WalkingCharacterHandle } from '@/components/WalkingCharacter';
+import HarvestOverlay from '@/components/HarvestOverlay';
+
 
 interface Character {
   _id: string;
