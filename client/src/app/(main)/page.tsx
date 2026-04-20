@@ -20,7 +20,11 @@ import {
 } from '@/lib/constants';
 import WalkingCharacter, { WalkingCharacterHandle } from '@/components/WalkingCharacter';
 import HarvestOverlay from '@/components/HarvestOverlay';
-
+import EvolutionModal from '@/components/EvolutionModal';
+import AnimalChangeModal from '@/components/AnimalChangeModal';
+import ShareMenu from '@/components/ShareMenu';
+import DeleteModal from '@/components/DeleteModal';
+import HelpCards from '@/components/HelpCards';
 
 interface Character {
   _id: string;
