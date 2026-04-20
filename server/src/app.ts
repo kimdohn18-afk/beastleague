@@ -13,6 +13,8 @@ import { rankingsRouter } from './routes/rankings';
 import { internalRouter } from './routes/internal';
 import { pushRouter } from './routes/push';
 import { leaguesRouter } from './routes/leagues';
+import { predictionsRouter } from './routes/predictions';
+
 
 export function createApp(): express.Application {
   const app = express();
