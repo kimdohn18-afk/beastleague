@@ -48,12 +48,7 @@ const gameSchema = new Schema<IGame>(
     startTime: { type: String },
     homeScore: Number,
     awayScore: Number,
-    batterRecords: {
-      away: [batterRecordSchema],
-      home: [batterRecordSchema],
-    },
-    events: [gameEventSchema],
-  },
+     },
   { timestamps: true }
 );
 
