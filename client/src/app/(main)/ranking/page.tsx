@@ -13,6 +13,8 @@ interface League { _id: string; name: string; code: string; members: string[]; o
 interface RankItem { rank: number; characterId?: string; name: string; animalType: string; xp: number; activeTrait?: string; placedToday: boolean; isMe: boolean; }
 interface LeagueRankItem { rank: number; name: string; code: string; memberCount: number; totalXp: number; avgXp: number; isMine: boolean; }
 interface AllRankItem { _id?: string; name: string; animalType: string; xp: number; totalXp?: number; currentXp?: number; activeTrait?: string; placedToday: boolean; todayPredictions?: number; }
+interface RankItem { rank: number; characterId?: string; name: string; animalType: string; xp: number; totalXp?: number; activeTrait?: string; placedToday: boolean; todayPredictions?: number; isMe: boolean; }
+
 
 export default function RankingPage() {
   const { data: session, status } = useSession();
@@ -287,7 +289,7 @@ export default function RankingPage() {
                         {traitStr && <p className="text-[11px] text-gray-400 mt-0.5">{traitStr}</p>}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        <p className="text-orange-500 text-sm font-bold">{r.xp.toLocaleString()} XP</p>
+                        <p className="text-orange-500 text-sm font-bold">{(r.totalXp ?? r.xp ?? 0).toLocaleString()} XP</p>
                         {!r.isMe && r.characterId && <span className="text-gray-300 text-xs">›</span>}
                       </div>
                     </div>
