@@ -22,6 +22,16 @@ const ANIMAL_NAMES: Record<string, string> = {
   cat: '고양이', rabbit: '토끼', gorilla: '고릴라', elephant: '코끼리',
 };
 
+const TEAM_NAMES: Record<string, string> = {
+  LG: 'LG 트윈스', KT: 'KT 위즈', SSG: 'SSG 랜더스', NC: 'NC 다이노스',
+  '두산': '두산 베어스', KIA: 'KIA 타이거즈', '롯데': '롯데 자이언츠',
+  '삼성': '삼성 라이온즈', '한화': '한화 이글스', '키움': '키움 히어로즈',
+};
+
+function teamLabel(code: string): string {
+  return TEAM_NAMES[code] || code;
+}
+
 function getCharacterSize(xp: number): number {
   const size = 60 + Math.pow(xp, 0.55) * 7.5;
   return Math.round(Math.min(size, 300));
@@ -30,23 +40,30 @@ function getCharacterSize(xp: number): number {
 interface PredictionItem {
   gameId: string;
   predictedWinner: string;
-  predictedDiffRange: string | null;
-  predictedTotalRange: string | null;
-  betXp: number;
+  scoreDiffRange: string | null;
+  totalRunsRange: string | null;
+  xpBetOnDiff: number;
+  xpBetOnTotal: number;
+  totalBet: number;
   status: string;
   result: {
     winCorrect: boolean;
-    diffCorrect: boolean;
-    totalCorrect: boolean;
+    diffCorrect?: boolean;
+    totalCorrect?: boolean;
     netXp: number;
+    xpFromWin: number;
+    xpFromDiff: number;
+    xpFromTotal: number;
+    xpLostDiff: number;
+    xpLostTotal: number;
   } | null;
   game: {
     gameId: string;
     homeTeam: string;
     awayTeam: string;
     status: string;
-    homeScore: number | null;
-    awayScore: number | null;
+    homeScore?: number;
+    awayScore?: number;
     startTime: string;
   } | null;
 }
@@ -190,9 +207,23 @@ export default function PublicProfilePage() {
   const animalName = ANIMAL_NAMES[character.animalType] || character.animalType;
   const size = getCharacterSize(character.xp);
 
-  const totalBetXp = todayPredictions?.reduce((sum, p) => sum + (p.betXp || 0), 0) || 0;
+  const totalBetXp = todayPredictions?.reduce((sum, p) => sum + (p.totalBet || 0), 0) || 0;
   const settledPredictions = todayPredictions?.filter(p => p.status === 'settled') || [];
   const totalNetXp = settledPredictions.reduce((sum, p) => sum + (p.result?.netXp || 0), 0);
+
+  const diffRangeLabel = (r: string) => {
+    if (r === '1-2') return '1~2점차';
+    if (r === '3-4') return '3~4점차';
+    if (r === '5+') return '5점차 이상';
+    return r;
+  };
+
+  const totalRangeLabel = (r: string) => {
+    if (r === 'low') return '로스코어 (0~5)';
+    if (r === 'normal') return '보통 (6~10)';
+    if (r === 'high') return '하이스코어 (11+)';
+    return r;
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-50 pb-20">
@@ -294,9 +325,9 @@ export default function PublicProfilePage() {
                     {p.game && (
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2 text-sm font-bold">
-                          <span>{p.game.homeTeam}</span>
+                          <span>{teamLabel(p.game.homeTeam)}</span>
                           <span className="text-gray-300">vs</span>
-                          <span>{p.game.awayTeam}</span>
+                          <span>{teamLabel(p.game.awayTeam)}</span>
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                           p.status === 'settled'
@@ -308,7 +339,8 @@ export default function PublicProfilePage() {
                       </div>
                     )}
 
-                    {p.game && p.game.homeScore !== null && (
+                    {/* 스코어: 경기 끝난 경우만 표시 */}
+                    {p.game && p.game.status === 'finished' && p.game.homeScore != null && p.game.awayScore != null && (
                       <div className="text-center mb-2">
                         <span className="text-lg font-bold text-gray-700">
                           {p.game.homeScore} : {p.game.awayScore}
@@ -316,46 +348,64 @@ export default function PublicProfilePage() {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div className="bg-gray-50 rounded-lg p-2 text-center">
-                        <p className="text-gray-400">승리 예측</p>
-                        <p className="font-bold mt-0.5">{p.predictedWinner}</p>
-                        {p.status === 'settled' && p.result && (
-                          <span>{p.result.winCorrect ? '✅' : '❌'}</span>
-                        )}
-                      </div>
-                      {p.predictedDiffRange && (
-                        <div className="bg-gray-50 rounded-lg p-2 text-center">
-                          <p className="text-gray-400">점수차</p>
-                          <p className="font-bold mt-0.5">{p.predictedDiffRange}</p>
+                    {/* 예측 내용 */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                        <span className="text-xs text-gray-400">승리 예측</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-bold">{teamLabel(p.predictedWinner)}</span>
                           {p.status === 'settled' && p.result && (
-                            <span>{p.result.diffCorrect ? '✅' : '❌'}</span>
+                            <span className="text-xs">{p.result.winCorrect ? '✅' : '❌'}</span>
                           )}
                         </div>
+                      </div>
+
+                      {p.scoreDiffRange && (
+                        <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                          <span className="text-xs text-gray-400">점수차 ({p.xpBetOnDiff} XP)</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold">{diffRangeLabel(p.scoreDiffRange)}</span>
+                            {p.status === 'settled' && p.result && p.result.diffCorrect !== undefined && (
+                              <span className="text-xs">{p.result.diffCorrect ? '✅' : '❌'}</span>
+                            )}
+                          </div>
+                        </div>
                       )}
-                      {p.predictedTotalRange && (
-                        <div className="bg-gray-50 rounded-lg p-2 text-center">
-                          <p className="text-gray-400">총점</p>
-                          <p className="font-bold mt-0.5">{p.predictedTotalRange}</p>
-                          {p.status === 'settled' && p.result && (
-                            <span>{p.result.totalCorrect ? '✅' : '❌'}</span>
-                          )}
+
+                      {p.totalRunsRange && (
+                        <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                          <span className="text-xs text-gray-400">총득점 ({p.xpBetOnTotal} XP)</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold">{totalRangeLabel(p.totalRunsRange)}</span>
+                            {p.status === 'settled' && p.result && p.result.totalCorrect !== undefined && (
+                              <span className="text-xs">{p.result.totalCorrect ? '✅' : '❌'}</span>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
 
-                    <div className="mt-2 flex items-center justify-between text-xs">
-                      <span className="text-gray-400">베팅: {p.betXp} XP</span>
-                      {p.status === 'settled' && p.result && (
-                        <span className={`font-bold ${p.result.netXp >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    {/* 결과 XP */}
+                    {p.status === 'settled' && p.result && (
+                      <div className={`mt-2 rounded-lg px-3 py-2 text-center ${
+                        p.result.netXp >= 0 ? 'bg-green-50' : 'bg-red-50'
+                      }`}>
+                        <span className={`text-sm font-bold ${
+                          p.result.netXp >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
                           {p.result.netXp >= 0 ? '+' : ''}{p.result.netXp} XP
                         </span>
-                      )}
-                    </div>
+                      </div>
+                    )}
+
+                    {p.status === 'active' && p.totalBet > 0 && (
+                      <div className="mt-2 text-center">
+                        <span className="text-xs text-gray-400">총 베팅: {p.totalBet} XP</span>
+                      </div>
+                    )}
                   </div>
                 ))}
 
-                {/* 오늘 합산 */}
                 <div className="bg-orange-50 rounded-2xl p-3 text-center border border-orange-200">
                   {settledPredictions.length > 0 ? (
                     <p className="text-sm font-bold">
