@@ -15,6 +15,7 @@ import { pushRouter } from './routes/push';
 import { leaguesRouter } from './routes/leagues';
 import { predictionsRouter } from './routes/predictions';
 import { statsRouter } from './routes/stats';
+import { virtualMatchRouter } from './routes/virtualMatch';
 
 
 export function createApp(): express.Application {
@@ -52,6 +53,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not Found' });
   });
+  app.use('/api/virtual-match', virtualMatchRouter);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
