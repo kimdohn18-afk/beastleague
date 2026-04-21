@@ -4,6 +4,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -51,7 +52,7 @@ jobs:
           NEXTAUTH_SECRET: ci-test-secret
           NEXTAUTH_URL: http://localhost:3000
 
-                - name: Seed 데이터 생성
+      - name: Seed 데이터 생성
         run: npx ts-node -P server/tsconfig.json server/src/scripts/seed.ts
         env:
           MONGODB_URI: mongodb://localhost:27017/beastleague-test
@@ -68,4 +69,3 @@ jobs:
           JWT_SECRET: ci-test-secret
           INTERNAL_API_KEY: ci-test-key
           BASE_URL: http://localhost:4000
-
