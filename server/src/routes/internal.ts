@@ -189,3 +189,16 @@ internalRouter.post('/games/:gameId/score', async (req: Request, res: Response) 
     return res.status(500).json({ error: String(err) });
   }
 });
+
+// GET /api/internal/games?date=YYYY-MM-DD — 날짜별 경기 조회
+internalRouter.get('/games', async (req: Request, res: Response) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ error: 'date 파라미터 필요' });
+    const games = await Game.find({ date: String(date) }).lean();
+    return res.json(games);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
