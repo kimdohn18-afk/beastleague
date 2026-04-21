@@ -278,10 +278,10 @@ export default function RankingPage() {
                         <div className="flex items-center gap-1.5">
                           <p className={`text-sm font-bold truncate ${r.isMe ? 'text-orange-600' : 'text-gray-900'}`}>{r.name}{r.isMe ? ' (나)' : ''}</p>
                           {r.placedToday ? (
-                            <span className="text-[10px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full font-medium shrink-0">배치완료</span>
-                          ) : (
-                            <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full shrink-0">미배치</span>
-                          )}
+  <span className="text-[10px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full font-medium shrink-0">배치완료</span>
+) : (
+  <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full shrink-0">미배치</span>
+)}
                         </div>
                         {traitStr && <p className="text-[11px] text-gray-400 mt-0.5">{traitStr}</p>}
                       </div>
@@ -356,10 +356,10 @@ export default function RankingPage() {
                       <div className="flex items-center gap-1.5">
                         <p className="text-sm font-bold text-gray-900 truncate">{r.name || '???'}</p>
                         {r.placedToday ? (
-                          <span className="text-[10px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full font-medium shrink-0">배치완료</span>
-                        ) : (
-                          <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full shrink-0">미배치</span>
-                        )}
+  <span className="text-[10px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full font-medium shrink-0">배치완료</span>
+) : (
+  <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full shrink-0">미배치</span>
+)}
                       </div>
                       {traitStr && <p className="text-[11px] text-gray-400 mt-0.5">{traitStr}</p>}
                     </div>
