@@ -18,7 +18,7 @@ async function main() {
   await mongoose.connect(MONGODB_URI);
   console.log('[Migration] Connected.\n');
 
-  const db = mongoose.connection.db;
+  const db = mongoose.connection.db!;
 
   // ─── 1. games 컬렉션: batterRecords, events 필드 제거 ───
   console.log('[1/4] Removing batterRecords and events from games...');
