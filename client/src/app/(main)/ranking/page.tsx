@@ -367,7 +367,7 @@ export default function RankingPage() {
                       {traitStr && <p className="text-[11px] text-gray-400 mt-0.5">{traitStr}</p>}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <p className="text-orange-500 text-sm font-bold">{(r.xp ?? 0).toLocaleString()} XP</p>
+                      <p className="text-orange-500 text-sm font-bold">{(r.totalXp ?? r.xp ?? 0).toLocaleString()} XP</p>
                       {r._id && <span className="text-gray-300 text-xs">›</span>}
                     </div>
                   </div>
