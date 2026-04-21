@@ -3,7 +3,7 @@ import { authenticateUser } from '../middleware/auth';
 import { Character } from '../models/Character';
 import { StatLog } from '../models/StatLog';
 import { Battle } from '../models/Battle';
-import { Placement } from '../models/Placement';
+import { Prediction } from '../models/Prediction';
 import mongoose from 'mongoose';
 
 export const rankingsRouter = Router();
@@ -15,36 +15,39 @@ function todayKST(): string {
 }
 
 async function getRanking(type: RankingType, limit: number) {
- // GET /api/rankings 에서 level 타입 응답 수정
-if (type === 'level') {
-  const characters = await Character.find().sort({ xp: -1 }).limit(limit)
-    .select('_id userId name animalType level xp stats activeTrait').lean();
+  if (type === 'level') {
+    const characters = await Character.find().sort({ xp: -1 }).limit(limit)
+      .select('_id userId name animalType level xp stats activeTrait').lean();
 
-  const today = todayKST();
-  const userIds = characters.map((c) => c.userId);
-  import { Prediction } from '../models/Prediction';
+    const today = todayKST();
+    const userIds = characters.map((c) => c.userId);
+    
+    // Prediction 기준으로 오늘 예측 여부 확인
+    const todayPredictions = await Prediction.find({
+      userId: { $in: userIds },
+      date: today,
+    }).select('userId').lean();
 
-// ... getRanking 함수 내부 level 타입에서:
-const todayPredictions = await Prediction.find({
-  userId: { $in: userIds },
-  date: today,
-}).select('userId').lean();
+    const predictedUserIds = new Set(todayPredictions.map((p) => String(p.userId)));
 
-const placedUserIds = new Set(todayPredictions.map((p) => String(p.userId)));
+    // 오늘 예측 수도 표시
+    const predictionCounts = new Map<string, number>();
+    todayPredictions.forEach((p) => {
+      const uid = String(p.userId);
+      predictionCounts.set(uid, (predictionCounts.get(uid) || 0) + 1);
+    });
 
-  const placedUserIds = new Set(todayPlacements.map((p) => String(p.userId)));
-
-  // ★ 수정: _id를 명시적으로 string 변환
-  return characters.map((c) => ({
-    _id: String(c._id),
-    userId: String(c.userId),
-    name: c.name,
-    animalType: c.animalType,
-    xp: c.xp,
-    activeTrait: c.activeTrait,
-    placedToday: placedUserIds.has(String(c.userId)),
-  }));
-}
+    return characters.map((c) => ({
+      _id: String(c._id),
+      userId: String(c.userId),
+      name: c.name,
+      animalType: c.animalType,
+      xp: c.xp,
+      activeTrait: c.activeTrait,
+      placedToday: predictedUserIds.has(String(c.userId)),
+      todayPredictions: predictionCounts.get(String(c.userId)) || 0,
+    }));
+  }
 
   if (type === 'totalStats') {
     return Character.aggregate([
@@ -71,7 +74,6 @@ const placedUserIds = new Set(todayPredictions.map((p) => String(p.userId)));
     ]);
   }
 
-  // battlePoints
   const since = new Date(Date.now() - 30 * 24 * 3600 * 1000);
   return Battle.aggregate([
     { $match: { createdAt: { $gte: since } } },
@@ -99,7 +101,6 @@ const placedUserIds = new Set(todayPredictions.map((p) => String(p.userId)));
   ]);
 }
 
-// GET /api/rankings
 rankingsRouter.get('/', authenticateUser, async (req: Request, res: Response) => {
   try {
     const type = (req.query.type as RankingType) ?? 'level';
@@ -111,7 +112,6 @@ rankingsRouter.get('/', authenticateUser, async (req: Request, res: Response) =>
   }
 });
 
-// GET /api/rankings/me
 rankingsRouter.get('/me', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = new mongoose.Types.ObjectId(req.user!.userId);
