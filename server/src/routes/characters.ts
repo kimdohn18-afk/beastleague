@@ -538,28 +538,44 @@ router.get('/:id/public', async (req: Request, res: Response) => {
     }
 
     const today = todayKST();
-    let todayPlacement = null;
 
-    const placement = await Placement.findOne({
+    // 새 시스템: Prediction 조회
+    const { Prediction } = await import('../models/Prediction');
+    const predictions = await Prediction.find({
       userId: character.userId,
       date: today,
     }).lean();
 
-    if (placement) {
-      const game = await Game.findOne({ gameId: (placement as any).gameId })
-        .select('gameId homeTeam awayTeam status scores startTime')
-        .lean();
+    let todayPredictions = null;
 
-      todayPlacement = {
-        team: (placement as any).team,
-        battingOrder: (placement as any).battingOrder,
-        predictedWinner: (placement as any).predictedWinner,
-        status: (placement as any).status,
-        isCorrect: (placement as any).isCorrect,
-        xpFromPlayer: (placement as any).xpFromPlayer,
-        xpFromPrediction: (placement as any).xpFromPrediction,
-        game: game || null,
-      };
+    if (predictions.length > 0) {
+      const gameIds = predictions.map((p: any) => p.gameId);
+      const games = await Game.find({ gameId: { $in: gameIds } })
+        .select('gameId homeTeam awayTeam status homeScore awayScore startTime')
+        .lean();
+      const gameMap = new Map(games.map((g: any) => [g.gameId, g]));
+
+      todayPredictions = predictions.map((p: any) => {
+        const game = gameMap.get(p.gameId);
+        return {
+          gameId: p.gameId,
+          predictedWinner: p.predictedWinner,
+          predictedDiffRange: p.predictedDiffRange || null,
+          predictedTotalRange: p.predictedTotalRange || null,
+          betXp: p.betXp || 0,
+          status: p.status,
+          result: p.result || null,
+          game: game ? {
+            gameId: game.gameId,
+            homeTeam: game.homeTeam,
+            awayTeam: game.awayTeam,
+            status: game.status,
+            homeScore: game.homeScore ?? null,
+            awayScore: game.awayScore ?? null,
+            startTime: game.startTime,
+          } : null,
+        };
+      });
     }
 
     res.json({
@@ -575,7 +591,7 @@ router.get('/:id/public', async (req: Request, res: Response) => {
         totalFeeds: character.totalFeeds || 0,
         createdAt: character.createdAt,
       },
-      todayPlacement,
+      todayPredictions,
     });
   } catch (err) {
     console.error('Public profile error:', err);
