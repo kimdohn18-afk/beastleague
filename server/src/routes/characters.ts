@@ -539,7 +539,6 @@ router.get('/:id/public', async (req: Request, res: Response) => {
 
     const today = todayKST();
 
-    // 새 시스템: Prediction 조회
     const { Prediction } = await import('../models/Prediction');
     const predictions = await Prediction.find({
       userId: character.userId,
@@ -557,12 +556,15 @@ router.get('/:id/public', async (req: Request, res: Response) => {
 
       todayPredictions = predictions.map((p: any) => {
         const game = gameMap.get(p.gameId);
+        const totalBet = (p.xpBetOnDiff || 0) + (p.xpBetOnTotal || 0);
         return {
           gameId: p.gameId,
           predictedWinner: p.predictedWinner,
-          predictedDiffRange: p.predictedDiffRange || null,
-          predictedTotalRange: p.predictedTotalRange || null,
-          betXp: p.betXp || 0,
+          scoreDiffRange: p.scoreDiffRange || null,
+          totalRunsRange: p.totalRunsRange || null,
+          xpBetOnDiff: p.xpBetOnDiff || 0,
+          xpBetOnTotal: p.xpBetOnTotal || 0,
+          totalBet,
           status: p.status,
           result: p.result || null,
           game: game ? {
@@ -570,8 +572,8 @@ router.get('/:id/public', async (req: Request, res: Response) => {
             homeTeam: game.homeTeam,
             awayTeam: game.awayTeam,
             status: game.status,
-            homeScore: game.homeScore ?? null,
-            awayScore: game.awayScore ?? null,
+            homeScore: game.homeScore,
+            awayScore: game.awayScore,
             startTime: game.startTime,
           } : null,
         };
