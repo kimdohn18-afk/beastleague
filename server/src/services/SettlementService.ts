@@ -113,7 +113,14 @@ export async function settleGame(
 
       // 3. XP 적용 (netXp + streak)
       const totalXp = result.netXp + streakBonus.total;
-      character.xp = Math.max(0, (character.xp || 0) + totalXp);
+      // 누적 XP는 양수 획득분만 더함 (절대 줄지 않음)
+if (totalXp > 0) {
+  character.totalXp = (character.totalXp || 0) + totalXp;
+}
+// 보유 XP는 증감 모두 반영 (0 미만 방지)
+character.currentXp = Math.max(0, (character.currentXp || 0) + totalXp);
+// 하위호환: xp = totalXp 동기화
+character.xp = character.totalXp;
       character.totalPlacements = (character.totalPlacements || 0) + 1;
 
       // 4. 업적 재계산 (10회 배수)
@@ -183,7 +190,9 @@ export async function settleGame(
         prediction.date
       );
       if (allKillXp > 0) {
-        character.xp = (character.xp || 0) + allKillXp;
+        character.totalXp = (character.totalXp || 0) + allKillXp;
+character.currentXp = (character.currentXp || 0) + allKillXp;
+character.xp = character.totalXp;
         await character.save();
       }
 
