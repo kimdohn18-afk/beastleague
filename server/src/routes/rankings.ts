@@ -22,10 +22,15 @@ if (type === 'level') {
 
   const today = todayKST();
   const userIds = characters.map((c) => c.userId);
-  const todayPlacements = await Placement.find({
-    userId: { $in: userIds },
-    date: today,
-  }).select('userId').lean();
+  import { Prediction } from '../models/Prediction';
+
+// ... getRanking 함수 내부 level 타입에서:
+const todayPredictions = await Prediction.find({
+  userId: { $in: userIds },
+  date: today,
+}).select('userId').lean();
+
+const placedUserIds = new Set(todayPredictions.map((p) => String(p.userId)));
 
   const placedUserIds = new Set(todayPlacements.map((p) => String(p.userId)));
 
