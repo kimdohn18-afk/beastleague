@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import WalkingCharacter from '@/components/WalkingCharacter';
 import { PIXEL_ART_ANIMALS, getEvolutionStage } from '@/lib/constants';
+import { getDisplayName } from '@beastleague/shared';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
@@ -21,16 +22,6 @@ const ANIMAL_NAMES: Record<string, string> = {
   turtle: '거북이', dinosaur: '공룡', dog: '강아지', penguin: '펭귄', seagull: '갈매기',
   cat: '고양이', rabbit: '토끼', gorilla: '고릴라', elephant: '코끼리',
 };
-
-const TEAM_NAMES: Record<string, string> = {
-  LG: 'LG 트윈스', KT: 'KT 위즈', SSG: 'SSG 랜더스', NC: 'NC 다이노스',
-  '두산': '두산 베어스', KIA: 'KIA 타이거즈', '롯데': '롯데 자이언츠',
-  '삼성': '삼성 라이온즈', '한화': '한화 이글스', '키움': '키움 히어로즈',
-};
-
-function teamLabel(code: string): string {
-  return TEAM_NAMES[code] || code;
-}
 
 function getCharacterSize(xp: number): number {
   const size = 60 + Math.pow(xp, 0.55) * 7.5;
