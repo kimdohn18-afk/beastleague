@@ -31,13 +31,11 @@ export function createApp(): express.Application {
   app.use(morgan('dev'));
   app.use(express.json());
   app.use(generalLimiter);
-  app.use('/api/stats', statsRouter);
 
-
-  // 서버 헬스체크 (인증 불필요 - 크론잡 서버 깨우기용)
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+  // 서버 헬스체크 (인증 불필요)
+  app.get('/api/health', (_req: Request, res: Response) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
 
   app.use('/api/auth', authRouter);
   app.use('/api/games', gamesRouter);
@@ -47,22 +45,23 @@ app.get('/api/health', (_req: Request, res: Response) => {
   app.use('/api/trainings', trainingsRouter);
   app.use('/api/battles', battlesRouter);
   app.use('/api/rankings', rankingsRouter);
+  app.use('/api/stats', statsRouter);
   app.use('/api/internal', internalRouter);
   app.use('/api/push', pushRouter);
   app.use('/api/leagues', leaguesRouter);
   app.use('/api/inventory', inventoryRouter);
   app.use('/api/virtual-match', virtualMatchRouter);
 
+  // 404 핸들러 (반드시 라우트 뒤에)
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not Found' });
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // 에러 핸들러 (맨 마지막)
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     console.error('[Error]', err);
     res.status(500).json({ error: err.message || 'Internal Server Error' });
   });
 
-  
   return app;
 }
