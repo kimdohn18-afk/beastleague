@@ -31,6 +31,15 @@ interface Character {
   name: string;
   animalType: string;
   xp: number;
+  totalXp?: number;
+  currentXp?: number;
+  stats?: {
+    power: number;
+    agility: number;
+    skill: number;
+    stamina: number;
+    mind: number;
+  };
   userId: string;
   activeTrait?: string | null;
   earnedAchievements?: string[];
