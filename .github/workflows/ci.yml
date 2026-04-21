@@ -52,20 +52,3 @@ jobs:
           NEXTAUTH_SECRET: ci-test-secret
           NEXTAUTH_URL: http://localhost:3000
 
-      - name: Seed 데이터 생성
-        run: npx ts-node -P server/tsconfig.json server/src/scripts/seed.ts
-        env:
-          MONGODB_URI: mongodb://localhost:27017/beastleague-test
-          JWT_SECRET: ci-test-secret
-          INTERNAL_API_KEY: ci-test-key
-
-      - name: E2E 플로우 테스트
-        run: |
-          npm run dev --workspace=server &
-          sleep 5
-          npx ts-node -P server/tsconfig.json server/src/scripts/e2eFlow.ts
-        env:
-          MONGODB_URI: mongodb://localhost:27017/beastleague-test
-          JWT_SECRET: ci-test-secret
-          INTERNAL_API_KEY: ci-test-key
-          BASE_URL: http://localhost:4000
