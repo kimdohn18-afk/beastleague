@@ -9,7 +9,7 @@ const NAV_ITEMS = [
   { href: '/',               label: '홈' },
   { href: '/match',          label: '예측' },
   { href: '/battle',         label: '경기' },
-  { href: '/stats',          label: '능력치' },
+  { href: '/inventory',      label: '장비' },
   { href: '/ranking',        label: '랭킹' },
 ];
 
