@@ -16,6 +16,7 @@ import { leaguesRouter } from './routes/leagues';
 import { predictionsRouter } from './routes/predictions';
 import { statsRouter } from './routes/stats';
 import { virtualMatchRouter } from './routes/virtualMatch';
+import { inventoryRouter } from './routes/inventory';
 
 
 export function createApp(): express.Application {
@@ -49,7 +50,8 @@ app.get('/api/health', (_req: Request, res: Response) => {
   app.use('/api/internal', internalRouter);
   app.use('/api/push', pushRouter);
   app.use('/api/leagues', leaguesRouter);
-
+  app.use('/api/inventory', inventoryRouter);
+  
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not Found' });
   });
@@ -61,5 +63,6 @@ app.get('/api/health', (_req: Request, res: Response) => {
     res.status(500).json({ error: err.message || 'Internal Server Error' });
   });
 
+  
   return app;
 }
