@@ -6,9 +6,10 @@ import Link from 'next/link';
 import PushManager from '@/components/PushManager';
 
 const NAV_ITEMS = [
-  { href: '/',               label: '캐릭터' },
-  { href: '/match',          label: '경기' },
-  { href: '/my-placements',  label: '내 배치' },
+  { href: '/',               label: '홈' },
+  { href: '/match',          label: '예측' },
+  { href: '/my-placements',  label: '내 예측' },
+  { href: '/stats',          label: '능력치' },
   { href: '/ranking',        label: '랭킹' },
 ];
 
