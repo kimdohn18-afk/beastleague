@@ -14,6 +14,7 @@ import { internalRouter } from './routes/internal';
 import { pushRouter } from './routes/push';
 import { leaguesRouter } from './routes/leagues';
 import { predictionsRouter } from './routes/predictions';
+import { statsRouter } from './routes/stats';
 
 
 export function createApp(): express.Application {
