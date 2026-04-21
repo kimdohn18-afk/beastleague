@@ -316,9 +316,9 @@ export default function PublicProfilePage() {
                     {p.game && (
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2 text-sm font-bold">
-                          <span>{getDisplayName(p.game.homeTeam)}</span>
+                          <span>{getDisplayName(p.game.homeTeam as any)}</span>
                           <span className="text-gray-300">vs</span>
-                          <span>{getDisplayName(p.game.awayTeam)}</span>
+                          <span>{getDisplayName(p.game.awayTeam as any)}</span>
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                           p.status === 'settled'
@@ -344,7 +344,7 @@ export default function PublicProfilePage() {
                       <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
                         <span className="text-xs text-gray-400">승리 예측</span>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-bold">{getDisplayName(p.predictedWinner)}</span>
+                          <span className="text-sm font-bold">{getDisplayName(p.predictedWinner as any)}</span>
                           {p.status === 'settled' && p.result && (
                             <span className="text-xs">{p.result.winCorrect ? '✅' : '❌'}</span>
                           )}
