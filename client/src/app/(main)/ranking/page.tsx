@@ -12,7 +12,7 @@ type Tab = 'league' | 'versus' | 'all';
 interface League { _id: string; name: string; code: string; members: string[]; ownerId: string; }
 interface RankItem { rank: number; characterId?: string; name: string; animalType: string; xp: number; activeTrait?: string; placedToday: boolean; isMe: boolean; }
 interface LeagueRankItem { rank: number; name: string; code: string; memberCount: number; totalXp: number; avgXp: number; isMine: boolean; }
-interface AllRankItem { _id?: string; name: string; animalType: string; xp: number; activeTrait?: string; placedToday: boolean; }
+interface AllRankItem { _id?: string; name: string; animalType: string; xp: number; totalXp?: number; currentXp?: number; activeTrait?: string; placedToday: boolean; todayPredictions?: number; }
 
 export default function RankingPage() {
   const { data: session, status } = useSession();
