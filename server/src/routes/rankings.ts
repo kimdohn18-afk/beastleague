@@ -16,7 +16,7 @@ function todayKST(): string {
 
 async function getRanking(type: RankingType, limit: number) {
   if (type === 'level') {
-    const characters = await Character.find().sort({ xp: -1 }).limit(limit)
+    const characters = await Character.find().sort({ totalXp: -1 }).limit(limit)
       .select('_id userId name animalType level xp stats activeTrait').lean();
 
     const today = todayKST();
@@ -42,7 +42,7 @@ async function getRanking(type: RankingType, limit: number) {
       userId: String(c.userId),
       name: c.name,
       animalType: c.animalType,
-      xp: c.xp,
+      totalXp: c.totalXp || c.xp || 0, currentXp: c.currentXp || c.xp || 0,
       activeTrait: c.activeTrait,
       placedToday: predictedUserIds.has(String(c.userId)),
       todayPredictions: predictionCounts.get(String(c.userId)) || 0,
