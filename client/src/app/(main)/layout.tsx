@@ -8,7 +8,7 @@ import PushManager from '@/components/PushManager';
 const NAV_ITEMS = [
   { href: '/',               label: '홈' },
   { href: '/match',          label: '예측' },
-  { href: '/my-placements',  label: '내 예측' },
+  { href: '/battle',         label: '경기' },
   { href: '/stats',          label: '능력치' },
   { href: '/ranking',        label: '랭킹' },
 ];
