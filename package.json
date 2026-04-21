@@ -11,23 +11,13 @@
     "seed": "npx ts-node -P server/tsconfig.json -r tsconfig-paths/register server/src/scripts/seed.ts",
     "e2e": "npx ts-node -P server/tsconfig.json -r tsconfig-paths/register server/src/scripts/e2eFlow.ts",
     "validate-data": "npx ts-node -P collector/tsconfig.json collector/src/tools/validate.ts",
-    "add-images": "bash scripts/add-character-images.sh"
+    "add-images": "bash scripts/add-character-images.sh",
+    "score": "npx ts-node collector/src/cli/scoreInput.ts",
+    "migrate": "npx ts-node -P server/tsconfig.json -r tsconfig-paths/register server/src/scripts/migrate-to-predictions.ts"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
     "typescript": "^5.3.3",
     "tsconfig-paths": "^4.2.0"
-  }
-}
-
-{
-  "scripts": {
-    "score": "npx ts-node collector/src/cli/scoreInput.ts"
-  }
-}
-
-{
-  "scripts": {
-    "migrate": "npx ts-node -P server/tsconfig.json -r tsconfig-paths/register server/src/scripts/migrate-to-predictions.ts"
   }
 }
