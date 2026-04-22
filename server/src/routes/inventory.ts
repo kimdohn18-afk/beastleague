@@ -149,4 +149,56 @@ inventoryRouter.delete('/:itemId', authenticateUser, async (req: Request, res: R
     await InventoryItem.findByIdAndDelete(item._id);
     return res.json({ success: true, refund, currentXp: character?.currentXp || 0, message: `${item.name}을(를) 분해하여 ${refund} XP를 획득했습니다.` });
   } catch (err) { return res.status(500).json({ error: String(err) }); }
+// GET /api/inventory/catalog — 아이템 도감
+inventoryRouter.get('/catalog', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+
+    // 유저가 보유 중이거나 보유했던 아이템 templateId 목록
+    const ownedItems = await InventoryItem.find({ userId }).select('templateId').lean();
+    const ownedSet = new Set(ownedItems.map(i => i.templateId));
+
+    // 전체 템플릿에서 도감 구성
+    const { ITEM_TEMPLATES, SET_BONUSES } = await import('../models/Item');
+
+    const catalog = ITEM_TEMPLATES.map(t => ({
+      templateId: t.templateId,
+      name: t.name,
+      description: t.description,
+      slot: t.slot,
+      rarity: t.rarity,
+      icon: t.icon,
+      effects: t.effects,
+      xpBonus: t.xpBonus || 0,
+      special: t.special || null,
+      setId: t.setId || null,
+      owned: ownedSet.has(t.templateId),
+    }));
+
+    // 세트 정보
+    const sets = SET_BONUSES.map(s => ({
+      setId: s.setId,
+      name: s.name,
+      bonuses: s.bonuses.map(b => ({
+        count: b.count,
+        description: b.description,
+      })),
+      items: ITEM_TEMPLATES.filter(t => t.setId === s.setId).map(t => ({
+        templateId: t.templateId,
+        name: t.name,
+        icon: t.icon,
+        slot: t.slot,
+        rarity: t.rarity,
+        owned: ownedSet.has(t.templateId),
+      })),
+    }));
+
+    const totalCount = ITEM_TEMPLATES.length;
+    const ownedCount = ownedSet.size;
+    const completion = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
+
+    return res.json({ catalog, sets, totalCount, ownedCount, completion });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
 });
