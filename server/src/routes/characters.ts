@@ -173,12 +173,11 @@ router.get('/me/achievements', authenticateUser, async (req: Request, res: Respo
       earned: earnedSet.has(a.id),
     }));
 
-    res.json({
+      res.json({
       activeTrait: result.activeTrait,
       earnedCount: result.earnedCount,
       totalCount: allAchievements.length,
       achievements,
-      teamAchievements: result.teamAchievements,
     });
   } catch (err) {
     console.error('My achievements error:', err);
