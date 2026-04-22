@@ -10,6 +10,13 @@ function getEnhanceCost(level: number): number { return 20 + level * 15; }
 function getEnhanceSuccessRate(level: number): number { return Math.max(0.5, 0.95 - level * 0.05); }
 function getEnhancedValue(baseValue: number, level: number): number { return Math.round(baseValue * (1 + level * 0.2)); }
 
+const SHOP_PRICES: Record<string, number> = {
+  common: 30,
+  rare: 100,
+  epic: 300,
+  legendary: 800,
+};
+
 // GET /api/inventory
 inventoryRouter.get('/', authenticateUser, async (req: Request, res: Response) => {
   try {
@@ -40,11 +47,10 @@ inventoryRouter.get('/', authenticateUser, async (req: Request, res: Response) =
   } catch (err) { return res.status(500).json({ error: String(err) }); }
 });
 
-// GET /api/inventory/catalog — 아이템 도감 (/:itemId 보다 위에 있어야 함)
+// GET /api/inventory/catalog — 아이템 도감
 inventoryRouter.get('/catalog', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-
     const ownedItems = await InventoryItem.find({ userId }).select('templateId').lean();
     const ownedSet = new Set(ownedItems.map(i => i.templateId));
 
@@ -60,6 +66,7 @@ inventoryRouter.get('/catalog', authenticateUser, async (req: Request, res: Resp
       special: t.special || null,
       setId: t.setId || null,
       owned: ownedSet.has(t.templateId),
+      price: SHOP_PRICES[t.rarity] || 30,
     }));
 
     const sets = SET_BONUSES.map(s => ({
@@ -76,7 +83,69 @@ inventoryRouter.get('/catalog', authenticateUser, async (req: Request, res: Resp
     const ownedCount = ownedSet.size;
     const completion = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
 
-    return res.json({ catalog, sets, totalCount, ownedCount, completion });
+    const character = await Character.findOne({ userId }).select('currentXp totalXp').lean();
+
+    return res.json({ catalog, sets, totalCount, ownedCount, completion, currentXp: character?.currentXp || 0 });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// POST /api/inventory/buy — 아이템 구매
+inventoryRouter.post('/buy', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { templateId } = req.body;
+
+    if (!templateId) return res.status(400).json({ error: 'templateId가 필요합니다' });
+
+    const template = ITEM_TEMPLATES.find(t => t.templateId === templateId);
+    if (!template) return res.status(404).json({ error: '존재하지 않는 아이템입니다' });
+
+    const price = SHOP_PRICES[template.rarity] || 30;
+
+    const character = await Character.findOne({ userId });
+    if (!character) return res.status(404).json({ error: '캐릭터가 없습니다' });
+
+    if ((character.currentXp || 0) < price) {
+      return res.status(400).json({
+        error: `XP가 부족합니다 (${price} XP 필요, 보유 ${character.currentXp || 0} XP)`,
+        code: 'insufficientXp',
+        price,
+        currentXp: character.currentXp || 0,
+      });
+    }
+
+    // XP 차감
+    character.currentXp = (character.currentXp || 0) - price;
+    character.xp = character.totalXp || 0;
+    await character.save();
+
+    // 아이템 생성
+    const invItem = await InventoryItem.create({
+      userId,
+      characterId: character._id,
+      templateId: template.templateId,
+      name: template.name,
+      slot: template.slot,
+      rarity: template.rarity,
+      icon: template.icon,
+      enhanceLevel: 0,
+      currentEffects: template.effects,
+      xpBonus: template.xpBonus || 0,
+      special: template.special || null,
+      setId: template.setId || null,
+      currentEffect: template.effects.length > 0
+        ? { stat: template.effects[0].stat, value: template.effects[0].value, xpBonus: template.xpBonus || 0 }
+        : { stat: '', value: 0, xpBonus: 0 },
+      equipped: false,
+    });
+
+    return res.json({
+      success: true,
+      item: invItem,
+      price,
+      currentXp: character.currentXp,
+      message: `${template.name}을(를) 구매했습니다! (-${price} XP)`,
+    });
   } catch (err) { return res.status(500).json({ error: String(err) }); }
 });
 
