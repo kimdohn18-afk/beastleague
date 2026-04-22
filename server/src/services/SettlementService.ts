@@ -142,12 +142,7 @@ character.xp = character.totalXp;
           );
 
           (character as any).earnedAchievements = achResult.earned;
-          (character as any).teamAchievements = achResult.teamAchievements.map((t: any) => ({
-            teamId: t.teamId,
-            tier: t.tier.tier,
-            count: t.count,
-          }));
-
+          
           if (newAchievements.length > 0) {
             const achNames = newAchievements
               .map((id: string) => {
