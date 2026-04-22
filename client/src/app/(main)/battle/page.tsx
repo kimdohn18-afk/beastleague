@@ -67,6 +67,14 @@ interface CareerStats {
   totalXpEarned: number;
 }
 
+interface StatsData {
+  stats: Record<string, number>;
+  upgradeCosts: Record<string, number>;
+  totalStats: number;
+  currentXp: number;
+  totalXp: number;
+}
+
 const RARITY_COLORS: Record<string, string> = {
   common: 'bg-gray-100 text-gray-600 border-gray-200',
   rare: 'bg-blue-50 text-blue-600 border-blue-200',
@@ -78,8 +86,12 @@ const RARITY_NAMES: Record<string, string> = {
   common: '일반', rare: '레어', epic: '에픽', legendary: '전설',
 };
 
-const STAT_NAMES: Record<string, string> = {
-  power: '파워', skill: '기술', agility: '민첩', stamina: '체력', mind: '정신',
+const STAT_INFO: Record<string, { emoji: string; name: string; short: string }> = {
+  power:   { emoji: '💪', name: '파워', short: '장타력' },
+  skill:   { emoji: '🎯', name: '기술', short: '안타' },
+  agility: { emoji: '⚡', name: '민첩', short: '도루·득점' },
+  stamina: { emoji: '❤️', name: '체력', short: '수비' },
+  mind:    { emoji: '🧠', name: '정신', short: '선구안' },
 };
 
 function formatTime(ms: number): string {
@@ -97,9 +109,11 @@ export default function BattlePage() {
   const [matchStatus, setMatchStatus] = useState<MatchStatus | null>(null);
   const [claimResult, setClaimResult] = useState<ClaimResult | null>(null);
   const [career, setCareer] = useState<CareerStats | null>(null);
+  const [statsData, setStatsData] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [upgrading, setUpgrading] = useState<string | null>(null);
   const [remainingMs, setRemainingMs] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -109,7 +123,10 @@ export default function BattlePage() {
 
   useEffect(() => {
     if (authStatus === 'unauthenticated') router.push('/login');
-    if (token) fetchStatus();
+    if (token) {
+      fetchStatus();
+      fetchStatsData();
+    }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [token, authStatus]);
 
@@ -138,6 +155,15 @@ export default function BattlePage() {
       if (res.ok) setMatchStatus(await res.json());
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
+  }
+
+  async function fetchStatsData() {
+    try {
+      const res = await fetch(`${apiUrl}/api/stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setStatsData(await res.json());
+    } catch (e) { console.error(e); }
   }
 
   async function handleStart() {
@@ -172,11 +198,47 @@ export default function BattlePage() {
       if (res.ok) {
         setClaimResult(data);
         await fetchStatus();
+        await fetchStatsData();
       } else {
         showToast(data.error || '결과 수령 실패');
       }
     } catch { showToast('네트워크 오류'); }
     setClaiming(false);
+  }
+
+  async function handleUpgrade(stat: string) {
+    if (upgrading || !statsData) return;
+    const cost = statsData.upgradeCosts[stat];
+    if (statsData.currentXp < cost) {
+      showToast(`XP 부족 (${cost} XP 필요)`);
+      return;
+    }
+    setUpgrading(stat);
+    try {
+      const res = await fetch(`${apiUrl}/api/stats/upgrade`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stat }),
+      });
+      const result = await res.json();
+      if (res.ok) {
+        setStatsData(prev => prev ? {
+          ...prev,
+          stats: result.stats,
+          currentXp: result.currentXp,
+          upgradeCosts: {
+            ...prev.upgradeCosts,
+            [stat]: prev.upgradeCosts[stat] + 5,
+          },
+          totalStats: Object.values(result.stats as Record<string, number>).reduce((a, b) => a + b, 0),
+        } : prev);
+        const info = STAT_INFO[stat];
+        showToast(`${info.emoji} ${info.name} Lv.${result.newLevel}!`);
+      } else {
+        showToast(result.error || '업그레이드 실패');
+      }
+    } catch { showToast('네트워크 오류'); }
+    setUpgrading(null);
   }
 
   async function fetchCareer() {
@@ -238,63 +300,96 @@ export default function BattlePage() {
       {/* ===== 경기 탭 ===== */}
       {tab === 'match' && (
         <div className="p-4 space-y-4">
-          {/* 남은 횟수 */}
-          {matchStatus && (
-            <div className="bg-white rounded-2xl p-4 border border-gray-100">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-bold text-gray-700">오늘 남은 횟수</span>
-                <span className="text-lg font-bold text-orange-500">
-                  {matchStatus.remaining} / {matchStatus.maxMatches}
-                </span>
-              </div>
-              {!matchStatus.hasPrediction && matchStatus.maxMatches < 2 && (
-                <div className="bg-orange-50 rounded-xl px-3 py-2 mt-2">
-                  <p className="text-xs text-orange-600">💡 오늘 경기 예측하면 추가 1회 가능!</p>
+
+          {/* 경기 상태 통합 카드 */}
+          {matchStatus && !claimResult && (
+            <div className={`rounded-2xl p-5 border-2 ${
+              hasActive ? 'bg-orange-50 border-orange-200' :
+              isReady ? 'bg-emerald-50 border-emerald-300' :
+              matchStatus.remaining > 0 ? 'bg-white border-gray-100' :
+              'bg-gray-50 border-gray-200'
+            }`}>
+
+              {/* 진행 중 */}
+              {hasActive && matchStatus.activeMatch && (
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">⚾</span>
+                      <span className="text-sm font-bold text-gray-700">경기 진행 중</span>
+                    </div>
+                    <span className="text-xs text-gray-400">
+                      {matchStatus.played}/{matchStatus.maxMatches} 사용
+                    </span>
+                  </div>
+                  <p className="text-3xl font-bold text-orange-500 text-center mb-2 font-mono">
+                    {formatTime(remainingMs)}
+                  </p>
+                  <div className="bg-gray-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-orange-400 h-full transition-all duration-1000"
+                      style={{ width: `${Math.max(0, 100 - (remainingMs / (4 * 60 * 60 * 1000)) * 100)}%` }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* 결과 대기 */}
+              {isReady && !hasActive && matchStatus.activeMatch && (
+                <>
+                  <div className="text-center mb-3">
+                    <span className="text-3xl">🎉</span>
+                    <p className="text-sm font-bold text-gray-700 mt-1">경기가 끝났습니다!</p>
+                  </div>
+                  <button
+                    onClick={() => handleClaim(matchStatus.activeMatch!.matchId)}
+                    disabled={claiming}
+                    className="w-full bg-emerald-500 text-white py-3 rounded-xl font-bold text-sm shadow-md active:scale-[0.98] disabled:opacity-50"
+                  >
+                    {claiming ? '수령 중...' : '결과 확인하기'}
+                  </button>
+                </>
+              )}
+
+              {/* 출전 가능 */}
+              {!hasActive && !isReady && matchStatus.remaining > 0 && (
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-bold text-gray-700">오늘 남은 횟수</span>
+                    <span className="text-lg font-bold text-orange-500">
+                      {matchStatus.remaining} / {matchStatus.maxMatches}
+                    </span>
+                  </div>
+                  {!matchStatus.hasPrediction && matchStatus.maxMatches < 2 && (
+                    <p className="text-xs text-orange-600 bg-orange-50 rounded-lg px-3 py-1.5 mb-3">
+                      💡 오늘 경기 예측하면 추가 1회!
+                    </p>
+                  )}
+                  <button
+                    onClick={handleStart}
+                    disabled={starting}
+                    className="w-full bg-orange-400 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-[0.98] disabled:opacity-50"
+                  >
+                    {starting ? '출전 중...' : '⚾ 경기 출전! (4시간)'}
+                  </button>
+                </>
+              )}
+
+              {/* 다 소진 */}
+              {!hasActive && !isReady && matchStatus.remaining <= 0 && (
+                <div className="text-center py-2">
+                  <span className="text-2xl">✅</span>
+                  <p className="text-sm font-bold text-gray-500 mt-1">오늘 경기 완료!</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{matchStatus.played}/{matchStatus.maxMatches} 사용</p>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* 경기 진행 중 */}
-          {hasActive && matchStatus?.activeMatch && (
-            <div className="bg-white rounded-2xl p-6 border-2 border-orange-200 text-center">
-              <div className="text-4xl mb-3">⚾</div>
-              <p className="text-sm font-bold text-gray-700 mb-2">경기 진행 중...</p>
-              <p className="text-3xl font-bold text-orange-500 mb-2 font-mono">
-                {formatTime(remainingMs)}
-              </p>
-              <p className="text-xs text-gray-400">경기가 끝나면 결과를 확인할 수 있어요</p>
-              <div className="mt-3 bg-gray-100 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-orange-400 h-full transition-all duration-1000"
-                  style={{
-                    width: `${Math.max(0, 100 - (remainingMs / (4 * 60 * 60 * 1000)) * 100)}%`
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* 결과 수령 가능 */}
-          {isReady && !claimResult && matchStatus?.activeMatch && (
-            <div className="bg-white rounded-2xl p-6 border-2 border-emerald-300 text-center">
-              <div className="text-4xl mb-3">🎉</div>
-              <p className="text-sm font-bold text-gray-700 mb-4">경기가 끝났습니다!</p>
-              <button
-                onClick={() => handleClaim(matchStatus.activeMatch!.matchId)}
-                disabled={claiming}
-                className="w-full bg-emerald-500 text-white py-3 rounded-2xl font-bold text-sm shadow-md active:scale-[0.98] disabled:opacity-50"
-              >
-                {claiming ? '수령 중...' : '결과 확인하기'}
-              </button>
             </div>
           )}
 
           {/* 결과 표시 */}
           {claimResult && (
             <div className="space-y-3">
-              {/* 승패 + 스코어 */}
-              <div className={`rounded-2xl p-6 text-center border-2 ${
+              <div className={`rounded-2xl p-5 text-center border-2 ${
                 claimResult.result.win ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'
               }`}>
                 <div className="text-4xl mb-2">
@@ -303,14 +398,12 @@ export default function BattlePage() {
                 <h2 className={`text-xl font-bold ${claimResult.result.win ? 'text-green-600' : 'text-red-600'}`}>
                   {claimResult.result.personal.mvp ? 'MVP 승리!' : claimResult.result.win ? '승리!' : '패배...'}
                 </h2>
-                <p className="text-2xl font-bold text-gray-800 mt-2">
+                <p className="text-2xl font-bold text-gray-800 mt-1">
                   {claimResult.result.myScore} : {claimResult.result.oppScore}
                 </p>
               </div>
 
-              {/* 개인 성적 */}
               <div className="bg-white rounded-2xl p-4 border border-gray-100">
-                <p className="text-xs text-gray-400 mb-3 font-bold">개인 성적</p>
                 <div className="grid grid-cols-4 gap-2 text-center">
                   {[
                     { label: '타수', val: claimResult.result.personal.atBats },
@@ -330,87 +423,114 @@ export default function BattlePage() {
                 </div>
               </div>
 
-              {/* 스탯 상승 */}
               {Object.values(claimResult.statGain).some(v => v > 0) && (
-                <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-200">
-                  <p className="text-xs text-emerald-600 font-bold mb-2">📈 능력치 상승!</p>
-                  <div className="flex flex-wrap gap-2">
+                <div className="bg-emerald-50 rounded-2xl p-3 border border-emerald-200">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-emerald-600">📈</span>
                     {Object.entries(claimResult.statGain)
                       .filter(([, v]) => v > 0)
                       .map(([stat, val]) => (
-                        <span key={stat} className="bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full font-bold">
-                          {STAT_NAMES[stat] || stat} +{val}
+                        <span key={stat} className="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-bold">
+                          {STAT_INFO[stat]?.name || stat} +{val}
                         </span>
                       ))}
                   </div>
                 </div>
               )}
 
-              {/* XP 획득 */}
-              <div className="bg-orange-50 rounded-2xl p-4 border border-orange-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-gray-700">XP 획득</span>
-                  <span className="text-lg font-bold text-orange-500">+{claimResult.xpReward} XP</span>
+              <div className="flex gap-2">
+                <div className="flex-1 bg-orange-50 rounded-xl p-3 border border-orange-100 text-center">
+                  <p className="text-[10px] text-gray-400">XP 획득</p>
+                  <p className="text-base font-bold text-orange-500">+{claimResult.xpReward}</p>
                 </div>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs text-gray-400">보유 XP</span>
-                  <span className="text-xs text-gray-500">{claimResult.currentXp.toLocaleString()} XP</span>
+                <div className="flex-1 bg-gray-50 rounded-xl p-3 border border-gray-100 text-center">
+                  <p className="text-[10px] text-gray-400">보유 XP</p>
+                  <p className="text-base font-bold text-gray-700">{claimResult.currentXp.toLocaleString()}</p>
                 </div>
               </div>
 
-              {/* 아이템 드롭 */}
               {claimResult.droppedItem ? (
-                <div className={`rounded-2xl p-4 border-2 ${RARITY_COLORS[claimResult.droppedItem.rarity] || 'bg-gray-50 border-gray-200'}`}>
+                <div className={`rounded-2xl p-3 border-2 ${RARITY_COLORS[claimResult.droppedItem.rarity] || 'bg-gray-50 border-gray-200'}`}>
                   <div className="flex items-center gap-3">
-                    <span className="text-3xl">{claimResult.droppedItem.icon}</span>
+                    <span className="text-2xl">{claimResult.droppedItem.icon}</span>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-bold">{claimResult.droppedItem.name}</p>
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/50 font-medium">
-                          {RARITY_NAMES[claimResult.droppedItem.rarity] || claimResult.droppedItem.rarity}
+                          {RARITY_NAMES[claimResult.droppedItem.rarity]}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {STAT_NAMES[claimResult.droppedItem.effect.stat || ''] || claimResult.droppedItem.effect.stat} +{claimResult.droppedItem.effect.value}
-                        {claimResult.droppedItem.effect.xpBonus ? ` · XP +${claimResult.droppedItem.effect.xpBonus}%` : ''}
+                      <p className="text-xs text-gray-500">
+                        {STAT_INFO[claimResult.droppedItem.effect.stat || '']?.name || claimResult.droppedItem.effect.stat} +{claimResult.droppedItem.effect.value}
                       </p>
                     </div>
-                    <span className="text-xl">🎁</span>
+                    <span className="text-lg">🎁</span>
                   </div>
                 </div>
               ) : (
-                <div className="bg-gray-50 rounded-2xl p-3 text-center border border-gray-100">
-                  <p className="text-xs text-gray-400">아이템이 드롭되지 않았습니다</p>
+                <div className="bg-gray-50 rounded-xl p-2 text-center border border-gray-100">
+                  <p className="text-xs text-gray-400">아이템 드롭 없음</p>
                 </div>
+              )}
+
+              {matchStatus && matchStatus.remaining > 0 && (
+                <button
+                  onClick={() => setClaimResult(null)}
+                  className="w-full py-3 rounded-xl text-sm font-bold bg-white border border-orange-300 text-orange-500"
+                >
+                  한 번 더! ({matchStatus.remaining}회 남음)
+                </button>
               )}
             </div>
           )}
 
-          {/* 경기 시작 버튼 */}
-          {!hasActive && !isReady && !claimResult && (
-            <button
-              onClick={handleStart}
-              disabled={starting || !matchStatus || matchStatus.remaining <= 0}
-              className={`w-full py-4 rounded-2xl text-base font-bold transition-all ${
-                matchStatus && matchStatus.remaining > 0
-                  ? 'bg-orange-400 text-white active:scale-[0.98] shadow-lg'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              }`}
-            >
-              {!matchStatus || matchStatus.remaining <= 0
-                ? '오늘 경기 완료!'
-                : starting ? '출전 중...' : '⚾ 경기 출전! (4시간)'}
-            </button>
-          )}
+          {/* ===== 능력치 섹션 ===== */}
+          {statsData && (
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+                <span className="text-sm font-bold text-gray-800">내 능력치</span>
+                <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-bold">
+                  {statsData.currentXp.toLocaleString()} XP
+                </span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {Object.entries(STAT_INFO).map(([key, info]) => {
+                  const level = statsData.stats[key] || 1;
+                  const cost = statsData.upgradeCosts[key];
+                  const canAfford = statsData.currentXp >= cost;
 
-          {/* 결과 확인 후 다시 하기 */}
-          {claimResult && matchStatus && matchStatus.remaining > 0 && (
-            <button
-              onClick={() => { setClaimResult(null); }}
-              className="w-full py-3 rounded-2xl text-sm font-bold bg-white border border-orange-300 text-orange-500"
-            >
-              한 번 더! ({matchStatus.remaining}회 남음)
-            </button>
+                  return (
+                    <div key={key} className="px-4 py-2.5 flex items-center gap-3">
+                      <span className="text-base">{info.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-bold text-gray-800">{info.name}</span>
+                          <span className="text-[10px] text-gray-400">{info.short}</span>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
+                          <div
+                            className="bg-orange-400 h-1.5 rounded-full transition-all"
+                            style={{ width: `${Math.min((level / 99) * 100, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold text-orange-500 w-10 text-right">{level}</span>
+                      <button
+                        onClick={() => handleUpgrade(key)}
+                        disabled={!canAfford || upgrading === key}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg whitespace-nowrap ${
+                          canAfford
+                            ? 'bg-orange-400 text-white active:scale-95'
+                            : 'bg-gray-100 text-gray-400'
+                        }`}
+                      >
+                        {upgrading === key ? '...' : `${cost}`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -435,7 +555,6 @@ export default function BattlePage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {/* 요약 */}
               <div className="bg-white rounded-2xl p-4 border border-gray-100">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
@@ -453,7 +572,6 @@ export default function BattlePage() {
                 </div>
               </div>
 
-              {/* 상세 기록 */}
               <div className="bg-white rounded-2xl p-4 border border-gray-100">
                 <p className="text-xs text-gray-400 font-bold mb-3">통산 기록</p>
                 <div className="grid grid-cols-2 gap-y-3 gap-x-4">
@@ -475,7 +593,6 @@ export default function BattlePage() {
                 </div>
               </div>
 
-              {/* 총 XP */}
               <div className="bg-orange-50 rounded-2xl p-4 border border-orange-100">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">경기로 획득한 총 XP</span>
