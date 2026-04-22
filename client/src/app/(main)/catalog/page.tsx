@@ -8,7 +8,7 @@ interface ItemEffect { stat: string; value: number; }
 interface CatalogItem {
   templateId: string; name: string; description: string; slot: string; rarity: string;
   icon: string; effects: ItemEffect[]; xpBonus: number; special: string | null;
-  setId: string | null; owned: boolean;
+  setId: string | null; owned: boolean; price: number;
 }
 interface SetInfo {
   setId: string; name: string;
@@ -35,11 +35,14 @@ export default function CatalogPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [ownedCount, setOwnedCount] = useState(0);
   const [completion, setCompletion] = useState(0);
+  const [currentXp, setCurrentXp] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [buying, setBuying] = useState(false);
   const [tab, setTab] = useState<Tab>('items');
   const [filterSlot, setFilterSlot] = useState<FilterSlot>('all');
   const [filterRarity, setFilterRarity] = useState<FilterRarity>('all');
   const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null);
+  const [toast, setToast] = useState('');
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
@@ -48,6 +51,8 @@ export default function CatalogPage() {
     if (status === 'unauthenticated') router.push('/login');
     if (token) fetchCatalog();
   }, [token, status]);
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 2500); };
 
   async function fetchCatalog() {
     try {
@@ -61,9 +66,32 @@ export default function CatalogPage() {
         setTotalCount(data.totalCount);
         setOwnedCount(data.ownedCount);
         setCompletion(data.completion);
+        setCurrentXp(data.currentXp || 0);
       }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
+  }
+
+  async function handleBuy(templateId: string) {
+    if (buying) return;
+    setBuying(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/inventory/buy`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message);
+        setCurrentXp(data.currentXp);
+        setSelectedItem(null);
+        await fetchCatalog();
+      } else {
+        showToast(data.error || '구매 실패');
+      }
+    } catch { showToast('네트워크 오류'); }
+    finally { setBuying(false); }
   }
 
   const filtered = catalog
@@ -82,13 +110,19 @@ export default function CatalogPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
-      {/* 헤더 */}
+      {toast && <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white px-4 py-2 rounded-2xl text-sm shadow-lg">{toast}</div>}
+
       <div className="bg-white border-b border-gray-100 px-4 pt-6 pb-3">
-        <div className="flex items-center gap-3 mb-1">
-          <button onClick={() => router.back()} className="text-gray-400 text-sm">← 뒤로</button>
-          <h1 className="text-lg font-bold text-gray-900">📖 아이템 도감</h1>
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-3">
+            <button onClick={() => router.back()} className="text-gray-400 text-sm">←</button>
+            <h1 className="text-lg font-bold text-gray-900">📖 아이템 도감</h1>
+          </div>
+          <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-bold">
+            {currentXp.toLocaleString()} XP
+          </span>
         </div>
-        {/* 수집률 */}
+
         <div className="mt-3 bg-gray-50 rounded-xl p-3">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs text-gray-500">수집률</span>
@@ -99,7 +133,6 @@ export default function CatalogPage() {
           </div>
         </div>
 
-        {/* 탭 */}
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mt-3">
           <button onClick={() => setTab('items')}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${tab === 'items' ? 'bg-white text-orange-500 shadow-sm' : 'text-gray-400'}`}>
@@ -115,7 +148,6 @@ export default function CatalogPage() {
       {/* ===== 아이템 탭 ===== */}
       {tab === 'items' && (
         <div className="p-4">
-          {/* 필터 */}
           <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
             {([['all', '전체'], ['bat', '배트'], ['glove', '글러브'], ['shoes', '신발'], ['helmet', '헬멧'], ['accessory', '악세']] as [FilterSlot, string][]).map(([val, label]) => (
               <button key={val} onClick={() => setFilterSlot(val)}
@@ -133,18 +165,26 @@ export default function CatalogPage() {
             ))}
           </div>
 
-          {/* 아이템 그리드 */}
-          <div className="grid grid-cols-4 gap-2">
+          <div className="space-y-2">
             {filtered.map(item => (
               <div key={item.templateId} onClick={() => setSelectedItem(item)}
-                className={`rounded-xl p-2 text-center border-2 cursor-pointer active:scale-95 transition-all ${
-                  item.owned ? RARITY_COLORS[item.rarity] : 'border-gray-200 bg-gray-100 opacity-40'
-                }`}>
-                <div className={`text-2xl ${!item.owned ? 'grayscale' : ''}`}>{item.owned ? item.icon : '❓'}</div>
-                <p className="text-[9px] text-gray-500 mt-0.5 truncate">{item.owned ? item.name : '???'}</p>
-                <span className={`text-[8px] px-1 py-0.5 rounded-full ${RARITY_BADGE[item.rarity]}`}>
-                  {RARITY_NAMES[item.rarity]}
-                </span>
+                className={`flex items-center gap-3 p-3 rounded-2xl border-2 cursor-pointer active:scale-[0.98] transition-all ${RARITY_COLORS[item.rarity]}`}>
+                <span className="text-2xl">{item.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-bold text-gray-800 truncate">{item.name}</p>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${RARITY_BADGE[item.rarity]}`}>{RARITY_NAMES[item.rarity]}</span>
+                    {item.setId && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-500 font-medium">세트</span>}
+                    {item.owned && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-500 font-medium">보유</span>}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {SLOT_NAMES[item.slot]} · {item.effects.map(e => `${STAT_NAMES[e.stat] || e.stat} +${e.value}`).join(', ')}
+                    {item.xpBonus > 0 ? ` · XP +${item.xpBonus}%` : ''}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-bold text-orange-500">{item.price} XP</p>
+                </div>
               </div>
             ))}
           </div>
@@ -175,8 +215,6 @@ export default function CatalogPage() {
                       style={{ width: `${totalInSet > 0 ? (ownedInSet / totalInSet) * 100 : 0}%` }} />
                   </div>
                 </div>
-
-                {/* 세트 아이템 */}
                 <div className="px-4 py-2">
                   <div className="flex gap-2 mb-2">
                     {s.items.map(item => (
@@ -190,8 +228,6 @@ export default function CatalogPage() {
                     ))}
                   </div>
                 </div>
-
-                {/* 세트 보너스 */}
                 <div className="px-4 pb-3 space-y-1">
                   {s.bonuses.map((b, i) => {
                     const isActive = ownedInSet >= b.count;
@@ -215,12 +251,8 @@ export default function CatalogPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4" onClick={() => setSelectedItem(null)}>
           <div className="w-full max-w-sm bg-white rounded-2xl p-5" onClick={e => e.stopPropagation()}>
             <div className="text-center mb-4">
-              <div className={`text-5xl mb-2 ${!selectedItem.owned ? 'grayscale opacity-50' : ''}`}>
-                {selectedItem.owned ? selectedItem.icon : '❓'}
-              </div>
-              <h2 className="text-lg font-bold text-gray-800">
-                {selectedItem.owned ? selectedItem.name : '???'}
-              </h2>
+              <div className="text-5xl mb-2">{selectedItem.icon}</div>
+              <h2 className="text-lg font-bold text-gray-800">{selectedItem.name}</h2>
               <div className="flex items-center justify-center gap-2 mt-1">
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${RARITY_BADGE[selectedItem.rarity]}`}>
                   {RARITY_NAMES[selectedItem.rarity]}
@@ -230,37 +262,50 @@ export default function CatalogPage() {
               </div>
             </div>
 
-            {selectedItem.owned ? (
-              <>
-                <p className="text-xs text-gray-400 text-center mb-3">{selectedItem.description}</p>
-                <div className="bg-gray-50 rounded-xl p-3 mb-3">
-                  <p className="text-xs text-gray-400 mb-1">효과</p>
-                  {selectedItem.effects.map((eff, i) => (
-                    <p key={i} className="text-sm font-bold text-gray-700">
-                      {STAT_NAMES[eff.stat] || eff.stat} +{eff.value}
-                    </p>
-                  ))}
-                  {selectedItem.xpBonus > 0 && (
-                    <p className="text-sm font-bold text-orange-500">XP 보너스 +{selectedItem.xpBonus}%</p>
-                  )}
-                </div>
-                {selectedItem.special && (
-                  <div className="bg-purple-50 rounded-xl p-3 mb-3">
-                    <p className="text-xs text-purple-600 font-bold">✨ 특수 효과: {selectedItem.special}</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="bg-gray-50 rounded-xl p-4 text-center mb-3">
-                <p className="text-sm text-gray-400">아직 획득하지 못한 아이템입니다</p>
-                <p className="text-xs text-gray-300 mt-1">경기 뛰기에서 드롭될 수 있어요!</p>
-              </div>
-            )}
+            <p className="text-xs text-gray-400 text-center mb-3">{selectedItem.description}</p>
 
-            <button onClick={() => setSelectedItem(null)}
-              className="w-full py-3 rounded-xl text-sm font-bold bg-gray-100 text-gray-600">
-              닫기
-            </button>
+            <div className="bg-gray-50 rounded-xl p-3 mb-3">
+              <p className="text-xs text-gray-400 mb-1">효과</p>
+              {selectedItem.effects.map((eff, i) => (
+                <p key={i} className="text-sm font-bold text-gray-700">
+                  {STAT_NAMES[eff.stat] || eff.stat} +{eff.value}
+                </p>
+              ))}
+              {selectedItem.xpBonus > 0 && (
+                <p className="text-sm font-bold text-orange-500">XP 보너스 +{selectedItem.xpBonus}%</p>
+              )}
+            </div>
+
+            <div className="bg-orange-50 rounded-xl p-3 mb-4 border border-orange-100">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">구매 가격</span>
+                <span className="text-sm font-bold text-orange-600">{selectedItem.price} XP</span>
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-xs text-gray-500">보유 XP</span>
+                <span className={`text-xs font-bold ${currentXp >= selectedItem.price ? 'text-emerald-500' : 'text-red-400'}`}>
+                  {currentXp.toLocaleString()} XP
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                onClick={() => handleBuy(selectedItem.templateId)}
+                disabled={buying || currentXp < selectedItem.price}
+                className={`w-full py-3 rounded-xl text-sm font-bold transition-all ${
+                  currentXp >= selectedItem.price
+                    ? 'bg-orange-400 text-white active:scale-[0.98] shadow-md'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {buying ? '구매 중...' : currentXp >= selectedItem.price ? `구매하기 (${selectedItem.price} XP)` : 'XP 부족'}
+              </button>
+              <button onClick={() => setSelectedItem(null)}
+                className="w-full py-3 rounded-xl text-sm font-bold bg-gray-100 text-gray-600">
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}
