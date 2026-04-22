@@ -2,13 +2,9 @@ import { Router, Request, Response } from 'express';
 import { authenticateUser } from '../middleware/auth';
 import { Character } from '../models/Character';
 import { InventoryItem } from '../models/Inventory';
-import { ItemSlot, SET_BONUSES } from '../models/Item';
+import { ItemSlot, SET_BONUSES, ITEM_TEMPLATES } from '../models/Item';
 
 export const inventoryRouter = Router();
-
-const SLOT_NAMES: Record<string, string> = {
-  bat: '배트', glove: '글러브', shoes: '신발', helmet: '헬멧', accessory: '악세서리',
-};
 
 function getEnhanceCost(level: number): number { return 20 + level * 15; }
 function getEnhanceSuccessRate(level: number): number { return Math.max(0.5, 0.95 - level * 0.05); }
@@ -22,7 +18,6 @@ inventoryRouter.get('/', authenticateUser, async (req: Request, res: Response) =
     const equipped = items.filter(i => i.equipped);
     const unequipped = items.filter(i => !i.equipped);
 
-    // 세트 정보 계산
     const setCounts: Record<string, number> = {};
     for (const item of equipped) {
       if (item.setId) setCounts[item.setId] = (setCounts[item.setId] || 0) + 1;
@@ -42,6 +37,46 @@ inventoryRouter.get('/', authenticateUser, async (req: Request, res: Response) =
     }
 
     return res.json({ equipped, unequipped, totalItems: items.length, activeSets });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// GET /api/inventory/catalog — 아이템 도감 (/:itemId 보다 위에 있어야 함)
+inventoryRouter.get('/catalog', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+
+    const ownedItems = await InventoryItem.find({ userId }).select('templateId').lean();
+    const ownedSet = new Set(ownedItems.map(i => i.templateId));
+
+    const catalog = ITEM_TEMPLATES.map(t => ({
+      templateId: t.templateId,
+      name: t.name,
+      description: t.description,
+      slot: t.slot,
+      rarity: t.rarity,
+      icon: t.icon,
+      effects: t.effects,
+      xpBonus: t.xpBonus || 0,
+      special: t.special || null,
+      setId: t.setId || null,
+      owned: ownedSet.has(t.templateId),
+    }));
+
+    const sets = SET_BONUSES.map(s => ({
+      setId: s.setId,
+      name: s.name,
+      bonuses: s.bonuses.map(b => ({ count: b.count, description: b.description })),
+      items: ITEM_TEMPLATES.filter(t => t.setId === s.setId).map(t => ({
+        templateId: t.templateId, name: t.name, icon: t.icon,
+        slot: t.slot, rarity: t.rarity, owned: ownedSet.has(t.templateId),
+      })),
+    }));
+
+    const totalCount = ITEM_TEMPLATES.length;
+    const ownedCount = ownedSet.size;
+    const completion = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
+
+    return res.json({ catalog, sets, totalCount, ownedCount, completion });
   } catch (err) { return res.status(500).json({ error: String(err) }); }
 });
 
@@ -97,13 +132,11 @@ inventoryRouter.post('/:itemId/enhance', authenticateUser, async (req: Request, 
 
     if (success) {
       item.enhanceLevel += 1;
-      // 복합 효과 강화
       if (item.currentEffects && item.currentEffects.length > 0) {
         item.currentEffects = item.currentEffects.map((eff: any) => ({
           stat: eff.stat,
           value: getEnhancedValue(Math.round(eff.value / (1 + (item.enhanceLevel - 1) * 0.2)), item.enhanceLevel),
         }));
-        // 하위호환 동기화
         item.currentEffect = { stat: item.currentEffects[0].stat, value: item.currentEffects[0].value, xpBonus: item.xpBonus || 0 };
       } else if (item.currentEffect) {
         const base = Math.round((item.currentEffect.value || 1) / (1 + (item.enhanceLevel - 1) * 0.2));
@@ -149,56 +182,4 @@ inventoryRouter.delete('/:itemId', authenticateUser, async (req: Request, res: R
     await InventoryItem.findByIdAndDelete(item._id);
     return res.json({ success: true, refund, currentXp: character?.currentXp || 0, message: `${item.name}을(를) 분해하여 ${refund} XP를 획득했습니다.` });
   } catch (err) { return res.status(500).json({ error: String(err) }); }
-// GET /api/inventory/catalog — 아이템 도감
-inventoryRouter.get('/catalog', authenticateUser, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-
-    // 유저가 보유 중이거나 보유했던 아이템 templateId 목록
-    const ownedItems = await InventoryItem.find({ userId }).select('templateId').lean();
-    const ownedSet = new Set(ownedItems.map(i => i.templateId));
-
-    // 전체 템플릿에서 도감 구성
-    const { ITEM_TEMPLATES, SET_BONUSES } = await import('../models/Item');
-
-    const catalog = ITEM_TEMPLATES.map(t => ({
-      templateId: t.templateId,
-      name: t.name,
-      description: t.description,
-      slot: t.slot,
-      rarity: t.rarity,
-      icon: t.icon,
-      effects: t.effects,
-      xpBonus: t.xpBonus || 0,
-      special: t.special || null,
-      setId: t.setId || null,
-      owned: ownedSet.has(t.templateId),
-    }));
-
-    // 세트 정보
-    const sets = SET_BONUSES.map(s => ({
-      setId: s.setId,
-      name: s.name,
-      bonuses: s.bonuses.map(b => ({
-        count: b.count,
-        description: b.description,
-      })),
-      items: ITEM_TEMPLATES.filter(t => t.setId === s.setId).map(t => ({
-        templateId: t.templateId,
-        name: t.name,
-        icon: t.icon,
-        slot: t.slot,
-        rarity: t.rarity,
-        owned: ownedSet.has(t.templateId),
-      })),
-    }));
-
-    const totalCount = ITEM_TEMPLATES.length;
-    const ownedCount = ownedSet.size;
-    const completion = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
-
-    return res.json({ catalog, sets, totalCount, ownedCount, completion });
-  } catch (err) {
-    return res.status(500).json({ error: String(err) });
-  }
 });
