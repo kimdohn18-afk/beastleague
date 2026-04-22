@@ -132,9 +132,16 @@ export default function InventoryPage() {
       {toast && <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white px-4 py-2 rounded-2xl text-sm shadow-lg">{toast}</div>}
 
       <div className="bg-white border-b border-gray-100 px-4 pt-6 pb-3">
-        <h1 className="text-lg font-bold text-gray-900">🎒 장비</h1>
-        <p className="text-xs text-gray-400 mt-1">아이템 {equipped.length + unequipped.length}개 보유</p>
-      </div>
+        <div className="flex items-center justify-between">
+  <div>
+    <h1 className="text-lg font-bold text-gray-900">🎒 장비</h1>
+    <p className="text-xs text-gray-400 mt-1">아이템 {equipped.length + unequipped.length}개 보유</p>
+  </div>
+  <button onClick={() => router.push('/catalog')}
+    className="text-xs bg-indigo-50 text-indigo-500 px-3 py-1.5 rounded-full font-medium">
+    📖 도감
+  </button>
+        </div>
 
       {/* 장착 슬롯 */}
       <div className="px-4 pt-4">
