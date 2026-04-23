@@ -1,13 +1,14 @@
 """
-KBO 경기 데이터 수집기 (Python) v4
+KBO 경기 데이터 수집기 (Python) v5
 - 역할: 경기 일정 수집 + 박스스코어 수집 + 서버 전송 + 정산 호출
-- 알림은 push_reminder.py가 별도 담당
+- v5: 타자별 안타 종류(2루타/3루타/홈런), 도루, 볼넷 파싱 추가
 """
 import requests
 import json
 import sys
 import os
 import csv
+import re
 from datetime import datetime, timezone, timedelta
 
 KST = timezone(timedelta(hours=9))
@@ -83,6 +84,101 @@ def parse_table(table_data):
     return result
 
 
+def parse_events(box_data):
+    """경기 이벤트 파싱"""
+    table_etc = box_data.get("tableEtc", "")
+    if isinstance(table_etc, str):
+        try:
+            table_etc = json.loads(table_etc)
+        except:
+            return []
+    rows = table_etc.get("rows", []) if isinstance(table_etc, dict) else []
+    events = []
+    for row_obj in rows:
+        row = row_obj.get("row", [])
+        if len(row) >= 2:
+            event_type = row[0].get("Text", "").strip()
+            event_detail = row[1].get("Text", "").strip()
+            if event_type and event_detail:
+                events.append({"type": event_type, "detail": event_detail})
+    return events
+
+
+def extract_names_from_event(detail_text):
+    """
+    이벤트 상세 텍스트에서 선수명 목록 추출
+    예: "김도영(15호 2점 이정후)" → ["김도영"]
+    예: "김도영, 이정후" → ["김도영", "이정후"]
+    예: "김도영(2회) 이정후(5회)" → ["김도영", "이정후"]
+    """
+    # 괄호 내용 제거
+    cleaned = re.sub(r'\([^)]*\)', '', detail_text)
+    # 쉼표, 공백으로 분리
+    parts = re.split(r'[,\s]+', cleaned)
+    # 한글 2~4글자인 것만 선수명으로 간주
+    names = [p.strip() for p in parts if re.match(r'^[가-힣]{2,4}$', p.strip())]
+    return names
+
+
+def enrich_batters_with_events(teams_data, events):
+    """
+    이벤트 정보를 활용해 각 타자에게 상세 기록 추가
+    - 홈런, 2루타, 3루타, 도루, 도루실패, 볼넷 등
+    """
+    # 모든 타자의 이름 → 참조 매핑
+    all_players = {}
+    for team in teams_data:
+        for player in team["players"]:
+            name = player["name"]
+            if name:
+                # 초기화
+                player["homeRuns"] = 0
+                player["doubles"] = 0
+                player["triples"] = 0
+                player["stolenBases"] = 0
+                player["stolenBaseFails"] = 0
+                player["walks"] = 0
+                player["walkOff"] = False
+                all_players[name] = player
+
+    for event in events:
+        event_type = event["type"]
+        event_detail = event["detail"]
+        names = extract_names_from_event(event_detail)
+
+        for name in names:
+            if name not in all_players:
+                continue
+            p = all_players[name]
+
+            if event_type in ("홈런", "HR"):
+                # "김도영(15호 2점 이정후)" → 홈런 횟수는 이름 등장 횟수
+                hr_count = len(re.findall(re.escape(name), event_detail))
+                p["homeRuns"] += max(hr_count, 1)
+
+            elif event_type in ("2루타", "二塁打"):
+                p["doubles"] += 1
+
+            elif event_type in ("3루타", "三塁打"):
+                p["triples"] += 1
+
+            elif event_type in ("도루", "盗塁"):
+                p["stolenBases"] += 1
+
+            elif event_type in ("도루실패", "도루자"):
+                p["stolenBaseFails"] += 1
+
+            elif event_type in ("볼넷", "사구", "四球"):
+                p["walks"] += 1
+
+            elif event_type in ("끝내기", "끝내기안타", "끝내기홈런"):
+                p["walkOff"] = True
+
+    # 안타에서 장타 분리 → 단타 계산은 서버에서 처리
+    # (hits - doubles - triples - homeRuns = singles)
+    return teams_data
+
+
 def parse_hitters(box_data):
     """타자 기록 파싱"""
     arr_hitter = box_data.get("arrHitter", [])
@@ -131,31 +227,19 @@ def parse_hitters(box_data):
                 "rbi": rbi,
                 "runs": runs,
                 "avg": avg,
-                "innings": innings
+                "innings": innings,
+                # 이벤트에서 채워질 필드 (기본값)
+                "homeRuns": 0,
+                "doubles": 0,
+                "triples": 0,
+                "stolenBases": 0,
+                "stolenBaseFails": 0,
+                "walks": 0,
+                "walkOff": False,
             })
 
         all_teams.append({"label": team_label, "players": players})
     return all_teams
-
-
-def parse_events(box_data):
-    """경기 이벤트 파싱"""
-    table_etc = box_data.get("tableEtc", "")
-    if isinstance(table_etc, str):
-        try:
-            table_etc = json.loads(table_etc)
-        except:
-            return []
-    rows = table_etc.get("rows", []) if isinstance(table_etc, dict) else []
-    events = []
-    for row_obj in rows:
-        row = row_obj.get("row", [])
-        if len(row) >= 2:
-            event_type = row[0].get("Text", "").strip()
-            event_detail = row[1].get("Text", "").strip()
-            if event_type and event_detail:
-                events.append({"type": event_type, "detail": event_detail})
-    return events
 
 
 def save_csv(date_str, all_records):
@@ -164,14 +248,22 @@ def save_csv(date_str, all_records):
     filepath = f"output/{date_str}.csv"
     with open(filepath, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["date", "gameId", "team", "order", "position", "name",
-                         "atBats", "hits", "rbi", "runs", "avg"])
+        writer.writerow([
+            "date", "gameId", "team", "order", "position", "name",
+            "atBats", "hits", "rbi", "runs", "avg",
+            "homeRuns", "doubles", "triples", "stolenBases", "stolenBaseFails",
+            "walks", "walkOff"
+        ])
         for record in all_records:
             writer.writerow([
                 record["date"], record["gameId"], record["team"],
                 record["order"], record["position"], record["name"],
                 record["atBats"], record["hits"], record["rbi"],
-                record["runs"], record["avg"]
+                record["runs"], record["avg"],
+                record.get("homeRuns", 0), record.get("doubles", 0),
+                record.get("triples", 0), record.get("stolenBases", 0),
+                record.get("stolenBaseFails", 0), record.get("walks", 0),
+                record.get("walkOff", False),
             ])
     print(f"  ✅ CSV 저장: {filepath}")
 
@@ -191,7 +283,6 @@ def send_to_server(game_data):
             print(f"  ⚠️ 서버 응답: {res.status_code} {res.text[:200]}")
             return
 
-        # 경기 종료 시 정산 호출 (정산 알림은 SettlementService가 자동 발송)
         game_id = game_data.get("gameId", "")
         if game_data.get("status") == "finished" and game_id:
             try:
@@ -278,15 +369,31 @@ def collect_date(date_str):
         if not box:
             continue
 
+        # 타자 파싱 + 이벤트 파싱
         teams = parse_hitters(box)
         events = parse_events(box)
+
+        # 이벤트로 타자 상세 기록 보강
+        teams = enrich_batters_with_events(teams, events)
 
         for team in teams:
             team_name = away_team if team["label"] == "원정" else home_team
             print(f"\n  [{team_name} 타자]")
             for p in team["players"]:
                 if p["order"]:
-                    print(f"    {p['order']} {p['name']}: {p['atBats']}타수 {p['hits']}안타 {p['rbi']}타점 {p['runs']}득점 ({p['avg']})")
+                    extras = []
+                    if p["homeRuns"] > 0:
+                        extras.append(f"{p['homeRuns']}홈런")
+                    if p["doubles"] > 0:
+                        extras.append(f"{p['doubles']}2루타")
+                    if p["triples"] > 0:
+                        extras.append(f"{p['triples']}3루타")
+                    if p["stolenBases"] > 0:
+                        extras.append(f"{p['stolenBases']}도루")
+                    extra_str = f" [{', '.join(extras)}]" if extras else ""
+
+                    print(f"    {p['order']} {p['name']}: {p['atBats']}타수 {p['hits']}안타 {p['rbi']}타점 {p['runs']}득점{extra_str}")
+
                 all_records.append({
                     "date": formatted,
                     "gameId": game_id,
@@ -298,7 +405,14 @@ def collect_date(date_str):
                     "hits": p["hits"],
                     "rbi": p["rbi"],
                     "runs": p["runs"],
-                    "avg": p["avg"]
+                    "avg": p["avg"],
+                    "homeRuns": p["homeRuns"],
+                    "doubles": p["doubles"],
+                    "triples": p["triples"],
+                    "stolenBases": p["stolenBases"],
+                    "stolenBaseFails": p["stolenBaseFails"],
+                    "walks": p["walks"],
+                    "walkOff": p["walkOff"],
                 })
 
         # 서버 전송
@@ -315,7 +429,14 @@ def collect_date(date_str):
                         "hits": p["hits"],
                         "rbi": p["rbi"],
                         "runs": p["runs"],
-                        "avg": p["avg"]
+                        "avg": p["avg"],
+                        "homeRuns": p["homeRuns"],
+                        "doubles": p["doubles"],
+                        "triples": p["triples"],
+                        "stolenBases": p["stolenBases"],
+                        "stolenBaseFails": p["stolenBaseFails"],
+                        "walks": p["walks"],
+                        "walkOff": p["walkOff"],
                     }
                     if team["label"] == "원정":
                         away_batters.append(batter)
@@ -332,7 +453,7 @@ def collect_date(date_str):
                 "awayScore": int(score_a) if score_a else 0,
                 "status": game_status,
                 "batterRecords": {"away": away_batters, "home": home_batters},
-                "events": events
+                "events": events,
             })
         else:
             print(f"\n  ⚠️ INTERNAL_API_KEY 없음, 서버 전송 건너뜀")
