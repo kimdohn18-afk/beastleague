@@ -36,13 +36,14 @@ async function fetchGameIds(date: string): Promise<string[]> {
   const $ = cheerio.load(html);
   const ids: string[] = [];
 
-  $('a[href*="gameId="]').each(function (this: cheerio.Element) {
-    const href = $(this).attr('href') || '';
+  const links = $('a[href*="gameId="]');
+  for (let i = 0; i < links.length; i++) {
+    const href = $(links[i]).attr('href') || '';
     const m = href.match(/gameId=(\d{8}\w+)/);
     if (m && m[1].startsWith(compact) && !ids.includes(m[1])) {
       ids.push(m[1]);
     }
-  });
+  }
 
   console.log(`📅 ${date}: ${ids.length}개 경기 발견`);
   return ids;
@@ -104,10 +105,12 @@ async function fetchBoxScore(gameId: string, date: string): Promise<GameResult |
     const sbFailNames: string[] = [];
     let walkOffName = '';
 
-    $('#tblEtc tr').each(function (this: cheerio.Element) {
-      const th = $(this).find('th').text().trim();
-      const td = $(this).find('td').text().trim();
-      if (!th || !td) return;
+    const etcRows = $('#tblEtc tr');
+    for (let i = 0; i < etcRows.length; i++) {
+      const row = $(etcRows[i]);
+      const th = row.find('th').text().trim();
+      const td = row.find('td').text().trim();
+      if (!th || !td) continue;
 
       if (th === '홈런') {
         const matches = td.match(/([가-힣A-Za-z]+)\d*호/g);
@@ -145,12 +148,12 @@ async function fetchBoxScore(gameId: string, date: string): Promise<GameResult |
       if (th === '결승타') {
         const inningMatch = td.match(/(\d+)회/);
         if (inningMatch && parseInt(inningMatch[1]) >= 9) {
-          const nameMatch2 = td.match(/^([가-힣A-Za-z]+)/);
-          if (nameMatch2) walkOffName = nameMatch2[1];
+          const nm = td.match(/^([가-힣A-Za-z]+)/);
+          if (nm) walkOffName = nm[1];
         }
         events.push({ type: 'WALK_OFF', detail: td });
       }
-    });
+    }
 
     // 이름 매칭
     function nameMatch(playerName: string, nameList: string[]): number {
@@ -163,29 +166,31 @@ async function fetchBoxScore(gameId: string, date: string): Promise<GameResult |
       const records: BatterRecord[] = [];
       let currentOrder = 0;
 
-      t$('tbody tr').each(function (this: cheerio.Element) {
-        const tds = t$(this).find('td');
-        if (tds.length < 5) return;
+      const bodyRows = t$('tbody tr');
+      for (let i = 0; i < bodyRows.length; i++) {
+        const row = t$(bodyRows[i]);
+        const tds = row.find('td');
+        if (tds.length < 5) continue;
 
         const texts: string[] = [];
-        tds.each(function (this: cheerio.Element) {
-          texts.push(t$(this).text().trim());
-        });
+        for (let j = 0; j < tds.length; j++) {
+          texts.push(t$(tds[j]).text().trim());
+        }
 
-        if (texts.join('').includes('TOTAL')) return;
+        if (texts.join('').includes('TOTAL')) continue;
 
         const orderText = texts[0];
         const position = texts[1] || '';
         const name = texts[2] || '';
 
-        if (!name) return;
+        if (!name) continue;
 
         if (/^\d+$/.test(orderText)) {
           currentOrder = parseInt(orderText);
         }
 
-        if (records.some(r => r.order === currentOrder)) return;
-        if (currentOrder === 0) return;
+        if (records.some(r => r.order === currentOrder)) continue;
+        if (currentOrder === 0) continue;
 
         const statsStart = texts.length - 5;
         const atBats = parseInt(texts[statsStart]) || 0;
@@ -195,8 +200,8 @@ async function fetchBoxScore(gameId: string, date: string): Promise<GameResult |
         const avg = texts[statsStart + 4] || '0.000';
 
         let walks = 0;
-        for (let i = 3; i < statsStart; i++) {
-          if (texts[i] === '4구') walks++;
+        for (let k = 3; k < statsStart; k++) {
+          if (texts[k] === '4구') walks++;
         }
 
         records.push({
@@ -216,20 +221,22 @@ async function fetchBoxScore(gameId: string, date: string): Promise<GameResult |
           walks,
           walkOff: walkOffName !== '' && name.includes(walkOffName),
         });
-      });
+      }
 
       return records;
     }
 
     // 타자 테이블 찾기
     const batterTableHtmls: string[] = [];
-    $('table').each(function (this: cheerio.Element) {
-      const caption = $(this).find('caption').text();
-      const prevText = $(this).prev().text();
+    const allTables = $('table');
+    for (let i = 0; i < allTables.length; i++) {
+      const tbl = $(allTables[i]);
+      const caption = tbl.find('caption').text();
+      const prevText = tbl.prev().text();
       if (caption.includes('타자') || prevText.includes('타자 기록')) {
-        batterTableHtmls.push($.html(this));
+        batterTableHtmls.push($.html(allTables[i]));
       }
-    });
+    }
 
     const awayBatters = batterTableHtmls.length >= 1 ? parseBatters(batterTableHtmls[0]) : [];
     const homeBatters = batterTableHtmls.length >= 2 ? parseBatters(batterTableHtmls[1]) : [];
@@ -239,18 +246,19 @@ async function fetchBoxScore(gameId: string, date: string): Promise<GameResult |
     let awayScore = 0;
     let homeScore = 0;
 
-    $('table').each(function (this: cheerio.Element) {
-      const text = $(this).text();
+    for (let i = 0; i < allTables.length; i++) {
+      const tbl = $(allTables[i]);
+      const text = tbl.text();
       if (text.includes('R') && text.includes('H') && text.includes('E') && text.includes('B')) {
-        const rows = $(this).find('tr');
+        const rows = tbl.find('tr');
         if (rows.length >= 2) {
-          const r0 = $(rows.eq(0)).find('td').first().text().trim();
-          const r1 = $(rows.eq(1)).find('td').first().text().trim();
+          const r0 = $(rows[0]).find('td').first().text().trim();
+          const r1 = $(rows[1]).find('td').first().text().trim();
           if (/^\d+$/.test(r0)) awayScore = parseInt(r0);
           if (/^\d+$/.test(r1)) homeScore = parseInt(r1);
         }
       }
-    });
+    }
 
     console.log(`  ⚾ ${gameId}: ${teams.away} ${awayScore} vs ${teams.home} ${homeScore} | 원정${awayBatters.length}명 홈${homeBatters.length}명`);
 
