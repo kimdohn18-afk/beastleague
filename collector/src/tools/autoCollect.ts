@@ -36,8 +36,8 @@ async function fetchGameIds(date: string): Promise<string[]> {
   const $ = cheerio.load(html);
   const ids: string[] = [];
 
-  $('a[href*="gameId="]').each((_i, el) => {
-    const href = $(el).attr('href') || '';
+  $('a[href*="gameId="]').each(function (this: cheerio.Element) {
+    const href = $(this).attr('href') || '';
     const m = href.match(/gameId=(\d{8}\w+)/);
     if (m && m[1].startsWith(compact) && !ids.includes(m[1])) {
       ids.push(m[1]);
@@ -104,9 +104,9 @@ async function fetchBoxScore(gameId: string, date: string): Promise<GameResult |
     const sbFailNames: string[] = [];
     let walkOffName = '';
 
-    $('#tblEtc tr').each((_i, row) => {
-      const th = $(row).find('th').text().trim();
-      const td = $(row).find('td').text().trim();
+    $('#tblEtc tr').each(function (this: cheerio.Element) {
+      const th = $(this).find('th').text().trim();
+      const td = $(this).find('td').text().trim();
       if (!th || !td) return;
 
       if (th === '홈런') {
@@ -145,8 +145,8 @@ async function fetchBoxScore(gameId: string, date: string): Promise<GameResult |
       if (th === '결승타') {
         const inningMatch = td.match(/(\d+)회/);
         if (inningMatch && parseInt(inningMatch[1]) >= 9) {
-          const nameMatch = td.match(/^([가-힣A-Za-z]+)/);
-          if (nameMatch) walkOffName = nameMatch[1];
+          const nameMatch2 = td.match(/^([가-힣A-Za-z]+)/);
+          if (nameMatch2) walkOffName = nameMatch2[1];
         }
         events.push({ type: 'WALK_OFF', detail: td });
       }
@@ -163,12 +163,14 @@ async function fetchBoxScore(gameId: string, date: string): Promise<GameResult |
       const records: BatterRecord[] = [];
       let currentOrder = 0;
 
-      t$('tbody tr').each((_i, row) => {
-        const tds = t$(row).find('td');
+      t$('tbody tr').each(function (this: cheerio.Element) {
+        const tds = t$(this).find('td');
         if (tds.length < 5) return;
 
         const texts: string[] = [];
-        tds.each((_j, td) => texts.push(t$(td).text().trim()));
+        tds.each(function (this: cheerio.Element) {
+          texts.push(t$(this).text().trim());
+        });
 
         if (texts.join('').includes('TOTAL')) return;
 
@@ -219,13 +221,13 @@ async function fetchBoxScore(gameId: string, date: string): Promise<GameResult |
       return records;
     }
 
-    // 타자 테이블 찾기 — HTML 문자열로 추출해서 파싱
+    // 타자 테이블 찾기
     const batterTableHtmls: string[] = [];
-    $('table').each((_i, tbl) => {
-      const caption = $(tbl).find('caption').text();
-      const prevText = $(tbl).prev().text();
+    $('table').each(function (this: cheerio.Element) {
+      const caption = $(this).find('caption').text();
+      const prevText = $(this).prev().text();
       if (caption.includes('타자') || prevText.includes('타자 기록')) {
-        batterTableHtmls.push($.html(tbl));
+        batterTableHtmls.push($.html(this));
       }
     });
 
@@ -237,10 +239,10 @@ async function fetchBoxScore(gameId: string, date: string): Promise<GameResult |
     let awayScore = 0;
     let homeScore = 0;
 
-    $('table').each((_i, tbl) => {
-      const text = $(tbl).text();
+    $('table').each(function (this: cheerio.Element) {
+      const text = $(this).text();
       if (text.includes('R') && text.includes('H') && text.includes('E') && text.includes('B')) {
-        const rows = $(tbl).find('tr');
+        const rows = $(this).find('tr');
         if (rows.length >= 2) {
           const r0 = $(rows.eq(0)).find('td').first().text().trim();
           const r1 = $(rows.eq(1)).find('td').first().text().trim();
@@ -252,7 +254,6 @@ async function fetchBoxScore(gameId: string, date: string): Promise<GameResult |
 
     console.log(`  ⚾ ${gameId}: ${teams.away} ${awayScore} vs ${teams.home} ${homeScore} | 원정${awayBatters.length}명 홈${homeBatters.length}명`);
 
-    // 상세 출력
     [...awayBatters, ...homeBatters].forEach(b => {
       const extras: string[] = [];
       if (b.homeRuns > 0) extras.push(`HR:${b.homeRuns}`);
@@ -343,7 +344,7 @@ async function main(): Promise<void> {
     if (g && (g.batterRecords.away.length > 0 || g.batterRecords.home.length > 0)) {
       games.push(g);
     }
-    await new Promise<void>(resolve => { setTimeout(() => resolve(), 2000); });
+    await new Promise<void>(resolve => setTimeout(resolve, 2000));
   }
 
   console.log(`\n📊 ${games.length}/${gameIds.length} 경기 파싱 성공`);
