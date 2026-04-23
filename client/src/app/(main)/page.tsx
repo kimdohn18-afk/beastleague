@@ -11,12 +11,11 @@ import {
   ANIMAL_EMOJI,
   ANIMAL_NAMES,
   PIXEL_ART_ANIMALS,
-  TRAIT_DISPLAY,
   getTraitDisplay,
-  getEvolutionStage,      
-  getNextEvolutionStage,  
-  EVOLUTION_STAGES,        
-  CHANGE_ANIMAL_COST,      
+  getEvolutionStage,
+  getNextEvolutionStage,
+  EVOLUTION_STAGES,
+  CHANGE_ANIMAL_COST,
 } from '@/lib/constants';
 import WalkingCharacter, { WalkingCharacterHandle } from '@/components/WalkingCharacter';
 import HarvestOverlay from '@/components/HarvestOverlay';
@@ -26,6 +25,7 @@ import ShareMenu from '@/components/ShareMenu';
 import DeleteModal from '@/components/DeleteModal';
 import HelpCards from '@/components/HelpCards';
 
+/* ─── 타입 ─── */
 interface Character {
   _id: string;
   name: string;
@@ -64,6 +64,7 @@ interface XpOrb {
   eaten: boolean;
 }
 
+/* ─── 유틸 ─── */
 function getCharacterSize(xp: number): number {
   const minPx = 60;
   if (xp <= 0) return minPx;
@@ -84,44 +85,45 @@ function getEmojiPx(xp: number): number {
   );
 }
 
+/* ─── 도움말 카드 (타순 기반 시스템용) ─── */
 const HELP_CARDS = [
   {
     icon: '🐾',
     title: '비스트리그란?',
     lines: [
-      '야구 경기 결과를 예측하고',
-      '내 동물 캐릭터를 성장시키는',
+      'KBO 경기에 타자를 배치하고',
+      '실제 선수 성적으로 XP를 획득하는',
       '육성형 웹앱입니다.',
       '',
-      '매일 예측하고, XP를 모아',
+      '매일 배치하고, XP를 모아',
       '캐릭터를 키워보세요!',
     ],
   },
   {
     icon: '⚾',
-    title: '예측하기',
+    title: '배치하기',
     lines: [
-      '① 오늘의 경기 중 최대 5개 선택',
-      '② 승리팀을 예측하세요 (무료)',
-      '③ 점수차·총득점도 예측 가능',
-      '④ 추가 예측엔 XP를 베팅!',
+      '① 오늘의 경기 중 1경기를 선택',
+      '② 응원하는 팀을 선택하세요',
+      '③ 1~9번 타순 중 하나를 선택',
       '',
-      '경기 시작 전까지만 예측 가능!',
+      '경기 시작 전까지 배치 가능!',
+      '하루 1경기만 배치할 수 있어요.',
     ],
   },
   {
     icon: '✨',
     title: 'XP 규칙',
     lines: [
-      '승리 예측 적중 +20 XP (무료)',
+      '선택한 타순 선수의 실제 성적으로',
+      'XP가 결정됩니다!',
       '',
-      '점수차 예측 (XP 베팅):',
-      '1~2점 ×1.5 · 3~4점 ×2 · 5+점 ×3',
+      '안타 +8 · 2루타 +12 · 3루타 +16',
+      '홈런 +25 · 타점 +6 · 득점 +5',
+      '도루 +10 · 끝내기 +30',
       '',
-      '총득점 예측 (XP 베팅):',
-      '로우 ×2 · 보통 ×1.5 · 하이 ×2.5',
-      '',
-      '전경기 적중 시 올킬 보너스 +30',
+      '팀 승리 +25 · 승리팀 적중 +15',
+      '무안타 시 -5 XP',
     ],
   },
   {
@@ -129,15 +131,15 @@ const HELP_CARDS = [
     title: '캐릭터 성장',
     lines: [
       'XP가 쌓이면 캐릭터가',
-      '점점 커집니다!',
+      '점점 커지고 진화합니다!',
       '',
-      '내 예측 탭에서 경기별 결과와',
-      'XP 내역을 확인할 수 있어요.',
+      '배치 탭에서 경기별 결과와',
+      '타자 성적, XP 내역을 확인하세요.',
     ],
   },
 ];
 
-// ──────────── 핀치 줌 훅 ────────────
+/* ─── 핀치 줌 훅 ─── */
 function usePinchZoom() {
   const [scale, setScale] = useState(1);
   const startDistRef = useRef(0);
@@ -166,10 +168,7 @@ function usePinchZoom() {
       e.preventDefault();
       const dist = getDistance(e.touches[0], e.touches[1]);
       const ratio = dist / startDistRef.current;
-      const newScale = Math.max(
-        0.02,
-        Math.min(startScaleRef.current * ratio, 3),
-      );
+      const newScale = Math.max(0.02, Math.min(startScaleRef.current * ratio, 3));
       setScale(newScale);
     }
   }, []);
@@ -181,62 +180,56 @@ function usePinchZoom() {
     (e: React.TouchEvent) => {
       if (e.touches.length === 1) {
         const now = Date.now();
-        if (now - lastTapRef.current < 300) {
-          setScale(1);
-        }
+        if (now - lastTapRef.current < 300) setScale(1);
         lastTapRef.current = now;
       }
-      if (e.touches.length === 2) {
-        onTouchStart(e);
-      }
+      if (e.touches.length === 2) onTouchStart(e);
     },
     [onTouchStart],
   );
 
-  return {
-    scale,
-    setScale,
-    containerRef,
-    onTouchStart: handleTouchStart,
-    onTouchMove,
-    onTouchEnd,
-  };
+  return { scale, setScale, containerRef, onTouchStart: handleTouchStart, onTouchMove, onTouchEnd };
 }
 
+/* ═══════════════════════════════════════════
+   메인 페이지
+   ═══════════════════════════════════════════ */
 export default function MainPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const [character, setCharacter] = useState<Character | null>(null);
   const [loading, setLoading] = useState(true);
+
+  /* UI 토글 */
   const [menuOpen, setMenuOpen] = useState(false);
-  const [showCompare, setShowCompare] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [helpPage, setHelpPage] = useState(0);
-  const [pushStatus, setPushStatus] = useState<
-    'idle' | 'loading' | 'granted' | 'denied'
-  >('idle');
   const [showWelcome, setShowWelcome] = useState(false);
   const [showBlockedGuide, setShowBlockedGuide] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
 
-  // ★ 밥주기 state
+  /* 푸시 */
+  const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'granted' | 'denied'>('idle');
+
+  /* 밥주기 */
   const [selfFed, setSelfFed] = useState(false);
   const [feedAnimation, setFeedAnimation] = useState(false);
   const [feedToast, setFeedToast] = useState('');
 
-  // ★ 진화 & 캐릭터 변경 state
+  /* 진화 & 동물 변경 */
   const [showEvolution, setShowEvolution] = useState(false);
   const [showAnimalChange, setShowAnimalChange] = useState(false);
   const [selectedNewAnimal, setSelectedNewAnimal] = useState<string | null>(null);
   const [animalChanging, setAnimalChanging] = useState(false);
   const [evolutionToast, setEvolutionToast] = useState('');
   const [evolving, setEvolving] = useState(false);
-  
-  // ★ XP 수확 state
+
+  /* XP 수확 */
   const [xpOrbs, setXpOrbs] = useState<XpOrb[]>([]);
   const [harvestMode, setHarvestMode] = useState(false);
   const [eatingOrbId, setEatingOrbId] = useState<number | null>(null);
@@ -247,19 +240,16 @@ export default function MainPage() {
   const orbIdCounter = useRef(0);
   const walkingCharRef = useRef<WalkingCharacterHandle>(null);
 
-
-  
-  const apiUrl =
-    process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-  const token =
-    (session as any)?.backendToken || (session as any)?.accessToken;
-
-  const pinch = usePinchZoom();
-
+  /* 공유 */
   const shareCardRef = useRef<HTMLDivElement>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
 
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const token = (session as any)?.backendToken || (session as any)?.accessToken;
+  const pinch = usePinchZoom();
+
+  /* ─── 푸시 알림 초기화 ─── */
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'denied') setPushStatus('denied');
@@ -271,6 +261,7 @@ export default function MainPage() {
     if (typeof window === 'undefined' || !('Notification' in window)) return;
     if (Notification.permission !== 'granted') return;
     if (localStorage.getItem('push-manually-disabled') === 'true') return;
+
     const checkAndAutoSubscribe = async () => {
       try {
         const res = await fetch(`${apiUrl}/api/push/status`, {
@@ -285,10 +276,7 @@ export default function MainPage() {
             if (fcmToken) {
               await fetch(`${apiUrl}/api/push/subscribe`, {
                 method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  'Content-Type': 'application/json',
-                },
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ fcmToken }),
               });
               setPushStatus('granted');
@@ -302,42 +290,33 @@ export default function MainPage() {
     checkAndAutoSubscribe();
   }, [token]);
 
+  /* ─── 인증 & 캐릭터 로드 ─── */
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
-      return;
-    }
-    if (status === 'authenticated' && token) {
-      fetchCharacter();
-    }
+    if (status === 'unauthenticated') { router.push('/login'); return; }
+    if (status === 'authenticated' && token) fetchCharacter();
   }, [status, token]);
 
+  /* ─── 푸시 프롬프트 타이밍 ─── */
   useEffect(() => {
     if (!character || !token) return;
     if (typeof window === 'undefined' || !('Notification' in window)) return;
     if (/KAKAOTALK/i.test(navigator.userAgent)) return;
     if (character.xp === 0) return;
-    const today = new Date(Date.now() + 9 * 3600 * 1000)
-      .toISOString()
-      .slice(0, 10);
+
+    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
     if (localStorage.getItem('push-prompt-dismissed') === today) return;
-    if (Notification.permission === 'denied') {
+
+    if (Notification.permission === 'denied' || Notification.permission === 'default') {
       setTimeout(() => setShowPushPrompt(true), 1000);
       return;
     }
-    if (Notification.permission === 'default') {
-      setTimeout(() => setShowPushPrompt(true), 1000);
-      return;
-    }
+
     const checkSub = async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/push/status`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(`${apiUrl}/api/push/status`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
           const data = await res.json();
-          if (!data.subscribed)
-            setTimeout(() => setShowPushPrompt(true), 1000);
+          if (!data.subscribed) setTimeout(() => setShowPushPrompt(true), 1000);
         }
       } catch {}
     };
@@ -351,23 +330,15 @@ export default function MainPage() {
         cache: 'no-store',
       });
       if (!res.ok) {
-        if (res.status === 404) {
-          router.push('/character');
-          return;
-        }
-        // 401이면 세션 만료 → 로그인으로
-        if (res.status === 401) {
-          router.push('/login');
-          return;
-        }
+        if (res.status === 404) { router.push('/character'); return; }
+        if (res.status === 401) { router.push('/login'); return; }
         throw new Error(`Failed: ${res.status}`);
       }
       const data = await res.json();
       setCharacter(data);
-      if (!data.tutorialCompleted) {
-        router.push('/tutorial');
-        return;
-      }
+
+      if (!data.tutorialCompleted) { router.push('/tutorial'); return; }
+
       const welcomeKey = `welcome-shown-${data._id}`;
       if (!localStorage.getItem(welcomeKey)) {
         setShowWelcome(true);
@@ -375,29 +346,17 @@ export default function MainPage() {
       }
     } catch (error) {
       console.error('Error fetching character:', error);
-      // 최대 2번 재시도
-      if (retry < 2) {
-        setTimeout(() => fetchCharacter(retry + 1), 1000 * (retry + 1));
-        return;
-      }
+      if (retry < 2) { setTimeout(() => fetchCharacter(retry + 1), 1000 * (retry + 1)); return; }
     } finally {
-      if (retry === 0 || retry >= 2) {
-        setLoading(false);
-      }
+      if (retry === 0 || retry >= 2) setLoading(false);
     }
   };
 
-  // 다른 페이지에서 돌아왔을 때 캐릭터 데이터 갱신
+  /* 포커스 복귀 시 갱신 */
   useEffect(() => {
-    const handleFocus = () => {
-      if (token && !loading) {
-        fetchCharacter();
-      }
-    };
+    const handleFocus = () => { if (token && !loading) fetchCharacter(); };
     window.addEventListener('focus', handleFocus);
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') handleFocus();
-    };
+    const handleVisibility = () => { if (document.visibilityState === 'visible') handleFocus(); };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       window.removeEventListener('focus', handleFocus);
@@ -405,15 +364,14 @@ export default function MainPage() {
     };
   }, [token, loading]);
 
-  // ★ 자기 밥주기 상태 확인 — token 변수 사용
+  /* ─── 밥주기 상태 체크 ─── */
   useEffect(() => {
     if (!character?._id || !token) return;
     const checkFeedStatus = async () => {
       try {
-        const res = await fetch(
-          `${apiUrl}/api/characters/${character._id}/feed-status`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
+        const res = await fetch(`${apiUrl}/api/characters/${character._id}/feed-status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (res.ok) {
           const data = await res.json();
           setSelfFed(data.fed);
@@ -425,19 +383,17 @@ export default function MainPage() {
     checkFeedStatus();
   }, [character?._id, token]);
 
-  // ★ 연습배치 직후 구슬 연출
+  /* ─── 튜토리얼 XP 구슬 ─── */
   useEffect(() => {
     const tutorialXp = searchParams.get('tutorialXp');
     if (!tutorialXp || !character?._id) return;
 
-    // 이미 처리했으면 스킵
     const tutorialHarvestKey = `tutorial-harvest-${character._id}`;
     if (sessionStorage.getItem(tutorialHarvestKey)) return;
 
     const xpAmount = parseInt(tutorialXp, 10);
     if (isNaN(xpAmount) || xpAmount <= 0) return;
 
-    // 구슬 생성
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const orb: XpOrb = {
@@ -454,15 +410,11 @@ export default function MainPage() {
     setXpOrbs([orb]);
     setTotalHarvestXp(xpAmount);
     setHarvestMode(true);
-
-    // 중복 방지
     sessionStorage.setItem(tutorialHarvestKey, 'true');
-
-    // URL에서 쿼리 파라미터 제거 (뒤로가기 시 재실행 방지)
     window.history.replaceState({}, '', '/');
   }, [searchParams, character?._id]);
-  
-    // ★ 미수확 XP 확인
+
+  /* ─── 미수확 XP 확인 ─── */
   useEffect(() => {
     if (!character?._id || !token) return;
 
@@ -479,7 +431,7 @@ export default function MainPage() {
         const data = await res.json();
         if (!data.hasUnclaimed || data.orbs.length === 0) return;
 
-               const vw = window.innerWidth;
+        const vw = window.innerWidth;
         const vh = window.innerHeight;
         const orbs: XpOrb[] = data.orbs
           .filter((o: any) => o.xp !== 0)
@@ -504,34 +456,23 @@ export default function MainPage() {
         console.error('Unclaimed XP check failed:', e);
       }
     };
-
     checkUnclaimed();
   }, [character?._id, token]);
 
-  // ★ 자기 밥주기 함수 — token 변수 사용
+  /* ─── 핸들러: 밥주기 ─── */
   const handleSelfFeed = async () => {
     if (!character || !token || selfFed) return;
     try {
-      const res = await fetch(
-        `${apiUrl}/api/characters/${character._id}/feed`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
+      const res = await fetch(`${apiUrl}/api/characters/${character._id}/feed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
       const data = await res.json();
       if (res.ok) {
         setSelfFed(true);
         setFeedAnimation(true);
         setTimeout(() => setFeedAnimation(false), 1800);
-        setCharacter((prev) =>
-          prev
-            ? { ...prev, xp: data.theirXp, totalFeeds: data.totalFeeds }
-            : prev,
-        );
+        setCharacter((prev) => prev ? { ...prev, xp: data.theirXp, totalFeeds: data.totalFeeds } : prev);
         setFeedToast('🍖 냠냠! +3 XP');
         setTimeout(() => setFeedToast(''), 2500);
       } else {
@@ -545,7 +486,7 @@ export default function MainPage() {
     }
   };
 
-  // ★ 캐릭터 동물 변경
+  /* ─── 핸들러: 동물 변경 ─── */
   const handleAnimalChange = async () => {
     if (!character || !token || !selectedNewAnimal || animalChanging) return;
     if (character.xp < CHANGE_ANIMAL_COST) {
@@ -557,17 +498,12 @@ export default function MainPage() {
     try {
       const res = await fetch(`${apiUrl}/api/characters/me/animal`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ animalType: selectedNewAnimal }),
       });
       const data = await res.json();
       if (res.ok) {
-        setCharacter(prev =>
-          prev ? { ...prev, animalType: data.character.animalType, xp: data.character.xp } : prev
-        );
+        setCharacter(prev => prev ? { ...prev, animalType: data.character.animalType, xp: data.character.xp } : prev);
         setEvolutionToast(`✨ ${ANIMAL_NAMES[data.character.animalType] || data.character.animalType}(으)로 변신! -${data.cost} XP`);
         setTimeout(() => setEvolutionToast(''), 3000);
         setShowAnimalChange(false);
@@ -584,24 +520,20 @@ export default function MainPage() {
     }
   };
 
-    // ★ XP 구슬 클릭
-    const handleOrbClick = useCallback(async (orbId: number) => {
+  /* ─── 핸들러: XP 구슬 클릭 ─── */
+  const handleOrbClick = useCallback(async (orbId: number) => {
     if (eatingOrbId !== null) return;
     const orb = xpOrbs.find(o => o.id === orbId);
     if (!orb || orb.eaten) return;
 
     setEatingOrbId(orbId);
 
-    // 캐릭터를 구슬 위치로 걸어가게 함
     if (walkingCharRef.current) {
       await walkingCharRef.current.walkTo(orb.x, orb.y);
     }
 
-    // 도착 후 구슬 먹기
     setXpOrbs(prev => {
-      const updated = prev.map(o =>
-        o.id === orbId ? { ...o, eaten: true } : o
-      );
+      const updated = prev.map(o => o.id === orbId ? { ...o, eaten: true } : o);
       const remaining = updated.filter(o => !o.eaten);
 
       if (remaining.length === 0) {
@@ -618,7 +550,6 @@ export default function MainPage() {
           }, 2500);
         }, 600);
       }
-
       return updated;
     });
 
@@ -628,7 +559,7 @@ export default function MainPage() {
     setEatingOrbId(null);
   }, [eatingOrbId, xpOrbs, character]);
 
-  
+  /* ─── 핸들러: 캐릭터 삭제 ─── */
   const handleDelete = async () => {
     setDeleting(true);
     try {
@@ -652,27 +583,21 @@ export default function MainPage() {
     }
   };
 
+  /* ─── 핸들러: 푸시 설정 ─── */
   const handlePushSetup = async () => {
     setMenuOpen(false);
-    if (pushStatus === 'denied') {
-      setShowBlockedGuide(true);
-      return;
-    }
+    if (pushStatus === 'denied') { setShowBlockedGuide(true); return; }
+
     if (pushStatus === 'granted') {
       try {
-        const reg = await navigator.serviceWorker.getRegistration(
-          '/firebase-messaging-sw.js',
-        );
+        const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
         if (reg) {
           const sub = await reg.pushManager.getSubscription();
           if (sub) await sub.unsubscribe();
         }
         await fetch(`${apiUrl}/api/push/unsubscribe`, {
           method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ fcmToken: 'all' }),
         });
         localStorage.setItem('push-manually-disabled', 'true');
@@ -684,28 +609,22 @@ export default function MainPage() {
       }
       return;
     }
+
     setPushStatus('loading');
     try {
       const fcmToken = await requestFcmToken();
       if (fcmToken) {
         await fetch(`${apiUrl}/api/push/subscribe`, {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ fcmToken }),
         });
         localStorage.removeItem('push-manually-disabled');
         setPushStatus('granted');
-        alert(
-          '알림이 설정되었습니다! 배치 미완료 시 알림을 받을 수 있어요.',
-        );
+        alert('알림이 설정되었습니다! 배치 미완료 시 알림을 받을 수 있어요.');
       } else {
         setPushStatus('denied');
-        alert(
-          '알림 권한이 차단되었습니다. 브라우저 설정에서 알림을 허용해주세요.',
-        );
+        alert('알림 권한이 차단되었습니다. 브라우저 설정에서 알림을 허용해주세요.');
       }
     } catch (e) {
       console.error('[Push] Setup failed:', e);
@@ -716,20 +635,14 @@ export default function MainPage() {
 
   const handlePushPromptAccept = async () => {
     setShowPushPrompt(false);
-    if (Notification.permission === 'denied') {
-      setShowBlockedGuide(true);
-      return;
-    }
+    if (Notification.permission === 'denied') { setShowBlockedGuide(true); return; }
     setPushStatus('loading');
     try {
       const fcmToken = await requestFcmToken();
       if (fcmToken) {
         await fetch(`${apiUrl}/api/push/subscribe`, {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ fcmToken }),
         });
         setPushStatus('granted');
@@ -742,32 +655,25 @@ export default function MainPage() {
   };
 
   const handlePushPromptDismiss = () => {
-    const today = new Date(Date.now() + 9 * 3600 * 1000)
-      .toISOString()
-      .slice(0, 10);
+    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
     localStorage.setItem('push-prompt-dismissed', today);
     setShowPushPrompt(false);
   };
 
-  const handleShare = async (
-    target: 'kakao' | 'instagram' | 'download',
-  ) => {
+  /* ─── 핸들러: 공유 ─── */
+  const handleShare = async (target: 'kakao' | 'instagram' | 'download') => {
     if (!character) return;
-
     let shareSuccess = false;
 
     if (target === 'kakao') {
       const { shareCharacter } = await import('@/lib/kakaoShare');
       shareCharacter({
         characterName: character.name,
-        animalName:
-          ANIMAL_NAMES[character.animalType] || character.animalType,
+        animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
         animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
         animalType: character.animalType,
         xp: character.xp,
-        traitName: character.activeTrait
-          ? getTraitDisplay(character.activeTrait) || undefined
-          : undefined,
+        traitName: character.activeTrait ? getTraitDisplay(character.activeTrait) || undefined : undefined,
       });
       shareSuccess = true;
       setShowShareMenu(false);
@@ -778,11 +684,7 @@ export default function MainPage() {
 
       try {
         const blob = await captureCardAsBlob(shareCardRef.current);
-        if (!blob) {
-          alert('이미지 생성에 실패했습니다.');
-          setShareLoading(false);
-          return;
-        }
+        if (!blob) { alert('이미지 생성에 실패했습니다.'); setShareLoading(false); return; }
 
         if (target === 'instagram') {
           shareSuccess = await shareToInstagramStory(blob);
@@ -801,25 +703,15 @@ export default function MainPage() {
 
     if (shareSuccess && token) {
       try {
-        const res = await fetch(
-          `${apiUrl}/api/characters/me/share-reward`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          },
-        );
+        const res = await fetch(`${apiUrl}/api/characters/me/share-reward`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        });
         if (res.ok) {
           const data = await res.json();
           if (data.rewarded) {
-            alert(
-              `🎉 공유 보상 +${data.added} XP! (${data.xpBefore} → ${data.xpAfter})`,
-            );
-            setCharacter((prev) =>
-              prev ? { ...prev, xp: data.xpAfter } : prev,
-            );
+            alert(`공유 보상 +${data.added} XP! (${data.xpBefore} → ${data.xpAfter})`);
+            setCharacter((prev) => prev ? { ...prev, xp: data.xpAfter } : prev);
           }
         }
       } catch (e) {
@@ -828,17 +720,7 @@ export default function MainPage() {
     }
   };
 
-  const handleHelpTouchStart = (e: React.TouchEvent) =>
-    setTouchStartX(e.touches[0].clientX);
-  const handleHelpTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX === null) return;
-    const diff = e.changedTouches[0].clientX - touchStartX;
-    if (diff > 50 && helpPage > 0) setHelpPage(helpPage - 1);
-    if (diff < -50 && helpPage < HELP_CARDS.length - 1)
-      setHelpPage(helpPage + 1);
-    setTouchStartX(null);
-  };
-
+  /* ─── 로딩 / 에러 렌더 ─── */
   if (loading || status === 'loading') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -856,22 +738,17 @@ export default function MainPage() {
     );
   }
 
+  /* ─── 파생 값 ─── */
   const emoji = ANIMAL_EMOJI[character.animalType] || '🐾';
-  const animalName =
-    ANIMAL_NAMES[character.animalType] || character.animalType;
-    const characterSize = character.displaySize ?? getCharacterSize(character.xp);
+  const animalName = ANIMAL_NAMES[character.animalType] || character.animalType;
+  const characterSize = character.displaySize ?? getCharacterSize(character.xp);
   const evolvedStage = character.evolvedStage ?? 1;
   const displayStage = character.displayStage ?? evolvedStage;
-
-  const initialPx = getEmojiPx(0);
-  const emojiPx = getEmojiPx(character.xp);
-  const card = HELP_CARDS[helpPage];
-
-   const earnedCount = (character.earnedAchievements || []).length + (character.teamAchievements || []).length;
-  const nextEvo = evolvedStage < 5 ? EVOLUTION_STAGES[evolvedStage] : null;
+  const earnedCount = (character.earnedAchievements || []).length + (character.teamAchievements || []).length;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24 relative">
+      {/* XP 수확 오버레이 */}
       {harvestMode && (
         <HarvestOverlay
           xpOrbs={xpOrbs}
@@ -883,6 +760,7 @@ export default function MainPage() {
         />
       )}
 
+      {/* 밥주기 애니메이션 */}
       {feedAnimation && (
         <div className="fixed inset-0 pointer-events-none z-[60]">
           {['🍖', '🥩', '🍗'].map((food, i) => (
@@ -892,14 +770,15 @@ export default function MainPage() {
         </div>
       )}
 
+      {/* 토스트 */}
       {feedToast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-black/80 text-white px-5 py-2.5 rounded-full text-sm font-medium z-[60] animate-bounce">{feedToast}</div>
       )}
-
       {evolutionToast && (
         <div className="fixed top-28 left-1/2 -translate-x-1/2 bg-indigo-600/90 text-white px-5 py-2.5 rounded-full text-sm font-medium z-[60] animate-bounce">{evolutionToast}</div>
       )}
 
+      {/* 카카오톡 브라우저 차단 */}
       {typeof navigator !== 'undefined' && /KAKAOTALK/i.test(navigator.userAgent) && (
         <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
           <div className="text-5xl mb-4">🌐</div>
@@ -913,11 +792,13 @@ export default function MainPage() {
         </div>
       )}
 
+      {/* 상단 바 */}
       <div className="px-4 pt-5 pb-2 flex items-center justify-between relative z-10">
         <div />
         <LogoutButton className="text-xs text-gray-400 hover:text-red-400" />
       </div>
 
+      {/* 걷는 캐릭터 */}
       <WalkingCharacter
         ref={walkingCharRef}
         animalType={character.animalType}
@@ -927,17 +808,19 @@ export default function MainPage() {
         stage={displayStage}
       />
 
+      {/* 캐릭터 정보 */}
       <div className="flex flex-col items-center justify-center pt-8 pb-4 relative z-10">
         <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
         <p className="text-sm text-gray-400 mt-1">{animalName}</p>
-<div className="flex items-center gap-3 mt-1">
-  <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-bold">
-    보유 {(character.currentXp ?? character.xp ?? 0).toLocaleString()} XP
-  </span>
-  <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-    누적 {(character.totalXp ?? character.xp ?? 0).toLocaleString()} XP
-  </span>
-</div>
+
+        <div className="flex items-center gap-3 mt-1">
+          <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-bold">
+            보유 {(character.currentXp ?? character.xp ?? 0).toLocaleString()} XP
+          </span>
+          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+            누적 {(character.totalXp ?? character.xp ?? 0).toLocaleString()} XP
+          </span>
+        </div>
 
         {character.activeTrait && (
           <div className="mt-3 bg-white/80 backdrop-blur rounded-xl px-4 py-2 border border-orange-100 shadow-sm">
@@ -965,13 +848,17 @@ export default function MainPage() {
         <button
           onClick={handleSelfFeed}
           disabled={selfFed}
-          className={`mt-4 px-6 py-2.5 rounded-full text-sm font-bold transition-all ${selfFed ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-orange-400 text-white hover:bg-orange-500 active:scale-95 shadow-md'}`}
+          className={`mt-4 px-6 py-2.5 rounded-full text-sm font-bold transition-all ${
+            selfFed
+              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              : 'bg-orange-400 text-white hover:bg-orange-500 active:scale-95 shadow-md'
+          }`}
         >
           {selfFed ? '🍖 오늘 밥 완료!' : '🍖 밥주기 (+3 XP)'}
         </button>
       </div>
 
-      {/* FAB 메뉴 */}
+      {/* ─── FAB 메뉴 ─── */}
       <div className="fixed bottom-24 right-4 z-50">
         {menuOpen && (
           <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
@@ -981,18 +868,29 @@ export default function MainPage() {
             <button onClick={() => { setShowHelp(true); setHelpPage(0); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">❓ 도움말</button>
             <button onClick={() => { router.push('/achievements'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">🏆 내 업적</button>
             <button onClick={() => { setShowEvolution(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
-              {(() => { const evo = EVOLUTION_STAGES[evolvedStage - 1]; return evolvedStage >= 5 ? `💎 신화 · ${character.xp.toLocaleString()} XP` : `${evo.badge} ${evo.stage}단계 · ${character.xp.toLocaleString()} XP`; })()}
+              {(() => {
+                const evo = EVOLUTION_STAGES[evolvedStage - 1];
+                return evolvedStage >= 5
+                  ? `💎 신화 · ${character.xp.toLocaleString()} XP`
+                  : `${evo.badge} ${evo.stage}단계 · ${character.xp.toLocaleString()} XP`;
+              })()}
             </button>
             <button onClick={() => { setShowAnimalChange(true); setSelectedNewAnimal(null); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">🔄 캐릭터 변경 ({CHANGE_ANIMAL_COST} XP)</button>
             <button onClick={() => { setShowShareMenu(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">📢 공유하기</button>
             <button onClick={() => { setShowDelete(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50">🗑️ 캐릭터 삭제</button>
           </div>
         )}
-        <button onClick={() => { setMenuOpen(!menuOpen); setShowDelete(false); setShowHelp(false); }} className={`w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg flex items-center justify-center text-2xl transition-transform duration-300 hover:bg-orange-600 active:scale-95 ${menuOpen ? 'rotate-45' : ''}`}>+</button>
+        <button
+          onClick={() => { setMenuOpen(!menuOpen); setShowDelete(false); setShowHelp(false); }}
+          className={`w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg flex items-center justify-center text-2xl transition-transform duration-300 hover:bg-orange-600 active:scale-95 ${menuOpen ? 'rotate-45' : ''}`}
+        >
+          +
+        </button>
       </div>
 
       {menuOpen && <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />}
 
+      {/* ─── 모달들 ─── */}
       {showHelp && <HelpCards onClose={() => setShowHelp(false)} />}
 
       {showEvolution && character && (
@@ -1003,7 +901,10 @@ export default function MainPage() {
             if (!token || evolving) return;
             setEvolving(true);
             try {
-              const res = await fetch(`${apiUrl}/api/characters/me/evolve`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+              const res = await fetch(`${apiUrl}/api/characters/me/evolve`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              });
               const data = await res.json();
               if (res.ok) {
                 setCharacter(prev => prev ? { ...prev, xp: data.character.xp, evolvedStage: data.character.evolvedStage } : prev);
@@ -1014,8 +915,12 @@ export default function MainPage() {
                 setEvolutionToast(data.error || '진화 실패');
                 setTimeout(() => setEvolutionToast(''), 2500);
               }
-            } catch { setEvolutionToast('네트워크 오류'); setTimeout(() => setEvolutionToast(''), 2500); }
-            finally { setEvolving(false); }
+            } catch {
+              setEvolutionToast('네트워크 오류');
+              setTimeout(() => setEvolutionToast(''), 2500);
+            } finally {
+              setEvolving(false);
+            }
           }}
           onDisplayStageChange={(stage) => setCharacter(prev => prev ? { ...prev, displayStage: stage } : prev)}
           onDisplaySizeChange={(size) => setCharacter(prev => prev ? { ...prev, displaySize: size } : prev)}
@@ -1056,6 +961,7 @@ export default function MainPage() {
         />
       )}
 
+      {/* 푸시 프롬프트 */}
       {showPushPrompt && (
         <div className="fixed bottom-28 left-4 right-4 z-50 bg-white rounded-2xl shadow-lg border border-gray-100 p-4">
           <p className="text-sm font-bold text-gray-800 mb-1">🔔 알림을 받으시겠어요?</p>
@@ -1067,6 +973,7 @@ export default function MainPage() {
         </div>
       )}
 
+      {/* 알림 차단 안내 */}
       {showBlockedGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full p-5 text-center">
@@ -1078,6 +985,7 @@ export default function MainPage() {
         </div>
       )}
 
+      {/* 웰컴 모달 */}
       {showWelcome && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center">
@@ -1089,8 +997,17 @@ export default function MainPage() {
         </div>
       )}
 
+      {/* 공유 카드 (숨김) */}
       <div className="hidden">
-        <ShareCard ref={shareCardRef} characterName={character.name} animalType={character.animalType} animalName={animalName} xp={character.xp} characterSize={characterSize} traitName={character.activeTrait ? getTraitDisplay(character.activeTrait) || undefined : undefined} />
+        <ShareCard
+          ref={shareCardRef}
+          characterName={character.name}
+          animalType={character.animalType}
+          animalName={animalName}
+          xp={character.xp}
+          characterSize={characterSize}
+          traitName={character.activeTrait ? getTraitDisplay(character.activeTrait) || undefined : undefined}
+        />
       </div>
 
       <style jsx global>{`
