@@ -1,3 +1,5 @@
+// client/src/app/(main)/layout.tsx — 메인 그룹 레이아웃
+
 'use client';
 import { useSession } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -6,9 +8,9 @@ import Link from 'next/link';
 import PushManager from '@/components/PushManager';
 
 const NAV_ITEMS = [
-  { href: '/',               label: '홈' },
-  { href: '/match',          label: '예측' },
-  { href: '/ranking',        label: '랭킹' },
+  { href: '/',        label: '홈' },
+  { href: '/match',   label: '배치' },
+  { href: '/ranking', label: '랭킹' },
 ];
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
