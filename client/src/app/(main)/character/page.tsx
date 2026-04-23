@@ -74,7 +74,7 @@ export default function CharacterCreatePage() {
         {selectedAnimal ? (
   <div className="text-center">
     <img
-      src={`/characters/${selectedAnimal.type}1.png`}
+      src={`/characters/${selectedAnimal.type}_1.png`}
       alt={selectedAnimal.name}
       className="mx-auto"
       style={{ width: '100px', height: '100px', objectFit: 'contain', imageRendering: 'pixelated' }}
@@ -112,7 +112,7 @@ export default function CharacterCreatePage() {
             }`}
           >
             <img
-  src={`/characters/${a.type}1.png`}
+  src={`/characters/${a.type}_1.png`}
   alt={a.name}
   style={{ width: '32px', height: '32px', objectFit: 'contain', imageRendering: 'pixelated' }}
 />
