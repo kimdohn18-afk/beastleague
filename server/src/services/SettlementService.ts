@@ -14,15 +14,17 @@ export interface SettlementResult {
   details: Array<{
     predictionId: string;
     characterName: string;
-    predictedWinner: string;
+    team: string;
+    battingOrder?: number;
     winCorrect: boolean;
     netXp: number;
+    playerName?: string;
   }>;
   errors: string[];
 }
 
 /**
- * streak 보너스 계산 (기존 로직 유지)
+ * streak 보너스 계산
  */
 function calculateStreakBonus(streak: number): {
   daily: number;
@@ -55,18 +57,13 @@ function calculateStreakBonus(streak: number): {
 }
 
 /**
- * 올킬 보너스 확인: 해당 날짜의 모든 예측이 정산 완료되고 전부 적중했는지
+ * 올킬 보너스 확인
  */
 async function checkAllKillBonus(userId: string, date: string): Promise<number> {
   const allPredictions = await Prediction.find({ userId, date }).lean();
-
-  // 아직 active인 예측이 있으면 올킬 판정 보류
-  if (allPredictions.some(p => p.status === 'active')) return 0;
-
-  // 최소 2경기 이상이어야 올킬 의미 있음
+  if (allPredictions.some((p) => p.status === 'active')) return 0;
   if (allPredictions.length < 2) return 0;
-
-  const allWinCorrect = allPredictions.every(p => p.result?.winCorrect === true);
+  const allWinCorrect = allPredictions.every((p) => p.result?.winCorrect === true);
   return allWinCorrect ? ALL_KILL_BONUS : 0;
 }
 
@@ -80,7 +77,6 @@ export async function settleGame(
   const errors: string[] = [];
   const details: SettlementResult['details'] = [];
 
-  // 이미 정산된 예측이 있는지 확인
   const settledCount = await Prediction.countDocuments({ gameId, status: 'settled' });
   const activePredictions = await Prediction.find({ gameId, status: 'active' });
 
@@ -93,7 +89,8 @@ export async function settleGame(
 
   const game = await Game.findOne({ gameId });
   if (!game) throw new Error(`경기를 찾을 수 없습니다: ${gameId}`);
-  if (game.status !== 'finished') throw new Error(`경기가 아직 종료되지 않았습니다: ${gameId}`);
+  if (game.status !== 'finished')
+    throw new Error(`경기가 아직 종료되지 않았습니다: ${gameId}`);
 
   let settled = 0;
 
@@ -105,28 +102,30 @@ export async function settleGame(
         continue;
       }
 
-      // 1. 예측 결과 계산
+      // 1. XP 계산 (XpCalculator가 타순/레거시 모두 처리)
       const result = calculatePredictionXp(game, prediction);
 
       // 2. streak 보너스
       const streakBonus = calculateStreakBonus(character.streak || 0);
 
-      // 3. XP 적용 (netXp + streak)
+      // 3. XP 적용
       const totalXp = result.netXp + streakBonus.total;
-      // 누적 XP는 양수 획득분만 더함 (절대 줄지 않음)
-if (totalXp > 0) {
-  character.totalXp = (character.totalXp || 0) + totalXp;
-}
-// 보유 XP는 증감 모두 반영 (0 미만 방지)
-character.currentXp = Math.max(0, (character.currentXp || 0) + totalXp);
-// 하위호환: xp = totalXp 동기화
-character.xp = character.totalXp;
+      if (totalXp > 0) {
+        character.totalXp = (character.totalXp || 0) + totalXp;
+      }
+      character.currentXp = Math.max(0, (character.currentXp || 0) + totalXp);
+      character.xp = character.totalXp;
       character.totalPlacements = (character.totalPlacements || 0) + 1;
 
       // 4. 업적 재계산 (10회 배수)
-      if (character.totalPlacements >= 10 && character.totalPlacements % 10 === 0) {
+      if (
+        character.totalPlacements >= 10 &&
+        character.totalPlacements % 10 === 0
+      ) {
         try {
-          const { calculateAchievements, getAchievementById } = await import('./TraitCalculator');
+          const { calculateAchievements, getAchievementById } = await import(
+            './TraitCalculator'
+          );
           const achResult = await calculateAchievements(
             String(prediction.userId),
             String(character._id)
@@ -136,13 +135,14 @@ character.xp = character.totalXp;
             ? `${achResult.activeTrait.emoji} ${achResult.activeTrait.name}`
             : null;
 
-          const prevEarned: string[] = (character as any).earnedAchievements || [];
+          const prevEarned: string[] =
+            (character as any).earnedAchievements || [];
           const newAchievements = achResult.earned.filter(
             (id: string) => !prevEarned.includes(id)
           );
 
           (character as any).earnedAchievements = achResult.earned;
-          
+
           if (newAchievements.length > 0) {
             const achNames = newAchievements
               .map((id: string) => {
@@ -156,7 +156,9 @@ character.xp = character.totalXp;
               '🏆 새 업적 달성!',
               `${achNames}을(를) 달성했어요!`,
               { url: '/achievements' }
-            ).catch((e) => console.error('[Push] Achievement push error:', e));
+            ).catch((e) =>
+              console.error('[Push] Achievement push error:', e)
+            );
           }
         } catch (e) {
           console.error('[Achievement] Calculation error:', e);
@@ -174,9 +176,11 @@ character.xp = character.totalXp;
       details.push({
         predictionId: String(prediction._id),
         characterName: character.name,
-        predictedWinner: prediction.predictedWinner,
+        team: prediction.team || prediction.predictedWinner,
+        battingOrder: prediction.battingOrder,
         winCorrect: result.winCorrect,
         netXp: totalXp,
+        playerName: result.batterResult?.playerName,
       });
 
       // 6. 올킬 보너스 확인
@@ -186,20 +190,51 @@ character.xp = character.totalXp;
       );
       if (allKillXp > 0) {
         character.totalXp = (character.totalXp || 0) + allKillXp;
-character.currentXp = (character.currentXp || 0) + allKillXp;
-character.xp = character.totalXp;
+        character.currentXp = (character.currentXp || 0) + allKillXp;
+        character.xp = character.totalXp;
         await character.save();
       }
 
       // 7. 푸시 알림
       const sign = totalXp >= 0 ? '+' : '';
-      let pushBody = `${character.name}: ${sign}${totalXp} XP`;
+      let pushBody = '';
 
-      if (result.winCorrect) pushBody = `✅ 승리 적중! ${pushBody}`;
-      else pushBody = `❌ 예측 실패 ${pushBody}`;
+      // 타순 배치인 경우
+      if (prediction.battingOrder && result.batterResult?.playerName) {
+        const br = result.batterResult;
+        const statsLine = [
+          `${br.atBats}타수 ${br.hits}안타`,
+          br.homeRuns > 0 ? `${br.homeRuns}홈런` : null,
+          br.rbi > 0 ? `${br.rbi}타점` : null,
+          br.stolenBases > 0 ? `${br.stolenBases}도루` : null,
+        ]
+          .filter(Boolean)
+          .join(' ');
 
-      if (result.diffCorrect) pushBody += '\n🎯 점수차 적중!';
-      if (result.totalCorrect) pushBody += '\n🎯 총득점 적중!';
+        pushBody = `${br.playerName} (${prediction.battingOrder}번): ${statsLine}`;
+        pushBody += `\n${character.name}: ${sign}${totalXp} XP`;
+
+        if (result.xpFromPlayer !== undefined && result.xpFromPlayer > 0) {
+          pushBody += `\n⚾ 타자 성적 +${result.xpFromPlayer}`;
+        }
+        if (result.xpFromTeamWin && result.xpFromTeamWin > 0) {
+          pushBody += `\n✅ 팀 승리 +${result.xpFromTeamWin}`;
+        }
+        if (result.xpFromWinPredict !== undefined) {
+          if (result.xpFromWinPredict > 0) {
+            pushBody += `\n🎯 승리 적중 +${result.xpFromWinPredict}`;
+          } else if (result.xpFromWinPredict < 0) {
+            pushBody += `\n❌ 승리 예측 실패 ${result.xpFromWinPredict}`;
+          }
+        }
+      } else {
+        // 레거시 스코어 기반
+        pushBody = `${character.name}: ${sign}${totalXp} XP`;
+        if (result.winCorrect) pushBody = `✅ 승리 적중! ${pushBody}`;
+        else pushBody = `❌ 예측 실패 ${pushBody}`;
+        if (result.diffCorrect) pushBody += '\n🎯 점수차 적중!';
+        if (result.totalCorrect) pushBody += '\n🎯 총득점 적중!';
+      }
 
       if (streakBonus.milestoneName) {
         pushBody += `\n🏆 ${streakBonus.milestoneName} +${streakBonus.total} XP`;
@@ -217,9 +252,10 @@ character.xp = character.totalXp;
         pushBody,
         { url: '/predictions' }
       ).catch((e) => console.error('[Push] Settlement push error:', e));
-
     } catch (err) {
-      errors.push(`예측 처리 오류 (${String(prediction._id)}): ${String(err)}`);
+      errors.push(
+        `배치 처리 오류 (${String(prediction._id)}): ${String(err)}`
+      );
     }
   }
 
