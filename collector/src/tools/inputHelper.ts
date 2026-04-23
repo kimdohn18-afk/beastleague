@@ -1,181 +1,150 @@
-#!/usr/bin/env ts-node
-/**
- * 대화형 CLI — 경기 결과 수동 입력 도구
- * 실행: npx ts-node collector/src/tools/inputHelper.ts
- */
-import * as readline from 'readline';
-import * as path from 'path';
-import { GameData, TeamCode, BatterGroupStats, PitcherStats, BatterGroupType } from '@beastleague/shared';
-import { validateGameData } from '../validator/GameDataValidator';
-import { ManualJsonDataSource } from '../datasource/ManualJsonDataSource';
+'use client';
 
-// ── 상수 ──────────────────────────────────────────────────
-const TEAM_CODES: TeamCode[] = [
-  '광주', '대구', '서울L', '서울D', '수원', '인천', '대전', '부산', '창원', '서울K',
+import { useState } from 'react';
+import {
+  BATTER_XP,
+  TEAM_WIN_XP,
+  WIN_PREDICT_XP,
+} from '@beastleague/shared';
+
+// ─── XP 상수에서 동적 생성 ───
+const HELP_CARDS = [
+  {
+    icon: '🐾',
+    title: '비스트리그란?',
+    lines: [
+      '실제 KBO 경기 결과로',
+      '내 동물 캐릭터가 성장하는',
+      '육성형 웹앱입니다.',
+      '',
+      '매일 배치하고, XP를 모아',
+      '캐릭터를 키워보세요!',
+    ],
+  },
+  {
+    icon: '⚾',
+    title: '배치하기',
+    lines: [
+      '① 오늘의 경기 중 하나를 선택',
+      '② 응원할 팀을 고르세요',
+      '③ 1~9번 중 타순을 선택',
+      '',
+      '경기 시작 전까지만 배치 가능!',
+      '하루 1경기만 배치할 수 있어요.',
+    ],
+  },
+  {
+    icon: '✨',
+    title: 'XP 규칙',
+    lines: [
+      `안타 +${BATTER_XP.HIT} · 2루타 +${BATTER_XP.DOUBLE} · 3루타 +${BATTER_XP.TRIPLE}`,
+      `홈런 +${BATTER_XP.HR} · 타점 +${BATTER_XP.RBI} · 득점 +${BATTER_XP.RUN}`,
+      `도루 +${BATTER_XP.SB} · 도루실패 ${BATTER_XP.SB_FAIL}`,
+      `끝내기 안타 +${BATTER_XP.WALK_OFF}`,
+      '',
+      `무안타(3타석↑) ${BATTER_XP.NO_HIT_PENALTY}`,
+      `팀 승리 +${TEAM_WIN_XP} · 승리예측 적중 +${WIN_PREDICT_XP}`,
+    ],
+  },
+  {
+    icon: '📈',
+    title: '캐릭터 성장',
+    lines: [
+      'XP가 쌓이면 캐릭터가',
+      '점점 커집니다!',
+      '',
+      '두 손가락으로 줌 아웃하면',
+      '전체 크기를 볼 수 있어요.',
+      '',
+      '내 배치 탭에서 경기별 기록과',
+      'XP 내역을 확인할 수 있어요.',
+    ],
+  },
 ];
 
-const TEAM_TO_KBO: Record<TeamCode, string> = {
-  '광주': 'HT', '대구': 'SS', '서울L': 'LG', '서울D': 'OB',
-  '수원': 'KT', '인천': 'SK', '대전': 'HH', '부산': 'LT', '창원': 'NC', '서울K': 'WO',
-};
-
-const BATTER_GROUP_TYPES: BatterGroupType[] = ['leadoff', 'cleanup', 'lower'];
-const GROUP_LABELS: Record<string, string> = {
-  leadoff: '상위타선 (1~2번)',
-  cleanup: '클린업 (3~5번)',
-  lower: '하위타선 (6~9번)',
-};
-
-const DATA_DIR = path.resolve(process.cwd(), 'data');
-
-// ── readline 래퍼 ─────────────────────────────────────────
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-
-function ask(question: string): Promise<string> {
-  return new Promise((resolve) => rl.question(question, resolve));
+interface HelpCardsProps {
+  onClose: () => void;
 }
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+export default function HelpCards({ onClose }: HelpCardsProps) {
+  const [page, setPage] = useState(0);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const card = HELP_CARDS[page];
 
-function generateGameId(date: string, homeTeam: TeamCode, awayTeam: TeamCode): string {
-  const d = date.replace(/-/g, '');
-  return `${d}${TEAM_TO_KBO[awayTeam]}${TEAM_TO_KBO[homeTeam]}0`;
-}
+  const handleTouchStart = (e: React.TouchEvent) =>
+    setTouchStartX(e.touches[0].clientX);
 
-async function askTeam(prompt: string): Promise<TeamCode> {
-  console.log('\n팀 목록:', TEAM_CODES.map((t, i) => `${i + 1}.${t}`).join('  '));
-  while (true) {
-    const input = await ask(`${prompt} (번호 또는 이름): `);
-    const num = parseInt(input, 10);
-    if (!isNaN(num) && num >= 1 && num <= TEAM_CODES.length) return TEAM_CODES[num - 1];
-    if (TEAM_CODES.includes(input as TeamCode)) return input as TeamCode;
-    console.log('올바른 팀을 선택해주세요.');
-  }
-}
-
-async function askInt(prompt: string, defaultVal?: number): Promise<number> {
-  while (true) {
-    const raw = await ask(defaultVal !== undefined ? `${prompt} [기본값: ${defaultVal}]: ` : `${prompt}: `);
-    if (raw.trim() === '' && defaultVal !== undefined) return defaultVal;
-    const n = Number(raw);
-    if (!isNaN(n) && n >= 0) return n;
-    console.log('0 이상 숫자를 입력해주세요.');
-  }
-}
-
-async function askFloat(prompt: string): Promise<number> {
-  while (true) {
-    const raw = await ask(`${prompt}: `);
-    const n = parseFloat(raw);
-    if (!isNaN(n) && n >= 0) return n;
-    console.log('0 이상 숫자를 입력해주세요.');
-  }
-}
-
-async function inputBatterGroup(team: TeamCode, groupType: BatterGroupType): Promise<BatterGroupStats> {
-  console.log(`\n  [${team}] ${GROUP_LABELS[groupType]} 합산 스탯`);
-  return {
-    AB: await askInt('    AB'),
-    H: await askInt('    H'),
-    '2B': await askInt('    2B'),
-    '3B': await askInt('    3B'),
-    HR: await askInt('    HR'),
-    RBI: await askInt('    RBI'),
-    RUN: await askInt('    RUN'),
-    SB: await askInt('    SB'),
-    BB: await askInt('    BB'),
-    K: await askInt('    K'),
-  };
-}
-
-async function inputPitcher(team: TeamCode): Promise<PitcherStats | null> {
-  const yn = await ask(`\n  [${team}] 선발투수 스탯 입력할까요? (y/N): `);
-  if (yn.toLowerCase() !== 'y') return null;
-  return {
-    IP: await askFloat('    IP (이닝, e.g. 6.2)'),
-    PITCH: await askInt('    투구 수'),
-    H: await askInt('    피안타'),
-    K: await askInt('    탈삼진'),
-    BB: await askInt('    볼넷'),
-    ER: await askInt('    자책점'),
-  };
-}
-
-async function inputGame(date: string): Promise<GameData | null> {
-  const homeTeam = await askTeam('홈팀');
-  const awayTeam = await askTeam('원정팀');
-  const statusRaw = await ask('경기 상태 (finished/cancelled/postponed) [기본값: finished]: ');
-  const status = (['finished', 'cancelled', 'postponed'].includes(statusRaw.trim())
-    ? statusRaw.trim()
-    : 'finished') as GameData['status'];
-
-  const homeScore = await askInt('홈팀 점수');
-  const awayScore = await askInt('원정팀 점수');
-
-  const batterGroups: GameData['batterGroups'] = [];
-  for (const team of [homeTeam, awayTeam]) {
-    for (const groupType of BATTER_GROUP_TYPES) {
-      const stats = await inputBatterGroup(team, groupType);
-      batterGroups.push({ team, groupType, stats });
-    }
-  }
-
-  const pitchers: GameData['pitchers'] = [];
-  for (const team of [homeTeam, awayTeam]) {
-    const p = await inputPitcher(team);
-    if (p) pitchers.push({ team, role: 'starter', stats: p });
-  }
-
-  const gameId = generateGameId(date, homeTeam, awayTeam);
-  const game: GameData = {
-    gameId, date, homeTeam, awayTeam, status,
-    homeScore, awayScore,
-    batterGroups,
-    pitchers: pitchers.length > 0 ? pitchers : undefined,
-    updatedAt: new Date().toISOString(),
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null) return;
+    const diff = e.changedTouches[0].clientX - touchStartX;
+    if (diff > 50 && page > 0) setPage(page - 1);
+    if (diff < -50 && page < HELP_CARDS.length - 1) setPage(page + 1);
+    setTouchStartX(null);
   };
 
-  const { valid, errors } = validateGameData(game);
-  if (!valid) {
-    console.error('\n검증 실패:');
-    errors.forEach((e) => console.error('  -', e));
-    const retry = await ask('다시 입력할까요? (y/N): ');
-    if (retry.toLowerCase() === 'y') return inputGame(date);
-    return null;
-  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div
+        className="bg-white rounded-2xl max-w-sm w-full p-6"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div className="text-center mb-4">
+          <span className="text-4xl">{card.icon}</span>
+          <h2 className="text-lg font-bold text-gray-800 mt-2">
+            {card.title}
+          </h2>
+        </div>
 
-  return game;
+        <div className="bg-gray-50 rounded-xl p-4 mb-4 min-h-[140px]">
+          {card.lines.map((line, i) => (
+            <p
+              key={i}
+              className={`text-sm ${line === '' ? 'h-2' : 'text-gray-600'}`}
+            >
+              {line}
+            </p>
+          ))}
+        </div>
+
+        <div className="flex justify-center gap-1.5 mb-4">
+          {HELP_CARDS.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setPage(i)}
+              className={`w-2 h-2 rounded-full transition-all ${
+                i === page ? 'bg-orange-400 w-4' : 'bg-gray-200'
+              }`}
+            />
+          ))}
+        </div>
+
+        <div className="flex gap-2">
+          {page > 0 && (
+            <button
+              onClick={() => setPage(page - 1)}
+              className="flex-1 py-2.5 bg-gray-100 rounded-xl text-sm text-gray-500 font-medium"
+            >
+              이전
+            </button>
+          )}
+          {page < HELP_CARDS.length - 1 ? (
+            <button
+              onClick={() => setPage(page + 1)}
+              className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold"
+            >
+              다음
+            </button>
+          ) : (
+            <button
+              onClick={onClose}
+              className="flex-1 py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold"
+            >
+              확인
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
-
-async function main() {
-  console.log('=== 비스트리그 경기 결과 입력 도구 ===');
-  console.log('⚠️  선수 이름/이니셜/등번호는 절대 입력하지 마세요.\n');
-
-  const dateInput = await ask(`날짜 [기본값: ${today()}]: `);
-  const date = dateInput.trim() || today();
-
-  const countInput = await ask('경기 수 [기본값: 5]: ');
-  const count = parseInt(countInput, 10) || 5;
-
-  const ds = new ManualJsonDataSource(DATA_DIR);
-  let saved = 0;
-
-  for (let i = 0; i < count; i++) {
-    console.log(`\n--- 경기 ${i + 1}/${count} ---`);
-    const game = await inputGame(date);
-    if (!game) {
-      console.log('건너뜀.');
-      continue;
-    }
-    await ds.upsertGame(game);
-    console.log(`✓ 저장 완료: ${game.gameId}`);
-    saved++;
-  }
-
-  console.log(`\n완료: ${count}경기 중 ${saved}경기 저장됨.`);
-  rl.close();
-}
-
-main().catch((e) => { console.error(e); rl.close(); process.exit(1); });
