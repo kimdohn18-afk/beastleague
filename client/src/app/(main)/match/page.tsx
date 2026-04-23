@@ -74,13 +74,14 @@ function isGameStartedByTime(game: Game): boolean {
 const todayKST = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 
+const MAX_PLACEMENTS = 1; // 하루 최대 배치 수
+
 // ─── 컴포넌트 ───
 
 export default function MatchPage() {
   const { data: session } = useSession();
   const router = useRouter();
 
-  // 공통 상태
   const [games, setGames] = useState<Game[]>([]);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [character, setCharacter] = useState<CharacterInfo | null>(null);
@@ -88,13 +89,11 @@ export default function MatchPage() {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  // 오늘 경기 탭
   const [expandedGame, setExpandedGame] = useState<string | null>(null);
   const [selections, setSelections] = useState<
     Record<string, { team: string; battingOrder: number | null }>
   >({});
 
-  // 탭 & 기록
   const [tab, setTab] = useState<'today' | 'history'>('today');
   const [historyData, setHistoryData] = useState<Prediction[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -127,7 +126,6 @@ export default function MatchPage() {
       if (predsRes.ok) {
         const preds: Prediction[] = await predsRes.json();
         setPredictions(preds);
-        // 기존 예측을 selections에 반영
         const sel: typeof selections = {};
         for (const p of preds) {
           if (p.team && p.battingOrder) {
@@ -207,7 +205,7 @@ export default function MatchPage() {
         headers,
         body: JSON.stringify({
           gameId,
-          predictedWinner: sel.team, // 하위 호환
+          predictedWinner: sel.team,
           team: sel.team,
           battingOrder: sel.battingOrder,
         }),
@@ -263,8 +261,8 @@ export default function MatchPage() {
 
   const activeGames = games.filter((g) => g.status !== 'cancelled');
   const placedCount = predictions.filter((p) => p.status === 'active').length;
+  const isMaxPlaced = placedCount >= MAX_PLACEMENTS;
 
-  // 히스토리 계산
   const historySettled = historyData.filter(
     (p) => p.status === 'settled' && p.result
   );
@@ -280,7 +278,6 @@ export default function MatchPage() {
       ? Math.round((historyCorrectCount / historySettled.length) * 100)
       : 0;
 
-  // 날짜별 그룹
   const dateGroupMap = new Map<string, Prediction[]>();
   for (const p of historyData) {
     const arr = dateGroupMap.get(p.date) || [];
@@ -295,7 +292,6 @@ export default function MatchPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 pb-24">
-      {/* 토스트 */}
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white px-4 py-2 rounded-2xl text-sm shadow-lg">
           {toast}
@@ -333,7 +329,7 @@ export default function MatchPage() {
             <div>
               <h1 className="text-gray-900 text-lg font-bold">{todayKST()}</h1>
               <p className="text-gray-400 text-sm">
-                {activeGames.length}경기 · {placedCount}개 배치
+                {activeGames.length}경기 · {placedCount}/{MAX_PLACEMENTS} 배치
               </p>
             </div>
             <div className="bg-orange-50 px-3 py-1.5 rounded-full">
@@ -342,6 +338,15 @@ export default function MatchPage() {
               </span>
             </div>
           </div>
+
+          {/* 배치 완료 안내 */}
+          {isMaxPlaced && (
+            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-3 mb-4 text-center">
+              <p className="text-orange-600 text-sm font-medium">
+                오늘의 배치를 완료했습니다! 경기 결과를 기다려주세요
+              </p>
+            </div>
+          )}
 
           {games.length === 0 ? (
             <p className="text-gray-400 text-center mt-20">
@@ -358,6 +363,9 @@ export default function MatchPage() {
                 const hasPrediction = !!pred;
                 const sel = selections[game.gameId];
 
+                // 이미 다른 경기에 배치했고 이 경기는 배치 안 한 경우
+                const isBlocked = isMaxPlaced && !hasPrediction;
+
                 const homeDisplay = getDisplayName(game.homeTeam as any);
                 const awayDisplay = getDisplayName(game.awayTeam as any);
 
@@ -365,7 +373,7 @@ export default function MatchPage() {
                   <div
                     key={game.gameId}
                     className={`rounded-2xl overflow-hidden shadow-sm ${
-                      isCancelled
+                      isCancelled || isBlocked
                         ? 'opacity-50'
                         : hasPrediction
                         ? 'ring-2 ring-orange-400'
@@ -374,21 +382,28 @@ export default function MatchPage() {
                   >
                     {/* 경기 헤더 */}
                     <div
-                      onClick={() =>
-                        !isCancelled &&
-                        !isSettled &&
-                        setExpandedGame(isExpanded ? null : game.gameId)
-                      }
+                      onClick={() => {
+                        if (isCancelled || isSettled) return;
+                        if (isBlocked) {
+                          showToast('하루 1경기만 배치할 수 있습니다');
+                          return;
+                        }
+                        setExpandedGame(isExpanded ? null : game.gameId);
+                      }}
                       className={`bg-white p-4 border border-gray-100 ${
-                        isCancelled || isSettled
+                        isCancelled || isSettled || isBlocked
                           ? 'opacity-60'
                           : 'cursor-pointer active:bg-gray-50'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className={`font-medium flex-1 text-center ${
-                          isCancelled ? 'text-gray-400 line-through' : 'text-gray-800'
-                        }`}>
+                        <span
+                          className={`font-medium flex-1 text-center ${
+                            isCancelled
+                              ? 'text-gray-400 line-through'
+                              : 'text-gray-800'
+                          }`}
+                        >
                           {awayDisplay}
                         </span>
                         <span className="text-gray-300 text-sm mx-3">
@@ -400,9 +415,13 @@ export default function MatchPage() {
                             ? '진행 중'
                             : game.startTime || 'vs'}
                         </span>
-                        <span className={`font-medium flex-1 text-center ${
-                          isCancelled ? 'text-gray-400 line-through' : 'text-gray-800'
-                        }`}>
+                        <span
+                          className={`font-medium flex-1 text-center ${
+                            isCancelled
+                              ? 'text-gray-400 line-through'
+                              : 'text-gray-800'
+                          }`}
+                        >
                           {homeDisplay}
                         </span>
                       </div>
@@ -412,11 +431,13 @@ export default function MatchPage() {
                         <div className="mt-2 pt-2 border-t border-gray-100">
                           <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
-                              <span className={
-                                pred.result.winCorrect
-                                  ? 'text-emerald-500 text-xs font-bold'
-                                  : 'text-red-400 text-xs'
-                              }>
+                              <span
+                                className={
+                                  pred.result.winCorrect
+                                    ? 'text-emerald-500 text-xs font-bold'
+                                    : 'text-red-400 text-xs'
+                                }
+                              >
                                 {pred.result.winCorrect ? '✅ 적중' : '❌ 실패'}
                               </span>
                               {pred.battingOrder && (
@@ -425,16 +446,17 @@ export default function MatchPage() {
                                 </span>
                               )}
                             </div>
-                            <span className={`text-sm font-bold ${
-                              (pred.result.netXp || 0) >= 0
-                                ? 'text-emerald-500'
-                                : 'text-red-400'
-                            }`}>
+                            <span
+                              className={`text-sm font-bold ${
+                                (pred.result.netXp || 0) >= 0
+                                  ? 'text-emerald-500'
+                                  : 'text-red-400'
+                              }`}
+                            >
                               {(pred.result.netXp || 0) >= 0 ? '+' : ''}
                               {pred.result.netXp} XP
                             </span>
                           </div>
-                          {/* 타자 성적 요약 */}
                           {pred.result.batterResult?.playerName && (
                             <p className="text-gray-400 text-xs mt-1">
                               {pred.result.batterResult.playerName}:{' '}
@@ -455,7 +477,9 @@ export default function MatchPage() {
                       {hasPrediction && !isSettled && (
                         <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between items-center">
                           <span className="text-orange-500 text-xs">
-                            {getDisplayName(pred!.team as any || pred!.predictedWinner as any)}{' '}
+                            {getDisplayName(
+                              (pred!.team as any) || (pred!.predictedWinner as any)
+                            )}{' '}
                             {pred!.battingOrder}번 타자 배치
                           </span>
                           {!isLocked && (
@@ -474,80 +498,87 @@ export default function MatchPage() {
                     </div>
 
                     {/* ===== 배치 UI (확장) ===== */}
-                    {isExpanded && !isCancelled && !isSettled && !isLocked && (
-                      <div className="bg-white border-t border-gray-100 p-4 space-y-4">
-                        {/* 팀 선택 */}
-                        <div>
-                          <p className="text-gray-400 text-xs mb-2">
-                            응원할 팀을 선택하세요
-                          </p>
-                          <div className="flex gap-3">
-                            {[game.awayTeam, game.homeTeam].map((t) => (
-                              <button
-                                key={t}
-                                onClick={() =>
-                                  updateSelection(game.gameId, {
-                                    team: t,
-                                    battingOrder: null, // 팀 변경 시 타순 초기화
-                                  })
-                                }
-                                className={`flex-1 py-3 rounded-xl text-sm font-medium transition ${
-                                  sel?.team === t
-                                    ? 'bg-orange-400 text-white shadow-md'
-                                    : 'bg-gray-100 text-gray-500'
-                                }`}
-                              >
-                                {getDisplayName(t as any)}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* 타순 선택 */}
-                        {sel?.team && (
+                    {isExpanded &&
+                      !isCancelled &&
+                      !isSettled &&
+                      !isLocked &&
+                      !isBlocked && (
+                        <div className="bg-white border-t border-gray-100 p-4 space-y-4">
+                          {/* 팀 선택 */}
                           <div>
                             <p className="text-gray-400 text-xs mb-2">
-                              타순을 선택하세요 (1~9번)
+                              응원할 팀을 선택하세요
                             </p>
-                            <div className="grid grid-cols-3 gap-2">
-                              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((order) => (
+                            <div className="flex gap-3">
+                              {[game.awayTeam, game.homeTeam].map((t) => (
                                 <button
-                                  key={order}
+                                  key={t}
                                   onClick={() =>
                                     updateSelection(game.gameId, {
-                                      battingOrder: order,
+                                      team: t,
+                                      battingOrder: null,
                                     })
                                   }
-                                  className={`py-3 rounded-xl font-bold text-sm transition ${
-                                    sel?.battingOrder === order
-                                      ? 'bg-yellow-400 text-gray-900 shadow-md'
+                                  className={`flex-1 py-3 rounded-xl text-sm font-medium transition ${
+                                    sel?.team === t
+                                      ? 'bg-orange-400 text-white shadow-md'
                                       : 'bg-gray-100 text-gray-500'
                                   }`}
                                 >
-                                  {order}번
+                                  {getDisplayName(t as any)}
                                 </button>
                               ))}
                             </div>
-                            <p className="text-gray-300 text-[11px] mt-2 text-center">
-                              경기 종료 후 해당 타자의 실제 성적으로 XP가 계산됩니다
-                            </p>
                           </div>
-                        )}
 
-                        {/* 제출 버튼 */}
-                        <button
-                          onClick={() => handleSubmit(game.gameId)}
-                          disabled={submitting || !sel?.team || !sel?.battingOrder}
-                          className="w-full bg-orange-400 text-white py-3 rounded-2xl font-bold text-sm disabled:opacity-40 shadow-md active:scale-[0.98] transition"
-                        >
-                          {submitting
-                            ? '처리 중...'
-                            : hasPrediction
-                            ? '배치 수정'
-                            : '배치 확정'}
-                        </button>
-                      </div>
-                    )}
+                          {/* 타순 선택 */}
+                          {sel?.team && (
+                            <div>
+                              <p className="text-gray-400 text-xs mb-2">
+                                타순을 선택하세요 (1~9번)
+                              </p>
+                              <div className="grid grid-cols-3 gap-2">
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((order) => (
+                                  <button
+                                    key={order}
+                                    onClick={() =>
+                                      updateSelection(game.gameId, {
+                                        battingOrder: order,
+                                      })
+                                    }
+                                    className={`py-3 rounded-xl font-bold text-sm transition ${
+                                      sel?.battingOrder === order
+                                        ? 'bg-yellow-400 text-gray-900 shadow-md'
+                                        : 'bg-gray-100 text-gray-500'
+                                    }`}
+                                  >
+                                    {order}번
+                                  </button>
+                                ))}
+                              </div>
+                              <p className="text-gray-300 text-[11px] mt-2 text-center">
+                                경기 종료 후 해당 타자의 실제 성적으로 XP가
+                                계산됩니다
+                              </p>
+                            </div>
+                          )}
+
+                          {/* 제출 버튼 */}
+                          <button
+                            onClick={() => handleSubmit(game.gameId)}
+                            disabled={
+                              submitting || !sel?.team || !sel?.battingOrder
+                            }
+                            className="w-full bg-orange-400 text-white py-3 rounded-2xl font-bold text-sm disabled:opacity-40 shadow-md active:scale-[0.98] transition"
+                          >
+                            {submitting
+                              ? '처리 중...'
+                              : hasPrediction
+                              ? '배치 수정'
+                              : '배치 확정'}
+                          </button>
+                        </div>
+                      )}
                   </div>
                 );
               })}
@@ -564,13 +595,14 @@ export default function MatchPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {/* 상단 요약 */}
             <div className="flex gap-3 mb-4">
               <div className="flex-1 bg-orange-50 rounded-2xl p-4 text-center">
                 <p className="text-gray-400 text-xs mb-1">총 획득</p>
-                <p className={`text-xl font-bold ${
-                  historyTotalNetXp >= 0 ? 'text-orange-500' : 'text-red-400'
-                }`}>
+                <p
+                  className={`text-xl font-bold ${
+                    historyTotalNetXp >= 0 ? 'text-orange-500' : 'text-red-400'
+                  }`}
+                >
                   {historyTotalNetXp >= 0 ? '+' : ''}
                   {historyTotalNetXp} XP
                 </p>
@@ -589,7 +621,6 @@ export default function MatchPage() {
               </div>
             </div>
 
-            {/* 날짜별 그룹 */}
             {dateGroups.length === 0 ? (
               <div className="text-center py-20">
                 <p className="text-gray-400 mb-4">아직 배치 기록이 없습니다</p>
@@ -633,20 +664,19 @@ export default function MatchPage() {
                         <span className="text-gray-900 font-bold">
                           {m}월 {d}일 ({dayName})
                         </span>
-                        <span className="bg-gray-100 text-gray-500 text-xs px-2 py-0.5 rounded-full">
-                          {preds.length}경기
-                        </span>
                         {settled.length > 0 && (
                           <span className="text-xs text-gray-400">
-                            적중 {correct}/{settled.length}
+                            {correct === settled.length ? '✅' : `적중 ${correct}/${settled.length}`}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-3">
                         {settled.length > 0 ? (
-                          <span className={`text-sm font-bold ${
-                            netXp >= 0 ? 'text-emerald-500' : 'text-red-400'
-                          }`}>
+                          <span
+                            className={`text-sm font-bold ${
+                              netXp >= 0 ? 'text-emerald-500' : 'text-red-400'
+                            }`}
+                          >
                             {netXp >= 0 ? '+' : ''}
                             {netXp} XP
                           </span>
@@ -655,9 +685,11 @@ export default function MatchPage() {
                             대기중
                           </span>
                         )}
-                        <span className={`text-gray-400 transition-transform ${
-                          isOpen ? 'rotate-180' : ''
-                        }`}>
+                        <span
+                          className={`text-gray-400 transition-transform ${
+                            isOpen ? 'rotate-180' : ''
+                          }`}
+                        >
                           ▼
                         </span>
                       </div>
@@ -684,11 +716,13 @@ export default function MatchPage() {
                                     {matchLabel}
                                   </p>
                                   {pSettled && (
-                                    <span className={`text-sm font-bold ${
-                                      pNetXp >= 0
-                                        ? 'text-emerald-500'
-                                        : 'text-red-400'
-                                    }`}>
+                                    <span
+                                      className={`text-sm font-bold ${
+                                        pNetXp >= 0
+                                          ? 'text-emerald-500'
+                                          : 'text-red-400'
+                                      }`}
+                                    >
                                       {pNetXp >= 0 ? '+' : ''}
                                       {pNetXp}
                                     </span>
@@ -706,7 +740,6 @@ export default function MatchPage() {
                                   </p>
                                 )}
 
-                                {/* 배치 정보 태그 */}
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="bg-orange-100 text-orange-700 text-xs px-1.5 py-0.5 rounded-full">
                                     {getDisplayName(
@@ -738,10 +771,8 @@ export default function MatchPage() {
                                 )}
                               </div>
 
-                              {/* 상세 XP 내역 */}
                               {isDetail && pSettled && p.result && (
                                 <div className="border-t border-gray-200 px-3 py-2 bg-white space-y-1.5 text-xs">
-                                  {/* 타자 기록 */}
                                   {p.result.batterResult?.playerName && (
                                     <div className="pb-1.5 border-b border-gray-100">
                                       <p className="text-gray-700 font-bold mb-1">
@@ -759,10 +790,11 @@ export default function MatchPage() {
                                         {(p.result.batterResult.homeRuns || 0) >
                                           0 &&
                                           ` · 홈런 ${p.result.batterResult.homeRuns}`}
-                                        {(p.result.batterResult.rbi || 0) >
-                                          0 && ` · ${p.result.batterResult.rbi}타점`}
+                                        {(p.result.batterResult.rbi || 0) > 0 &&
+                                          ` · ${p.result.batterResult.rbi}타점`}
                                         {(p.result.batterResult.runs || 0) >
-                                          0 && ` · ${p.result.batterResult.runs}득점`}
+                                          0 &&
+                                          ` · ${p.result.batterResult.runs}득점`}
                                         {(p.result.batterResult.stolenBases ||
                                           0) > 0 &&
                                           ` · ${p.result.batterResult.stolenBases}도루`}
@@ -770,17 +802,18 @@ export default function MatchPage() {
                                     </div>
                                   )}
 
-                                  {/* XP 항목별 */}
                                   {p.result.xpFromPlayer !== undefined && (
                                     <div className="flex justify-between">
                                       <span className="text-gray-500">
                                         타자 성적 XP
                                       </span>
-                                      <span className={
-                                        p.result.xpFromPlayer >= 0
-                                          ? 'text-emerald-500'
-                                          : 'text-red-400'
-                                      }>
+                                      <span
+                                        className={
+                                          p.result.xpFromPlayer >= 0
+                                            ? 'text-emerald-500'
+                                            : 'text-red-400'
+                                        }
+                                      >
                                         {p.result.xpFromPlayer >= 0 ? '+' : ''}
                                         {p.result.xpFromPlayer}
                                       </span>
@@ -791,11 +824,13 @@ export default function MatchPage() {
                                       <span className="text-gray-500">
                                         팀 승리 XP
                                       </span>
-                                      <span className={
-                                        p.result.xpFromTeamWin > 0
-                                          ? 'text-emerald-500'
-                                          : 'text-gray-400'
-                                      }>
+                                      <span
+                                        className={
+                                          p.result.xpFromTeamWin > 0
+                                            ? 'text-emerald-500'
+                                            : 'text-gray-400'
+                                        }
+                                      >
                                         {p.result.xpFromTeamWin > 0
                                           ? `+${p.result.xpFromTeamWin}`
                                           : '0'}
@@ -807,13 +842,15 @@ export default function MatchPage() {
                                       <span className="text-gray-500">
                                         승리 예측 XP
                                       </span>
-                                      <span className={
-                                        p.result.xpFromWinPredict > 0
-                                          ? 'text-emerald-500'
-                                          : p.result.xpFromWinPredict < 0
-                                          ? 'text-red-400'
-                                          : 'text-gray-400'
-                                      }>
+                                      <span
+                                        className={
+                                          p.result.xpFromWinPredict > 0
+                                            ? 'text-emerald-500'
+                                            : p.result.xpFromWinPredict < 0
+                                            ? 'text-red-400'
+                                            : 'text-gray-400'
+                                        }
+                                      >
                                         {p.result.xpFromWinPredict >= 0
                                           ? `+${p.result.xpFromWinPredict}`
                                           : p.result.xpFromWinPredict}
@@ -821,14 +858,15 @@ export default function MatchPage() {
                                     </div>
                                   )}
 
-                                  {/* 합계 */}
                                   <div className="pt-1.5 border-t border-gray-100 flex justify-between font-bold">
                                     <span className="text-gray-700">합계</span>
-                                    <span className={
-                                      pNetXp >= 0
-                                        ? 'text-emerald-500'
-                                        : 'text-red-400'
-                                    }>
+                                    <span
+                                      className={
+                                        pNetXp >= 0
+                                          ? 'text-emerald-500'
+                                          : 'text-red-400'
+                                      }
+                                    >
                                       {pNetXp >= 0 ? '+' : ''}
                                       {pNetXp} XP
                                     </span>
