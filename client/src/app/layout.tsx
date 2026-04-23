@@ -1,33 +1,57 @@
-import type { Metadata, Viewport } from 'next';
-import './globals.css';
-import Providers from './providers';
+'use client';
+import { useSession } from 'next-auth/react';
+import { useRouter, usePathname } from 'next/navigation';
+import { useEffect } from 'react';
+import Link from 'next/link';
+import PushManager from '@/components/PushManager';
 
-export const metadata: Metadata = {
-  title: '비스트리그',
-  description: '야구 경기 결과를 예측하고 동물 캐릭터를 키우는 육성형 웹앱',
-  manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: '비스트리그',
-  },
-};
+const NAV_ITEMS = [
+  { href: '/',        label: '홈' },
+  { href: '/match',   label: '배치' },
+  { href: '/ranking', label: '랭킹' },
+];
 
-export const viewport: Viewport = {
-  themeColor: '#fb923c',
-};
+export default function MainLayout({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    if (status === 'unauthenticated') router.replace('/login');
+  }, [status, router]);
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!session) return null;
+
   return (
-    <html lang="ko">
-      <head>
-        <link rel="apple-touch-icon" href="/icon-192.png" />
-        {/* 카카오 SDK */}
-        <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" defer />
-      </head>
-      <body className="bg-gray-50 text-gray-900 min-h-screen">
-        <Providers>{children}</Providers>
-      </body>
-    </html>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <PushManager />
+      <main className="flex-1 overflow-y-auto">{children}</main>
+
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
+        <div className="flex">
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex-1 py-4 text-center text-sm font-medium transition-colors
+                  ${isActive ? 'text-orange-500 border-t-2 border-orange-400' : 'text-gray-400'}`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    </div>
   );
 }
