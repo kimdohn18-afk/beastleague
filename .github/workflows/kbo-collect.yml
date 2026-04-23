@@ -1,15 +1,25 @@
-name: KBO Data Collector
+name: KBO 데이터 수집
 
 on:
+  # 매일 밤 10시 30분(한국시간) = UTC 13:30 에 자동 실행
   schedule:
-    - cron: '0 0 * * *'     # UTC 00:00 = KST 09:00 (어제 미정산 + 오늘 일정 보완)
-    - cron: '0 14 * * *'    # UTC 14:00 = KST 23:00 (오늘 결과 + 정산 + 내일 일정)
+    - cron: '30 13 * * *'
+  
+  # 수동 실행 (GitHub에서 버튼 클릭)
   workflow_dispatch:
     inputs:
       date:
-        description: '수집 날짜 (YYYYMMDD)'
+        description: '수집 날짜 (YYYY-MM-DD, 비우면 오늘)'
         required: false
         default: ''
+      settle:
+        description: '정산도 실행?'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 jobs:
   collect:
@@ -17,39 +27,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
+          node-version: 20
+          cache: 'npm'
 
-      - name: Install dependencies
-        run: pip install -r collector/requirements.txt
+      - run: npm ci
 
-      - name: Run KBO Collector
-        working-directory: collector
+      # cheerio, axios 설치 (collector 워크스페이스에)
+      - name: Install collector deps
+        run: |
+          cd collector
+          npm install axios cheerio
+          npm install -D @types/cheerio
+
+      - name: Run auto collector
         env:
           API_URL: ${{ secrets.API_URL }}
           INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
         run: |
-          if [ -n "${{ github.event.inputs.date }}" ]; then
-            echo "📌 수동 실행: ${{ github.event.inputs.date }}"
-            python kbo_collector.py ${{ github.event.inputs.date }}
-          else
-            HOUR=$(TZ=Asia/Seoul date +%H)
-            TODAY=$(TZ=Asia/Seoul date +%Y%m%d)
-            YESTERDAY=$(TZ=Asia/Seoul date -d "yesterday" +%Y%m%d)
-            TOMORROW=$(TZ=Asia/Seoul date -d "tomorrow" +%Y%m%d)
-
-            if [ "$HOUR" -lt 12 ]; then
-              echo "🌅 오전 실행 (KST $HOUR시)"
-              echo "  → 어제 ($YESTERDAY) 미정산 경기 수집"
-              python kbo_collector.py $YESTERDAY
-              echo "  → 오늘 ($TODAY) 일정 보완"
-              python kbo_collector.py $TODAY
-            else
-              echo "🌙 야간 실행 (KST $HOUR시)"
-              echo "  → 오늘 ($TODAY) 결과 수집 + 정산"
-              python kbo_collector.py $TODAY
-              echo "  → 내일 ($TOMORROW) 일정 미리 수집"
-              python kbo_collector.py $TOMORROW
-            fi
+          DATE="${{ github.event.inputs.date }}"
+          SETTLE="${{ github.event.inputs.settle }}"
+          
+          # 날짜가 비었으면 오늘(KST)
+          if [ -z "$DATE" ]; then
+            DATE=$(TZ=Asia/Seoul date +%Y-%m-%d)
           fi
+          
+          # 정산 플래그
+          SETTLE_FLAG=""
+          if [ "$SETTLE" = "true" ]; then
+            SETTLE_FLAG="--settle"
+          fi
+          
+          echo "📅 수집 날짜: $DATE"
+          echo "⚡ 정산: $SETTLE"
+          
+          npx ts-node collector/src/tools/autoCollect.ts --date "$DATE" $SETTLE_FLAG
