@@ -343,7 +343,7 @@ async function main(): Promise<void> {
     if (g && (g.batterRecords.away.length > 0 || g.batterRecords.home.length > 0)) {
       games.push(g);
     }
-    await new Promise<void>(r => setTimeout(r, 2000));
+    await new Promise<void>(resolve => { setTimeout(() => resolve(), 2000); });
   }
 
   console.log(`\n📊 ${games.length}/${gameIds.length} 경기 파싱 성공`);
