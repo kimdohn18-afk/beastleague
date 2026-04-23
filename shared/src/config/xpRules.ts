@@ -23,7 +23,7 @@ export const WIN_PREDICT_FAIL_XP = 0;    // 실패 시 손해 없음
 export const ALL_KILL_BONUS = 30;
 
 // === 배치 제한 ===
-export const MAX_PLACEMENTS_PER_DAY = 5;
+export const MAX_PLACEMENTS_PER_DAY = 1;
 
 // === 하위호환 (삭제 예정) ===
 export const DIFF_MULTIPLIER = {
