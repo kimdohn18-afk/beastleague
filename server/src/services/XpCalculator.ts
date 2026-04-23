@@ -31,19 +31,17 @@ function findBatterByOrder(
   const records = (game as any).batterRecords;
   if (!records) return null;
 
-  // 홈/원정 판별
   const side = team === game.homeTeam ? 'home' : 'away';
   const batters = records[side];
   if (!Array.isArray(batters)) return null;
 
-  // 타순 매칭 (order가 "1", "2" ... "9" 문자열로 저장됨)
+  // order는 "1", "2" ... "9" 문자열
   return batters.find((b: any) => String(b.order) === String(battingOrder)) || null;
 }
 
 /**
- * 타자 기록에서 상세 정보 파싱
- * - 크롤러가 수집하는 기본 필드: atBats, hits, rbi, runs
- * - 이벤트에서 추출: doubles, triples, homeRuns, stolenBases, walkOff 등
+ * 타자 기록 → IBatterResult 변환
+ * 우선순위: 크롤러가 채운 상세 필드 > 이벤트 텍스트 파싱(폴백)
  */
 function parseBatterResult(
   batter: any,
@@ -56,7 +54,31 @@ function parseBatterResult(
   const runs = parseInt(batter.runs) || 0;
   const playerName = batter.name || '';
 
-  // 이벤트에서 장타/도루 추출
+  // 크롤러 v5가 이미 채운 상세 필드 확인
+  const hasDetailFromCrawler =
+    (batter.homeRuns !== undefined && batter.homeRuns !== null) ||
+    (batter.doubles !== undefined && batter.doubles !== null) ||
+    (batter.stolenBases !== undefined && batter.stolenBases !== null);
+
+  if (hasDetailFromCrawler) {
+    // 크롤러가 이미 이벤트 매칭을 완료한 데이터 → 그대로 사용
+    return {
+      playerName,
+      atBats,
+      hits,
+      doubles: parseInt(batter.doubles) || 0,
+      triples: parseInt(batter.triples) || 0,
+      homeRuns: parseInt(batter.homeRuns) || 0,
+      rbi,
+      runs,
+      stolenBases: parseInt(batter.stolenBases) || 0,
+      stolenBaseFails: parseInt(batter.stolenBaseFails) || 0,
+      walks: parseInt(batter.walks) || 0,
+      walkOff: !!batter.walkOff,
+    };
+  }
+
+  // === 폴백: 구버전 크롤러 데이터 (상세 필드 없음) → 이벤트에서 추출 ===
   let homeRuns = 0;
   let doubles = 0;
   let triples = 0;
@@ -70,29 +92,16 @@ function parseBatterResult(
     const detail: string = evt.detail || '';
     const type: string = evt.type || '';
 
-    // 이벤트에서 선수명 포함 여부로 매칭
-    if (!detail.includes(playerName) && playerName.length > 0) continue;
+    if (playerName.length === 0 || !detail.includes(playerName)) continue;
 
-    const typeLower = type.toLowerCase();
-    if (typeLower.includes('홈런') || typeLower === '홈런') {
-      homeRuns++;
-    } else if (typeLower.includes('2루타') || typeLower === '2루타') {
-      doubles++;
-    } else if (typeLower.includes('3루타') || typeLower === '3루타') {
-      triples++;
-    } else if (typeLower.includes('도루') && !typeLower.includes('실패')) {
-      stolenBases++;
-    } else if (typeLower.includes('도루실패') || typeLower.includes('도루 실패')) {
-      stolenBaseFails++;
-    } else if (typeLower.includes('볼넷') || typeLower.includes('사구')) {
-      walks++;
-    } else if (typeLower.includes('끝내기')) {
-      walkOff = true;
-    }
+    if (type === '홈런') homeRuns++;
+    else if (type === '2루타') doubles++;
+    else if (type === '3루타') triples++;
+    else if (type === '도루' && !type.includes('실패')) stolenBases++;
+    else if (type.includes('도루실패') || type.includes('도루자')) stolenBaseFails++;
+    else if (type === '볼넷' || type === '사구') walks++;
+    else if (type.includes('끝내기')) walkOff = true;
   }
-
-  // 이벤트에서 장타를 못 찾은 경우, 안타 수만으로 처리
-  // (장타 구분 불가 시 전부 단타로 계산)
 
   return {
     playerName,
@@ -116,23 +125,21 @@ function parseBatterResult(
 function calculateBatterXp(batter: IBatterResult): number {
   let xp = 0;
 
-  // 장타 먼저 계산, 나머지가 단타
   const singles = Math.max(0, batter.hits - batter.doubles - batter.triples - batter.homeRuns);
 
-  xp += singles * BATTER_XP.HIT;          // 단타
-  xp += batter.doubles * BATTER_XP.DOUBLE; // 2루타
-  xp += batter.triples * BATTER_XP.TRIPLE; // 3루타
-  xp += batter.homeRuns * BATTER_XP.HR;    // 홈런
-  xp += batter.rbi * BATTER_XP.RBI;        // 타점
-  xp += batter.runs * BATTER_XP.RUN;       // 득점
-  xp += batter.stolenBases * BATTER_XP.SB; // 도루
-  xp += batter.stolenBaseFails * BATTER_XP.SB_FAIL; // 도루실패
+  xp += singles * BATTER_XP.HIT;
+  xp += batter.doubles * BATTER_XP.DOUBLE;
+  xp += batter.triples * BATTER_XP.TRIPLE;
+  xp += batter.homeRuns * BATTER_XP.HR;
+  xp += batter.rbi * BATTER_XP.RBI;
+  xp += batter.runs * BATTER_XP.RUN;
+  xp += batter.stolenBases * BATTER_XP.SB;
+  xp += batter.stolenBaseFails * BATTER_XP.SB_FAIL;
 
   if (batter.walkOff) {
-    xp += BATTER_XP.WALK_OFF;              // 끝내기 안타
+    xp += BATTER_XP.WALK_OFF;
   }
 
-  // 무안타 페널티 (3타석 이상 출전 & 0안타)
   if (batter.atBats >= 3 && batter.hits === 0) {
     xp += BATTER_XP.NO_HIT_PENALTY;
   }
@@ -141,7 +148,7 @@ function calculateBatterXp(batter: IBatterResult): number {
 }
 
 /**
- * 단일 예측 정산 (타자 기록 기반)
+ * 단일 예측 정산
  */
 export function calculatePredictionXp(
   game: IGame,
@@ -150,7 +157,7 @@ export function calculatePredictionXp(
   const winner = getWinner(game);
   const winCorrect = winner !== '' && prediction.predictedWinner === winner;
 
-  // === 타자 기록 기반 정산 (battingOrder가 있는 경우) ===
+  // === 타자 기록 기반 정산 ===
   if (prediction.battingOrder && prediction.team) {
     const batter = findBatterByOrder(game, prediction.team, prediction.battingOrder);
 
@@ -161,7 +168,6 @@ export function calculatePredictionXp(
       batterResult = parseBatterResult(batter, game, prediction.team);
       xpFromPlayer = calculateBatterXp(batterResult);
     } else {
-      // 해당 타순 선수를 찾지 못한 경우 (대타 등으로 변경)
       batterResult = {
         playerName: '(선수 없음)',
         atBats: 0, hits: 0, doubles: 0, triples: 0, homeRuns: 0,
@@ -169,13 +175,9 @@ export function calculatePredictionXp(
       };
     }
 
-    // 팀 승리 보너스
     const teamWon = winner === prediction.team;
     const xpFromTeamWin = teamWon ? TEAM_WIN_XP : 0;
-
-    // 승리 예측 보너스
     const xpFromWinPredict = winCorrect ? WIN_PREDICT_XP : WIN_PREDICT_FAIL_XP;
-
     const netXp = xpFromPlayer + xpFromTeamWin + xpFromWinPredict;
 
     return {
@@ -185,7 +187,6 @@ export function calculatePredictionXp(
       xpFromTeamWin,
       xpFromWinPredict,
       batterResult,
-      // 하위호환 필드
       xpFromWin: xpFromWinPredict,
       xpFromDiff: 0,
       xpFromTotal: 0,
@@ -194,7 +195,7 @@ export function calculatePredictionXp(
     };
   }
 
-  // === 하위호환: 스코어 기반 정산 (기존 예측 처리) ===
+  // === 하위호환: 스코어 기반 정산 ===
   const { DIFF_MULTIPLIER, TOTAL_RUNS_MULTIPLIER, TOTAL_RUNS_RANGE } = require('@beastleague/shared');
 
   const xpFromWin = winCorrect ? WIN_PREDICT_XP : WIN_PREDICT_FAIL_XP;
