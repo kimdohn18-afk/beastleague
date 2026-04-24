@@ -164,7 +164,6 @@ router.get('/me/achievements', authenticateUser, async (req: Request, res: Respo
       { skipTraitUpdate: true },
     );
 
-    // 전체 업적 목록을 가져와서 earned 여부를 포함한 형태로 가공
     const allAchievements = getAllAchievements();
     const earnedSet = new Set(result.earned);
 
@@ -173,7 +172,7 @@ router.get('/me/achievements', authenticateUser, async (req: Request, res: Respo
       earned: earnedSet.has(a.id),
     }));
 
-      res.json({
+    res.json({
       activeTrait: result.activeTrait,
       earnedCount: result.earnedCount,
       totalCount: allAchievements.length,
@@ -254,13 +253,11 @@ router.get('/me/unclaimed-xp', authenticateUser, async (req: Request, res: Respo
       return res.status(404).json({ error: '캐릭터가 없습니다' });
     }
 
-    // 어제 날짜 (KST)
     const now = new Date();
     const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
     kst.setDate(kst.getDate() - 1);
     const yesterday = kst.toISOString().split('T')[0];
 
-    // 어제 정산 완료된 배치를 찾음
     const placement = await Placement.findOne({
       userId,
       date: yesterday,
@@ -274,7 +271,6 @@ router.get('/me/unclaimed-xp', authenticateUser, async (req: Request, res: Respo
     const totalXp = (placement.xpFromPlayer || 0) + (placement.xpFromPrediction || 0);
     const breakdown = placement.xpBreakdown;
 
-    // XP 내역을 개별 "구슬"로 변환
     const orbs: Array<{ label: string; emoji: string; xp: number }> = [];
 
     if (breakdown) {
@@ -291,12 +287,10 @@ router.get('/me/unclaimed-xp', authenticateUser, async (req: Request, res: Respo
       if (breakdown.caughtStealing < 0)  orbs.push({ label: '도루실패', emoji: '⚠️', xp: breakdown.caughtStealing });
     }
 
-    // 예측 적중 보너스
     const predXp = placement.xpFromPrediction || 0;
     if (predXp > 0) orbs.push({ label: '예측 적중', emoji: '🔮', xp: predXp });
     if (predXp < 0) orbs.push({ label: '예측 실패', emoji: '❌', xp: predXp });
 
-    // breakdown이 없으면 총 XP를 하나의 구슬로
     if (orbs.length === 0 && totalXp !== 0) {
       orbs.push({ label: 'XP', emoji: '✨', xp: totalXp });
     }
@@ -363,14 +357,13 @@ router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) 
       return res.status(400).json({ error: '이미 최고 단계입니다' });
     }
 
-    // 다음 단계 조건
     const EVOLVE_REQUIREMENTS = [
-      null, // 0 (사용 안함)
-      null, // 1→2 는 index 1
-      { xpCost: 200,  requiredAchievements: 3 },   // 1→2
-      { xpCost: 500,  requiredAchievements: 8 },   // 2→3
-      { xpCost: 1500, requiredAchievements: 15 },  // 3→4
-      { xpCost: 5000, requiredAchievements: 25 },  // 4→5
+      null,
+      null,
+      { xpCost: 200,  requiredAchievements: 3 },
+      { xpCost: 500,  requiredAchievements: 8 },
+      { xpCost: 1500, requiredAchievements: 15 },
+      { xpCost: 5000, requiredAchievements: 25 },
     ];
 
     const nextStage = currentStage + 1;
@@ -379,11 +372,9 @@ router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) 
       return res.status(400).json({ error: '진화 조건을 찾을 수 없습니다' });
     }
 
-    // 업적 수 계산 (일반 업적 + 팀 업적)
     const earnedCount = (character.earnedAchievements || []).length 
       + (character.teamAchievements || []).length;
 
-    // 조건 체크
     if (character.xp < req_data.xpCost) {
       return res.status(400).json({ 
         error: `XP가 부족합니다 (${req_data.xpCost} XP 필요, 현재 ${character.xp} XP)`,
@@ -398,13 +389,9 @@ router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) 
       });
     }
 
-    // 진화 실행: XP 차감 + 단계 업그레이드
     character.xp -= req_data.xpCost;
     character.evolvedStage = nextStage;
-    
-    // displayStage도 새 단계로 자동 업데이트
     character.displayStage = null;
-    
     await character.save();
 
     const STAGE_NAMES = ['', '아기', '성장', '성숙', '전설', '신화'];
@@ -432,7 +419,6 @@ router.put('/me/display', authenticateUser, async (req: Request, res: Response) 
 
     const { displayStage, displaySize } = req.body;
 
-    // 진화 단계 검증: null이거나, 해금된 단계 이하만 허용
     if (displayStage !== null && displayStage !== undefined) {
       const maxStage = character.evolvedStage || 1;
       if (displayStage < 1 || displayStage > maxStage) {
@@ -443,7 +429,6 @@ router.put('/me/display', authenticateUser, async (req: Request, res: Response) 
       character.displayStage = null;
     }
 
-    // 크기 검증: null이거나, 현재 XP 기준 크기 이하만 허용
     if (displaySize !== null && displaySize !== undefined) {
       const maxSize = getCharacterSize(character.xp);
       if (displaySize < 60 || displaySize > maxSize) {
@@ -538,6 +523,52 @@ router.get('/:id/public', async (req: Request, res: Response) => {
 
     const today = todayKST();
 
+    /* ── 오늘의 배치 조회 ── */
+    const todayPlacement = await Placement.findOne({
+      userId: character.userId,
+      date: today,
+    }).lean();
+
+    let placementInfo = null;
+    if (todayPlacement) {
+      const placementGame = await Game.findOne({ gameId: todayPlacement.gameId })
+        .select('gameId homeTeam awayTeam status homeScore awayScore startTime batterRecords')
+        .lean();
+
+      let playerName = null;
+      if (placementGame && (placementGame as any).batterRecords) {
+        const isHome = todayPlacement.team === placementGame.homeTeam;
+        const records = isHome
+          ? (placementGame as any).batterRecords.home
+          : (placementGame as any).batterRecords.away;
+        if (Array.isArray(records)) {
+          const player = records.find((r: any) => r.order === todayPlacement.battingOrder);
+          if (player) playerName = player.name;
+        }
+      }
+
+      placementInfo = {
+        gameId: todayPlacement.gameId,
+        team: todayPlacement.team,
+        battingOrder: todayPlacement.battingOrder,
+        predictedWinner: todayPlacement.predictedWinner,
+        playerName,
+        status: todayPlacement.status,
+        xpFromPlayer: todayPlacement.xpFromPlayer ?? null,
+        xpFromPrediction: todayPlacement.xpFromPrediction ?? null,
+        xpBreakdown: todayPlacement.xpBreakdown ?? null,
+        game: placementGame ? {
+          homeTeam: placementGame.homeTeam,
+          awayTeam: placementGame.awayTeam,
+          status: placementGame.status,
+          homeScore: placementGame.homeScore,
+          awayScore: placementGame.awayScore,
+          startTime: placementGame.startTime,
+        } : null,
+      };
+    }
+
+    /* ── 오늘의 예측 조회 (레거시) ── */
     const { Prediction } = await import('../models/Prediction');
     const predictions = await Prediction.find({
       userId: character.userId,
@@ -592,6 +623,7 @@ router.get('/:id/public', async (req: Request, res: Response) => {
         totalFeeds: character.totalFeeds || 0,
         createdAt: character.createdAt,
       },
+      todayPlacement: placementInfo,
       todayPredictions,
     });
   } catch (err) {
