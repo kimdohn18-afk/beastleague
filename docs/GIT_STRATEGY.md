@@ -28,6 +28,14 @@ dev  ──── feature/xxx ──── (PR) ──── dev ──── (P
 5. `main` merge 시 자동 배포 (추후 Railway/Vercel 설정)
 
 ---
+## 배포 체크리스트
+
+1. **환경 변수**: Vercel/Railway 대시보드에 `INTERNAL_API_KEY`, `JWT_SECRET` 등이 설정되어 있는가?
+2. **DB 연결**: 운영용 MongoDB Atlas URI가 정상적으로 입력되었는가?
+3. **빌드 로그**: 배포 중 에러(Error) 없이 완료되었는가?
+4. **버전 태깅**: 주요 기능 반영 후 `git tag`를 생성했는가?
+
+---
 
 ## 핫픽스 워크플로우
 

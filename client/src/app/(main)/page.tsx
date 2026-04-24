@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import LogoutButton from '@/components/LogoutButton';
 
 interface Character {
   _id: string;
@@ -101,6 +102,11 @@ export default function MainPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative">
+      {/* 로그아웃 버튼 배치 */}
+      <div className="absolute top-6 right-6">
+        <LogoutButton />
+      </div>
+
       {/* 캐릭터 이름 */}
       <h1 className="text-3xl font-bold text-gray-900 mb-2">{character.name}</h1>
       <p className="text-gray-600 mb-8">Lv. {character.level}</p>

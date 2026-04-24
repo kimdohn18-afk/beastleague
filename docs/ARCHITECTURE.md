@@ -319,6 +319,7 @@ graph TD
 | Method | Endpoint | 설명 | 인증 |
 |--------|----------|------|------|
 | GET | `/api/auth/[...nextauth]` | NextAuth OAuth 핸들러 | — |
+| POST | `/api/auth/signout` | 로그아웃 및 세션 제거 (계정 전환을 위해 클라이언트 쿠키 삭제 필수) | 🔐 |
 
 ---
 
@@ -581,6 +582,7 @@ graph TD
 | `/internal/*` 외부 노출 | Vercel에서 서버 직접 접근 불가. Railway/Render 환경변수로 `INTERNAL_API_KEY` 관리 |
 | JWT 탈취 | NextAuth 세션 + httpOnly 쿠키. 클라이언트 localStorage 토큰 저장 금지 |
 | 훈련/배치 조작 | 서버 사이드 시각 검증 (`lockedAt`, 슬롯 중복 체크). 클라이언트 값 신뢰 금지 |
+| 계정 전환 (Account Switching) | OAuth Provider 설정에 `prompt: "select_account"` (Google) 또는 `prompt: "login"` (Kakao)를 추가하여 자동 로그인 대신 계정 선택창 강제 호출 |
 
 ---
 

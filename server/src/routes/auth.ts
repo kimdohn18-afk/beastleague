@@ -48,4 +48,10 @@ router.post('/register', async (req: Request, res: Response) => {
   }
 });
 
+// 로그아웃 엔드포인트 추가
+router.post('/logout', (_req: Request, res: Response) => {
+  // 세션 기반일 경우 세션 파괴, JWT일 경우 클라이언트 측에서 토큰 폐기 안내
+  return res.status(200).json({ message: 'Successfully logged out' });
+});
+
 export const authRouter = router;

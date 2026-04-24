@@ -9,6 +9,9 @@ const handler = NextAuth({
     KakaoProvider({
       clientId: process.env.KAKAO_CLIENT_ID || '',
       clientSecret: process.env.KAKAO_CLIENT_SECRET || '',
+      authorization: {
+        params: { prompt: 'login' },
+      },
       profile(profile: any) {
         const nickname =
           profile?.kakao_account?.profile?.nickname ||
@@ -27,6 +30,9 @@ const handler = NextAuth({
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      authorization: {
+        params: { prompt: 'select_account' },
+      },
     }),
     CredentialsProvider({
       id: 'dev-login',
