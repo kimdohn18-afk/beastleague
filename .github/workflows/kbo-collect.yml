@@ -30,9 +30,9 @@ jobs:
         run: |
           DATE="${{ github.event.inputs.date }}"
           if [ -n "$DATE" ]; then
-            python collector/collect_kbo.py "$DATE"
+            python collector/kbo_collector.py "$DATE"
           else
-            python collector/collect_kbo.py
+            python collector/kbo_collector.py
           fi
 
       - name: Upload CSV
