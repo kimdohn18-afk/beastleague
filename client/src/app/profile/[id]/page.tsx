@@ -48,35 +48,12 @@ interface PlacementInfo {
   } | null;
 }
 
-interface PredictionItem {
-  gameId: string;
-  predictedWinner: string;
-  scoreDiffRange: string | null;
-  totalRunsRange: string | null;
-  xpBetOnDiff: number;
-  xpBetOnTotal: number;
-  totalBet: number;
-  status: string;
-  result: {
-    winCorrect: boolean;
-    diffCorrect?: boolean;
-    totalCorrect?: boolean;
-    netXp: number;
-    xpFromWin: number;
-    xpFromDiff: number;
-    xpFromTotal: number;
-    xpLostDiff: number;
-    xpLostTotal: number;
-  } | null;
-  game: {
-    gameId: string;
-    homeTeam: string;
-    awayTeam: string;
-    status: string;
-    homeScore?: number;
-    awayScore?: number;
-    startTime: string;
-  } | null;
+interface GuestBookEntry {
+  id: string;
+  fromCharacterName: string;
+  fromAnimalType: string;
+  message: string;
+  createdAt: string;
 }
 
 interface PublicProfile {
@@ -93,7 +70,7 @@ interface PublicProfile {
     createdAt: string;
   };
   todayPlacement: PlacementInfo | null;
-  todayPredictions: PredictionItem[] | null;
+  guestBook: GuestBookEntry[];
 }
 
 export default function PublicProfilePage() {
@@ -118,8 +95,15 @@ export default function PublicProfilePage() {
   const [remainingFeeds, setRemainingFeeds] = useState(3);
 
   const [showPlacement, setShowPlacement] = useState(true);
-  const [showPredictions, setShowPredictions] = useState(false);
   const [toast, setToast] = useState('');
+
+  // 방명록
+  const [guestBookEntries, setGuestBookEntries] = useState<GuestBookEntry[]>([]);
+  const [guestBookMsg, setGuestBookMsg] = useState('');
+  const [guestBookWritten, setGuestBookWritten] = useState(false);
+  const [guestBookLoading, setGuestBookLoading] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+  const [myCharacterId, setMyCharacterId] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -135,6 +119,7 @@ export default function PublicProfilePage() {
         setProfile(data);
         setTotalLikes(data.character.totalLikes);
         setTotalFeeds(data.character.totalFeeds);
+        setGuestBookEntries(data.guestBook || []);
       } catch (e) {
         console.error('Profile fetch error:', e);
         setError(true);
@@ -144,6 +129,19 @@ export default function PublicProfilePage() {
     };
     fetchProfile();
   }, [characterId]);
+
+  // 내 캐릭터 확인 (프로필 주인 여부 + 방명록 작성 여부)
+  useEffect(() => {
+    if (!token) return;
+    fetch(`${API_URL}/api/characters/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => r.ok ? r.json() : null).then(d => {
+      if (d) {
+        setMyCharacterId(String(d._id));
+        if (String(d._id) === characterId) setIsOwner(true);
+      }
+    }).catch(() => {});
+  }, [token, characterId]);
 
   useEffect(() => {
     if (!token || !characterId) return;
@@ -198,6 +196,46 @@ export default function PublicProfilePage() {
     finally { setFeedLoading(false); }
   };
 
+  const handleGuestBookSubmit = async () => {
+    if (!token || !guestBookMsg.trim() || guestBookLoading || guestBookWritten) return;
+    setGuestBookLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/characters/${characterId}/guestbook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ message: guestBookMsg.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setGuestBookEntries(prev => [data, ...prev]);
+        setGuestBookMsg('');
+        setGuestBookWritten(true);
+        showToast('📝 방명록을 남겼어요!');
+      } else {
+        if (data.code === 'alreadyWritten') setGuestBookWritten(true);
+        showToast(data.error || '방명록 작성 실패');
+      }
+    } catch { showToast('네트워크 오류'); }
+    finally { setGuestBookLoading(false); }
+  };
+
+  const handleGuestBookDelete = async (entryId: string) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/characters/${characterId}/guestbook/${entryId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setGuestBookEntries(prev => prev.filter(e => e.id !== entryId));
+        showToast('🗑️ 방명록을 삭제했어요');
+      } else {
+        const data = await res.json();
+        showToast(data.error || '삭제 실패');
+      }
+    } catch { showToast('네트워크 오류'); }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50">
@@ -215,30 +253,11 @@ export default function PublicProfilePage() {
     );
   }
 
-  const { character, todayPlacement, todayPredictions } = profile;
+  const { character, todayPlacement } = profile;
   const emoji = ANIMAL_EMOJI[character.animalType] || '🐾';
   const animalName = ANIMAL_NAMES[character.animalType] || character.animalType;
   const size = getCharacterSize(character.xp);
 
-  const totalBetXp = todayPredictions?.reduce((sum, p) => sum + (p.totalBet || 0), 0) || 0;
-  const settledPredictions = todayPredictions?.filter(p => p.status === 'settled') || [];
-  const totalNetXp = settledPredictions.reduce((sum, p) => sum + (p.result?.netXp || 0), 0);
-
-  const diffRangeLabel = (r: string) => {
-    if (r === '1-2') return '1~2점차';
-    if (r === '3-4') return '3~4점차';
-    if (r === '5+') return '5점차 이상';
-    return r;
-  };
-
-  const totalRangeLabel = (r: string) => {
-    if (r === 'low') return '로스코어 (0~5)';
-    if (r === 'normal') return '보통 (6~10)';
-    if (r === 'high') return '하이스코어 (11+)';
-    return r;
-  };
-
-  // 배치 XP 합산
   const placementTotalXp = todayPlacement
     ? (todayPlacement.xpFromPlayer || 0) + (todayPlacement.xpFromPrediction || 0)
     : 0;
@@ -338,7 +357,6 @@ export default function PublicProfilePage() {
           <div className="mt-2">
             {todayPlacement ? (
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-orange-100">
-                {/* 경기 정보 */}
                 {todayPlacement.game && (
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2 text-sm font-bold">
@@ -360,7 +378,6 @@ export default function PublicProfilePage() {
                   </div>
                 )}
 
-                {/* 스코어 */}
                 {todayPlacement.game && todayPlacement.game.status === 'finished' &&
                   todayPlacement.game.homeScore != null && todayPlacement.game.awayScore != null && (
                   <div className="text-center mb-3">
@@ -370,7 +387,6 @@ export default function PublicProfilePage() {
                   </div>
                 )}
 
-                {/* 배치 상세 */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
                     <span className="text-xs text-gray-400">배치 팀</span>
@@ -395,7 +411,6 @@ export default function PublicProfilePage() {
                   </div>
                 </div>
 
-                {/* 정산 결과 */}
                 {todayPlacement.status === 'settled' && (
                   <div className={`mt-3 rounded-lg px-3 py-2 text-center ${
                     placementTotalXp >= 0 ? 'bg-green-50' : 'bg-red-50'
@@ -422,132 +437,65 @@ export default function PublicProfilePage() {
         )}
       </div>
 
-      {/* ── 오늘의 예측 ── */}
-      <div className="px-6">
-        <button onClick={() => setShowPredictions(!showPredictions)}
-          className="w-full bg-white rounded-2xl p-4 shadow-sm border border-orange-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-gray-700">⚾ 오늘의 예측</span>
-            {todayPredictions && todayPredictions.length > 0 && (
-              <span className="text-xs bg-orange-100 text-orange-500 px-2 py-0.5 rounded-full font-medium">
-                {todayPredictions.length}경기
-              </span>
-            )}
-          </div>
-          <span className="text-gray-400 text-lg">{showPredictions ? '▲' : '▼'}</span>
-        </button>
+      {/* ── 방명록 ── */}
+      <div className="px-6 mt-4">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-orange-100">
+          <h3 className="text-sm font-bold text-gray-700 mb-3">📝 방명록</h3>
 
-        {showPredictions && (
-          <div className="mt-2 space-y-2">
-            {todayPredictions && todayPredictions.length > 0 ? (
-              <>
-                {todayPredictions.map((p, i) => (
-                  <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-orange-100">
-                    {p.game && (
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2 text-sm font-bold">
-                          <span>{getDisplayName(p.game.homeTeam as any)}</span>
-                          <span className="text-gray-300">vs</span>
-                          <span>{getDisplayName(p.game.awayTeam as any)}</span>
-                        </div>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          p.status === 'settled'
-                            ? (p.result && p.result.netXp >= 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600')
-                            : 'bg-blue-100 text-blue-600'
-                        }`}>
-                          {p.status === 'settled' ? (p.result && p.result.netXp >= 0 ? '✅ 수익' : '❌ 손실') : '⏳ 대기'}
-                        </span>
-                      </div>
-                    )}
+          {/* 작성 폼 */}
+          {token && !isOwner && !guestBookWritten && (
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={guestBookMsg}
+                onChange={e => setGuestBookMsg(e.target.value)}
+                placeholder="메시지를 남겨보세요 (100자)"
+                maxLength={100}
+                className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-orange-300"
+              />
+              <button
+                onClick={handleGuestBookSubmit}
+                disabled={!guestBookMsg.trim() || guestBookLoading}
+                className="px-4 py-2 bg-orange-400 text-white text-sm font-bold rounded-xl hover:bg-orange-500 active:scale-95 disabled:bg-gray-200 disabled:text-gray-400 transition-all"
+              >
+                등록
+              </button>
+            </div>
+          )}
 
-                    {p.game && p.game.status === 'finished' && p.game.homeScore != null && p.game.awayScore != null && (
-                      <div className="text-center mb-2">
-                        <span className="text-lg font-bold text-gray-700">
-                          {p.game.homeScore} : {p.game.awayScore}
-                        </span>
-                      </div>
-                    )}
+          {token && !isOwner && guestBookWritten && (
+            <p className="text-xs text-gray-400 mb-4">✅ 오늘 방명록을 남겼어요</p>
+          )}
 
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                        <span className="text-xs text-gray-400">승리 예측</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-bold">{getDisplayName(p.predictedWinner as any)}</span>
-                          {p.status === 'settled' && p.result && (
-                            <span className="text-xs">{p.result.winCorrect ? '✅' : '❌'}</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {p.scoreDiffRange && (
-                        <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                          <span className="text-xs text-gray-400">점수차 ({p.xpBetOnDiff} XP)</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-bold">{diffRangeLabel(p.scoreDiffRange)}</span>
-                            {p.status === 'settled' && p.result && p.result.diffCorrect !== undefined && (
-                              <span className="text-xs">{p.result.diffCorrect ? '✅' : '❌'}</span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {p.totalRunsRange && (
-                        <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                          <span className="text-xs text-gray-400">총득점 ({p.xpBetOnTotal} XP)</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-bold">{totalRangeLabel(p.totalRunsRange)}</span>
-                            {p.status === 'settled' && p.result && p.result.totalCorrect !== undefined && (
-                              <span className="text-xs">{p.result.totalCorrect ? '✅' : '❌'}</span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {p.status === 'settled' && p.result && (
-                      <div className={`mt-2 rounded-lg px-3 py-2 text-center ${
-                        p.result.netXp >= 0 ? 'bg-green-50' : 'bg-red-50'
-                      }`}>
-                        <span className={`text-sm font-bold ${
-                          p.result.netXp >= 0 ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {p.result.netXp >= 0 ? '+' : ''}{p.result.netXp} XP
-                        </span>
-                      </div>
-                    )}
-
-                    {p.status === 'active' && p.totalBet > 0 && (
-                      <div className="mt-2 text-center">
-                        <span className="text-xs text-gray-400">총 베팅: {p.totalBet} XP</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                <div className="bg-orange-50 rounded-2xl p-3 text-center border border-orange-200">
-                  {settledPredictions.length > 0 ? (
-                    <p className="text-sm font-bold">
-                      오늘 수익: <span className={totalNetXp >= 0 ? 'text-green-500' : 'text-red-500'}>
-                        {totalNetXp >= 0 ? '+' : ''}{totalNetXp} XP
+          {/* 방명록 목록 */}
+          {guestBookEntries.length > 0 ? (
+            <div className="space-y-2">
+              {guestBookEntries.map(entry => (
+                <div key={entry.id} className="bg-gray-50 rounded-xl px-3 py-2.5 flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="text-sm">{ANIMAL_EMOJI[entry.fromAnimalType] || '🐾'}</span>
+                      <span className="text-xs font-bold text-gray-700">{entry.fromCharacterName}</span>
+                      <span className="text-xs text-gray-300">
+                        {new Date(entry.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
                       </span>
-                    </p>
-                  ) : (
-                    <p className="text-sm text-gray-500">총 베팅: {totalBetXp} XP · 결과 대기중</p>
+                    </div>
+                    <p className="text-sm text-gray-600">{entry.message}</p>
+                  </div>
+                  {isOwner && (
+                    <button
+                      onClick={() => handleGuestBookDelete(entry.id)}
+                      className="text-xs text-red-300 hover:text-red-500 ml-2 mt-1"
+                    >
+                      삭제
+                    </button>
                   )}
                 </div>
-              </>
-            ) : (
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100 text-center">
-                <p className="text-gray-400 text-sm">오늘 아직 예측하지 않았어요</p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="px-6 mt-4 space-y-3">
-        <div className="bg-white/50 rounded-2xl p-4 border border-dashed border-orange-200 text-center">
-          <p className="text-sm text-gray-400">📝 방명록 (곧 추가 예정)</p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-300 text-sm py-4">아직 방명록이 없어요</p>
+          )}
         </div>
       </div>
 
