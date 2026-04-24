@@ -202,3 +202,23 @@ internalRouter.get('/games', async (req: Request, res: Response) => {
   }
 });
 
+// POST /internal/games/:gameId/resettle
+internalRouter.post('/games/:gameId/resettle', async (req: Request, res: Response) => {
+  try {
+    const { Placement } = await import('../models/Placement');
+    const game = await Game.findOne({ gameId: req.params.gameId });
+    if (!game) return res.status(404).json({ error: 'game not found' });
+
+    await Placement.updateMany(
+      { gameId: req.params.gameId, status: 'settled' },
+      { $set: { status: 'active' } }
+    );
+
+    const io = req.app.locals.io as SocketIOServer;
+    const result = await settleGame(req.params.gameId, io);
+    return res.json({ resettle: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
