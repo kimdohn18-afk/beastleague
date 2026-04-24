@@ -106,9 +106,9 @@ def parse_events(box_data):
 def extract_names_from_event(detail_text):
     """
     이벤트 상세 텍스트에서 선수명 목록 추출
-    예: "김도영(15호 2점 이정후)" → ["김도영"]
-    예: "김도영, 이정후" → ["김도영", "이정후"]
-    예: "김도영(2회) 이정후(5회)" → ["김도영", "이정후"]
+    예: "김도영(15호 2점 이정후)"-> ["김도영"]
+    예: "김도영, 이정후"-> ["김도영", "이정후"]
+    예: "김도영(2회) 이정후(5회)"-> ["김도영", "이정후"]
     """
     # 괄호 내용 제거
     cleaned = re.sub(r'\([^)]*\)', '', detail_text)
@@ -124,7 +124,7 @@ def enrich_batters_with_events(teams_data, events):
     이벤트 정보를 활용해 각 타자에게 상세 기록 추가
     - 홈런, 2루타, 3루타, 도루, 도루실패, 볼넷 등
     """
-    # 모든 타자의 이름 → 참조 매핑
+    # 모든 타자의 이름-> 참조 매핑
     all_players = {}
     for team in teams_data:
         for player in team["players"]:
@@ -151,7 +151,7 @@ def enrich_batters_with_events(teams_data, events):
             p = all_players[name]
 
             if event_type in ("홈런", "HR"):
-                # "김도영(15호 2점 이정후)" → 홈런 횟수는 이름 등장 횟수
+                # "김도영(15호 2점 이정후)"-> 홈런 횟수는 이름 등장 횟수
                 hr_count = len(re.findall(re.escape(name), event_detail))
                 p["homeRuns"] += max(hr_count, 1)
 
@@ -173,7 +173,7 @@ def enrich_batters_with_events(teams_data, events):
             elif event_type in ("끝내기", "끝내기안타", "끝내기홈런"):
                 p["walkOff"] = True
 
-    # 안타에서 장타 분리 → 단타 계산은 서버에서 처리
+    # 안타에서 장타 분리-> 단타 계산은 서버에서 처리
     # (hits - doubles - triples - homeRuns = singles)
     return teams_data
 
@@ -341,7 +341,7 @@ def collect_date(date_str):
                 "homeScore": 0,
                 "awayScore": 0,
             })
-            print(f"  📋 경기 예정 ({start_time}) → scheduled로 저장")
+            print(f"  📋 경기 예정 ({start_time})-> scheduled로 저장")
             continue
 
         # 우천취소 / 경기취소
@@ -355,7 +355,7 @@ def collect_date(date_str):
                 "homeScore": 0,
                 "awayScore": 0,
             })
-            print(f"  🌧️ 경기 취소 → cancelled로 저장")
+            print(f"  🌧️ 경기 취소-> cancelled로 저장")
             continue
 
         # 알 수 없는 상태
@@ -363,7 +363,7 @@ def collect_date(date_str):
             print(f"  ⏭️ 알 수 없는 상태 (상태: {status}), 건너뜀")
             continue
 
-        # 진행 중 또는 종료 → 박스스코어 수집
+        # 진행 중 또는 종료-> 박스스코어 수집
         box = get_boxscore(game_id, season_id, sr_id)
         if not box:
             continue
