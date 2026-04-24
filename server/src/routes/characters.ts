@@ -6,6 +6,7 @@ import { Placement } from '../models/Placement';
 import { Game } from '../models/Game';
 import { Like } from '../models/Like';
 import { Feed } from '../models/Feed';
+import { GuestBook } from '../models/GuestBook';
 import {
   calculateAchievements,
   getAllAchievements,
@@ -106,6 +107,9 @@ router.delete('/me', authenticateUser, async (req: Request, res: Response) => {
       $or: [{ fromUserId: userId }, { toCharacterId: character._id }],
     });
     await Feed.deleteMany({
+      $or: [{ fromUserId: userId }, { toCharacterId: character._id }],
+    });
+    await GuestBook.deleteMany({
       $or: [{ fromUserId: userId }, { toCharacterId: character._id }],
     });
     await Character.findByIdAndDelete(character._id);
@@ -343,7 +347,7 @@ router.get('/me/evolution', authenticateUser, async (req: Request, res: Response
   }
 });
 
-/* ───── POST /me/evolve — 진화 (XP 소모 + 업적 조건) ───── */
+/* ───── POST /me/evolve — 진화 ───── */
 router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -449,7 +453,7 @@ router.put('/me/display', authenticateUser, async (req: Request, res: Response) 
   }
 });
 
-/* ───── PUT /me/animal — 캐릭터 동물 변경 (XP 소모) ───── */
+/* ───── PUT /me/animal — 캐릭터 동물 변경 ───── */
 router.put('/me/animal', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -505,7 +509,7 @@ router.put('/me/animal', authenticateUser, async (req: Request, res: Response) =
 });
 
 
-/* ───── GET /:id/public — 공개 프로필 (인증 불필요) ───── */
+/* ───── GET /:id/public — 공개 프로필 ───── */
 router.get('/:id/public', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -523,7 +527,7 @@ router.get('/:id/public', async (req: Request, res: Response) => {
 
     const today = todayKST();
 
-    /* ── 오늘의 배치 조회 ── */
+    /* ── 오늘의 배치 ── */
     const todayPlacement = await Placement.findOne({
       userId: character.userId,
       date: today,
@@ -568,47 +572,11 @@ router.get('/:id/public', async (req: Request, res: Response) => {
       };
     }
 
-    /* ── 오늘의 예측 조회 (레거시) ── */
-    const { Prediction } = await import('../models/Prediction');
-    const predictions = await Prediction.find({
-      userId: character.userId,
+    /* ── 오늘의 방명록 ── */
+    const guestBookEntries = await GuestBook.find({
+      toCharacterId: id,
       date: today,
-    }).lean();
-
-    let todayPredictions = null;
-
-    if (predictions.length > 0) {
-      const gameIds = predictions.map((p: any) => p.gameId);
-      const games = await Game.find({ gameId: { $in: gameIds } })
-        .select('gameId homeTeam awayTeam status homeScore awayScore startTime')
-        .lean();
-      const gameMap = new Map(games.map((g: any) => [g.gameId, g]));
-
-      todayPredictions = predictions.map((p: any) => {
-        const game = gameMap.get(p.gameId);
-        const totalBet = (p.xpBetOnDiff || 0) + (p.xpBetOnTotal || 0);
-        return {
-          gameId: p.gameId,
-          predictedWinner: p.predictedWinner,
-          scoreDiffRange: p.scoreDiffRange || null,
-          totalRunsRange: p.totalRunsRange || null,
-          xpBetOnDiff: p.xpBetOnDiff || 0,
-          xpBetOnTotal: p.xpBetOnTotal || 0,
-          totalBet,
-          status: p.status,
-          result: p.result || null,
-          game: game ? {
-            gameId: game.gameId,
-            homeTeam: game.homeTeam,
-            awayTeam: game.awayTeam,
-            status: game.status,
-            homeScore: game.homeScore,
-            awayScore: game.awayScore,
-            startTime: game.startTime,
-          } : null,
-        };
-      });
-    }
+    }).sort({ createdAt: -1 }).lean();
 
     res.json({
       character: {
@@ -624,11 +592,112 @@ router.get('/:id/public', async (req: Request, res: Response) => {
         createdAt: character.createdAt,
       },
       todayPlacement: placementInfo,
-      todayPredictions,
+      guestBook: guestBookEntries.map(g => ({
+        id: String(g._id),
+        fromCharacterName: g.fromCharacterName,
+        fromAnimalType: g.fromAnimalType,
+        message: g.message,
+        createdAt: g.createdAt,
+      })),
     });
   } catch (err) {
     console.error('Public profile error:', err);
     res.status(500).json({ error: '프로필 조회 실패' });
+  }
+});
+
+/* ───── POST /:id/guestbook — 방명록 작성 ───── */
+router.post('/:id/guestbook', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const targetId = req.params.id;
+    const { message } = req.body;
+    const today = todayKST();
+
+    if (!mongoose.Types.ObjectId.isValid(targetId)) {
+      return res.status(400).json({ error: '잘못된 ID입니다' });
+    }
+
+    if (!message || message.trim().length === 0) {
+      return res.status(400).json({ error: '메시지를 입력해주세요' });
+    }
+
+    if (message.length > 100) {
+      return res.status(400).json({ error: '메시지는 100자 이내로 입력해주세요' });
+    }
+
+    const targetChar = await Character.findById(targetId);
+    if (!targetChar) {
+      return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
+    }
+
+    const myChar = await Character.findOne({ userId });
+    if (!myChar) {
+      return res.status(400).json({ error: '캐릭터가 없습니다' });
+    }
+
+    const existing = await GuestBook.findOne({
+      toCharacterId: targetId,
+      fromUserId: userId,
+      date: today,
+    });
+    if (existing) {
+      return res.status(400).json({ error: '오늘 이미 방명록을 남겼어요', code: 'alreadyWritten' });
+    }
+
+    const entry = await GuestBook.create({
+      toCharacterId: targetId,
+      fromUserId: userId,
+      fromCharacterName: myChar.name,
+      fromAnimalType: myChar.animalType,
+      message: message.trim(),
+      date: today,
+    });
+
+    res.status(201).json({
+      id: String(entry._id),
+      fromCharacterName: entry.fromCharacterName,
+      fromAnimalType: entry.fromAnimalType,
+      message: entry.message,
+      createdAt: entry.createdAt,
+    });
+  } catch (err: any) {
+    if (err.code === 11000) {
+      return res.status(400).json({ error: '오늘 이미 방명록을 남겼어요', code: 'alreadyWritten' });
+    }
+    console.error('GuestBook write error:', err);
+    res.status(500).json({ error: '방명록 작성 실패' });
+  }
+});
+
+/* ───── DELETE /:id/guestbook/:entryId — 방명록 삭제 (프로필 주인만) ───── */
+router.delete('/:id/guestbook/:entryId', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { id: targetId, entryId } = req.params;
+
+    const character = await Character.findById(targetId);
+    if (!character) {
+      return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
+    }
+
+    if (String(character.userId) !== userId) {
+      return res.status(403).json({ error: '프로필 주인만 삭제할 수 있습니다' });
+    }
+
+    const entry = await GuestBook.findOneAndDelete({
+      _id: entryId,
+      toCharacterId: targetId,
+    });
+
+    if (!entry) {
+      return res.status(404).json({ error: '방명록을 찾을 수 없습니다' });
+    }
+
+    res.json({ deleted: true });
+  } catch (err) {
+    console.error('GuestBook delete error:', err);
+    res.status(500).json({ error: '방명록 삭제 실패' });
   }
 });
 
