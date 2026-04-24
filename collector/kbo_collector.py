@@ -106,8 +106,6 @@ def extract_names_from_event(detail_text):
     names = [p.strip() for p in parts if re.match(r'^[가-힣]{2,4}$', p.strip())]
     return names
 
-
-def enrich_batters_with_events(teams_data, events):
     def enrich_batters_with_events(teams_data, events):
     print(f"  events raw: {json.dumps(events, ensure_ascii=False)}")
     all_players = {}
