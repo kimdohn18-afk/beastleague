@@ -1,25 +1,14 @@
 name: KBO 데이터 수집
 
 on:
-  # 매일 밤 10시 30분(한국시간) = UTC 13:30 에 자동 실행
-  schedule:
-    - cron: '30 13 * * *'
-  
-  # 수동 실행 (GitHub에서 버튼 클릭)
   workflow_dispatch:
     inputs:
       date:
-        description: '수집 날짜 (YYYY-MM-DD, 비우면 오늘)'
+        description: '수집 날짜 (YYYYMMDD, 비우면 어제)'
         required: false
         default: ''
-      settle:
-        description: '정산도 실행?'
-        required: false
-        default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
+  schedule:
+    - cron: '30 13 * * *'
 
 jobs:
   collect:
@@ -27,40 +16,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: 20
-          cache: 'npm'
+          python-version: '3.11'
 
-      - run: npm ci
+      - name: Install deps
+        run: pip install requests
 
-      # cheerio, axios 설치 (collector 워크스페이스에)
-      - name: Install collector deps
-        run: |
-          cd collector
-          npm install axios cheerio
-          npm install -D @types/cheerio
-
-      - name: Run auto collector
+      - name: Run KBO collector
         env:
           API_URL: ${{ secrets.API_URL }}
           INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
         run: |
           DATE="${{ github.event.inputs.date }}"
-          SETTLE="${{ github.event.inputs.settle }}"
-          
-          # 날짜가 비었으면 오늘(KST)
-          if [ -z "$DATE" ]; then
-            DATE=$(TZ=Asia/Seoul date +%Y-%m-%d)
+          if [ -n "$DATE" ]; then
+            python collector/collect_kbo.py "$DATE"
+          else
+            python collector/collect_kbo.py
           fi
-          
-          # 정산 플래그
-          SETTLE_FLAG=""
-          if [ "$SETTLE" = "true" ]; then
-            SETTLE_FLAG="--settle"
-          fi
-          
-          echo "📅 수집 날짜: $DATE"
-          echo "⚡ 정산: $SETTLE"
-          
-          npx ts-node collector/src/tools/autoCollect.ts --date "$DATE" $SETTLE_FLAG
+
+      - name: Upload CSV
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kbo-data-${{ github.run_id }}
+          path: output/*.csv
+          retention-days: 30
