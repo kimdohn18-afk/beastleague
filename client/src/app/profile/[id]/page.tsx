@@ -28,6 +28,26 @@ function getCharacterSize(xp: number): number {
   return Math.round(Math.min(size, 300));
 }
 
+interface PlacementInfo {
+  gameId: string;
+  team: string;
+  battingOrder: number;
+  predictedWinner: string;
+  playerName: string | null;
+  status: string;
+  xpFromPlayer: number | null;
+  xpFromPrediction: number | null;
+  xpBreakdown: Record<string, number> | null;
+  game: {
+    homeTeam: string;
+    awayTeam: string;
+    status: string;
+    homeScore?: number;
+    awayScore?: number;
+    startTime: string;
+  } | null;
+}
+
 interface PredictionItem {
   gameId: string;
   predictedWinner: string;
@@ -72,6 +92,7 @@ interface PublicProfile {
     totalFeeds: number;
     createdAt: string;
   };
+  todayPlacement: PlacementInfo | null;
   todayPredictions: PredictionItem[] | null;
 }
 
@@ -96,6 +117,7 @@ export default function PublicProfilePage() {
   const [totalFeeds, setTotalFeeds] = useState(0);
   const [remainingFeeds, setRemainingFeeds] = useState(3);
 
+  const [showPlacement, setShowPlacement] = useState(true);
   const [showPredictions, setShowPredictions] = useState(false);
   const [toast, setToast] = useState('');
 
@@ -193,7 +215,7 @@ export default function PublicProfilePage() {
     );
   }
 
-  const { character, todayPredictions } = profile;
+  const { character, todayPlacement, todayPredictions } = profile;
   const emoji = ANIMAL_EMOJI[character.animalType] || '🐾';
   const animalName = ANIMAL_NAMES[character.animalType] || character.animalType;
   const size = getCharacterSize(character.xp);
@@ -215,6 +237,11 @@ export default function PublicProfilePage() {
     if (r === 'high') return '하이스코어 (11+)';
     return r;
   };
+
+  // 배치 XP 합산
+  const placementTotalXp = todayPlacement
+    ? (todayPlacement.xpFromPlayer || 0) + (todayPlacement.xpFromPrediction || 0)
+    : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-50 pb-20">
@@ -292,7 +319,110 @@ export default function PublicProfilePage() {
         </div>
       )}
 
-      {/* 오늘의 예측 */}
+      {/* ── 오늘의 배치 ── */}
+      <div className="px-6 mb-3">
+        <button onClick={() => setShowPlacement(!showPlacement)}
+          className="w-full bg-white rounded-2xl p-4 shadow-sm border border-orange-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-gray-700">🏟️ 오늘의 배치</span>
+            {todayPlacement && (
+              <span className="text-xs bg-blue-100 text-blue-500 px-2 py-0.5 rounded-full font-medium">
+                {todayPlacement.battingOrder}번 타순
+              </span>
+            )}
+          </div>
+          <span className="text-gray-400 text-lg">{showPlacement ? '▲' : '▼'}</span>
+        </button>
+
+        {showPlacement && (
+          <div className="mt-2">
+            {todayPlacement ? (
+              <div className="bg-white rounded-2xl p-4 shadow-sm border border-orange-100">
+                {/* 경기 정보 */}
+                {todayPlacement.game && (
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 text-sm font-bold">
+                      <span>{getDisplayName(todayPlacement.game.homeTeam as any)}</span>
+                      <span className="text-gray-300">vs</span>
+                      <span>{getDisplayName(todayPlacement.game.awayTeam as any)}</span>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      todayPlacement.status === 'settled'
+                        ? 'bg-green-100 text-green-600'
+                        : todayPlacement.game.status === 'in_progress'
+                          ? 'bg-yellow-100 text-yellow-600'
+                          : 'bg-blue-100 text-blue-600'
+                    }`}>
+                      {todayPlacement.status === 'settled' ? '✅ 정산완료'
+                        : todayPlacement.game.status === 'in_progress' ? '🔴 경기중'
+                        : '⏳ 대기'}
+                    </span>
+                  </div>
+                )}
+
+                {/* 스코어 */}
+                {todayPlacement.game && todayPlacement.game.status === 'finished' &&
+                  todayPlacement.game.homeScore != null && todayPlacement.game.awayScore != null && (
+                  <div className="text-center mb-3">
+                    <span className="text-lg font-bold text-gray-700">
+                      {todayPlacement.game.homeScore} : {todayPlacement.game.awayScore}
+                    </span>
+                  </div>
+                )}
+
+                {/* 배치 상세 */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                    <span className="text-xs text-gray-400">배치 팀</span>
+                    <span className="text-sm font-bold">{getDisplayName(todayPlacement.team as any)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                    <span className="text-xs text-gray-400">타순</span>
+                    <span className="text-sm font-bold">{todayPlacement.battingOrder}번</span>
+                  </div>
+
+                  {todayPlacement.playerName && (
+                    <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2">
+                      <span className="text-xs text-gray-400">선수</span>
+                      <span className="text-sm font-bold text-blue-600">{todayPlacement.playerName}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                    <span className="text-xs text-gray-400">승리 예측</span>
+                    <span className="text-sm font-bold">{getDisplayName(todayPlacement.predictedWinner as any)}</span>
+                  </div>
+                </div>
+
+                {/* 정산 결과 */}
+                {todayPlacement.status === 'settled' && (
+                  <div className={`mt-3 rounded-lg px-3 py-2 text-center ${
+                    placementTotalXp >= 0 ? 'bg-green-50' : 'bg-red-50'
+                  }`}>
+                    <span className={`text-sm font-bold ${
+                      placementTotalXp >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {placementTotalXp >= 0 ? '+' : ''}{placementTotalXp} XP
+                    </span>
+                    {todayPlacement.xpFromPlayer != null && todayPlacement.xpFromPrediction != null && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        타자 {todayPlacement.xpFromPlayer >= 0 ? '+' : ''}{todayPlacement.xpFromPlayer} · 예측 {todayPlacement.xpFromPrediction >= 0 ? '+' : ''}{todayPlacement.xpFromPrediction}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100 text-center">
+                <p className="text-gray-400 text-sm">오늘 아직 배치하지 않았어요</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── 오늘의 예측 ── */}
       <div className="px-6">
         <button onClick={() => setShowPredictions(!showPredictions)}
           className="w-full bg-white rounded-2xl p-4 shadow-sm border border-orange-100 flex items-center justify-between">
@@ -330,7 +460,6 @@ export default function PublicProfilePage() {
                       </div>
                     )}
 
-                    {/* 스코어: 경기 끝난 경우만 표시 */}
                     {p.game && p.game.status === 'finished' && p.game.homeScore != null && p.game.awayScore != null && (
                       <div className="text-center mb-2">
                         <span className="text-lg font-bold text-gray-700">
@@ -339,7 +468,6 @@ export default function PublicProfilePage() {
                       </div>
                     )}
 
-                    {/* 예측 내용 */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
                         <span className="text-xs text-gray-400">승리 예측</span>
@@ -376,7 +504,6 @@ export default function PublicProfilePage() {
                       )}
                     </div>
 
-                    {/* 결과 XP */}
                     {p.status === 'settled' && p.result && (
                       <div className={`mt-2 rounded-lg px-3 py-2 text-center ${
                         p.result.netXp >= 0 ? 'bg-green-50' : 'bg-red-50'
