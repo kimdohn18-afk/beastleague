@@ -8,7 +8,7 @@ on:
         required: false
         default: ''
   schedule:
-    - cron: '30 13 * * *'  # 매일 KST 22:30 (경기 종료 후)
+    - cron: '30 13 * * *'
 
 jobs:
   collect:
@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Python deps
+      - name: Install deps
         run: pip install requests
 
       - name: Run KBO collector
@@ -30,12 +30,12 @@ jobs:
         run: |
           DATE="${{ github.event.inputs.date }}"
           if [ -n "$DATE" ]; then
-            python collector/collect_kbo.py "$DATE"
+            python collector/kbo_collector.py "$DATE"
           else
-            python collector/collect_kbo.py
+            python collector/kbo_collector.py
           fi
 
-      - name: Upload CSV artifact
+      - name: Upload CSV
         if: always()
         uses: actions/upload-artifact@v4
         with:
