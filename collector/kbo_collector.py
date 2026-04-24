@@ -97,13 +97,17 @@ def parse_events(box_data):
     return events
 
 
-def extract_names_from_event(detail_text):
-    # remove content in parentheses
+def extract_names_from_event(detail_text, event_type=""):
+    names = []
+    if event_type in ("홈런", "HR"):
+        matches = re.findall(r'([가-힣A-Za-z]+)\d+호', detail_text)
+        return matches
+    if event_type in ("도루", "도루실패", "도루자"):
+        matches = re.findall(r'([가-힣A-Za-z]+)\(', detail_text)
+        return [m for m in matches if len(m) >= 2]
     cleaned = re.sub(r'\([^)]*\)', '', detail_text)
-    # split by comma or whitespace
     parts = re.split(r'[,\s]+', cleaned)
-    # only keep Korean names (2-4 chars)
-    names = [p.strip() for p in parts if re.match(r'^[가-힣]{2,4}$', p.strip())]
+    names = [p.strip() for p in parts if re.match(r'^[가-힣A-Za-z]{2,6}$', p.strip())]
     return names
 
 def enrich_batters_with_events(teams_data, events):
@@ -125,7 +129,7 @@ def enrich_batters_with_events(teams_data, events):
     for event in events:
         event_type = event["type"]
         event_detail = event["detail"]
-        names = extract_names_from_event(event_detail)
+        names = extract_names_from_event(event_detail, event_type)
 
         for name in names:
             if name not in all_players:
