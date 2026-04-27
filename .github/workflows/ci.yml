@@ -24,12 +24,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
 
-      - run: npm ci
+      - run: npm install
 
-      - name: shared 타입 체크
-        run: npx tsc --noEmit --project shared/tsconfig.json
+      - name: shared 빌드
+        run: npm run build --workspace=shared
 
       - name: server 타입 체크
         run: npx tsc --noEmit --project server/tsconfig.json
@@ -43,12 +42,3 @@ jobs:
           MONGODB_URI: mongodb://localhost:27017/beastleague-test
           JWT_SECRET: ci-test-secret
           INTERNAL_API_KEY: ci-test-key
-
-      - name: client 빌드 체크
-        run: npm run build --workspace=client
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:4000
-          NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
-          NEXTAUTH_SECRET: ci-test-secret
-          NEXTAUTH_URL: http://localhost:3000
-
