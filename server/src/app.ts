@@ -13,7 +13,6 @@ import { rankingsRouter } from './routes/rankings';
 import { internalRouter } from './routes/internal';
 import { pushRouter } from './routes/push';
 import { leaguesRouter } from './routes/leagues';
-import { predictionsRouter } from './routes/predictions';
 import { statsRouter } from './routes/stats';
 import { virtualMatchRouter } from './routes/virtualMatch';
 import { inventoryRouter } from './routes/inventory';
@@ -41,7 +40,6 @@ export function createApp(): express.Application {
   app.use('/api/games', gamesRouter);
   app.use('/api/characters', charactersRouter);
   app.use('/api/placements', placementsRouter);
-  app.use('/api/predictions', predictionsRouter);
   app.use('/api/trainings', trainingsRouter);
   app.use('/api/battles', battlesRouter);
   app.use('/api/rankings', rankingsRouter);
