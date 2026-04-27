@@ -4,11 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       date:
-        description: '수집 날짜 (YYYYMMDD, 비우면 어제)'
+        description: '수집 날짜 (YYYYMMDD, 비우면 오늘)'
         required: false
         default: ''
   schedule:
+    - cron: '0 22 * * *'
     - cron: '30 13 * * *'
+    - cron: '30 14 * * *'
 
 jobs:
   collect:
@@ -32,7 +34,8 @@ jobs:
           if [ -n "$DATE" ]; then
             python collector/kbo_collector.py "$DATE"
           else
-            python collector/kbo_collector.py
+            TODAY=$(TZ=Asia/Seoul date +%Y%m%d)
+            python collector/kbo_collector.py "$TODAY"
           fi
 
       - name: Upload CSV
