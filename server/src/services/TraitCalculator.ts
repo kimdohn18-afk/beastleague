@@ -247,4 +247,5 @@ export function getAllAchievements() {
 }
 
 export function getAchievementById(id: string) {
-  return ACHIEVEMENT_<span class="cursor">█</span>
+  return ACHIEVEMENT_DEFINITIONS.find(d => d.id === id);
+}
