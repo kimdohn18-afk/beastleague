@@ -51,6 +51,7 @@ interface Character {
   displayStage?: number | null;
   displaySize?: number | null;
   evolvedStage?: number;
+  streak?: number;
 }
 
 interface XpOrb {
