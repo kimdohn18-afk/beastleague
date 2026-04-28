@@ -442,6 +442,8 @@ router.get('/me/evolution', authenticateUser, async (req: Request, res: Response
       return res.status(404).json({ error: '캐릭터가 없습니다' });
     }
 
+    const totalXp = character.totalXp ?? character.xp ?? 0;
+
     const STAGES = [
       { stage: 1, name: '아기',  minXp: 0,     badge: '🥚' },
       { stage: 2, name: '성장',  minXp: 300,   badge: '⭐' },
@@ -452,15 +454,16 @@ router.get('/me/evolution', authenticateUser, async (req: Request, res: Response
 
     let current = STAGES[0];
     for (const s of STAGES) {
-      if (character.xp >= s.minXp) current = s;
+      if (totalXp >= s.minXp) current = s;
     }
-    const next = STAGES.find(s => character.xp < s.minXp) || null;
+    const next = STAGES.find(s => totalXp < s.minXp) || null;
 
     res.json({
+      totalXp,
       xp: character.xp,
       currentStage: current,
       nextStage: next,
-      xpToNext: next ? next.minXp - character.xp : 0,
+      xpToNext: next ? next.minXp - totalXp : 0,
     });
   } catch (err) {
     console.error('Evolution info error:', err);
@@ -482,13 +485,14 @@ router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) 
       return res.status(400).json({ error: '이미 최고 단계입니다' });
     }
 
+    // 누적 XP 기준 진화 조건 (소모 없음)
     const EVOLVE_REQUIREMENTS = [
       null,
       null,
-      { xpCost: 200,  requiredAchievements: 3 },
-      { xpCost: 500,  requiredAchievements: 8 },
-      { xpCost: 1500, requiredAchievements: 15 },
-      { xpCost: 5000, requiredAchievements: 25 },
+      { totalXpRequired: 300,   requiredAchievements: 3 },
+      { totalXpRequired: 1000,  requiredAchievements: 8 },
+      { totalXpRequired: 3000,  requiredAchievements: 15 },
+      { totalXpRequired: 10000, requiredAchievements: 25 },
     ];
 
     const nextStage = currentStage + 1;
@@ -497,12 +501,13 @@ router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) 
       return res.status(400).json({ error: '진화 조건을 찾을 수 없습니다' });
     }
 
+    const totalXp = character.totalXp ?? character.xp ?? 0;
     const earnedCount = (character.earnedAchievements || []).length
       + (character.teamAchievements || []).length;
 
-    if (character.xp < req_data.xpCost) {
+    if (totalXp < req_data.totalXpRequired) {
       return res.status(400).json({
-        error: `XP가 부족합니다 (${req_data.xpCost} XP 필요, 현재 ${character.xp} XP)`,
+        error: `누적 XP가 부족합니다 (${req_data.totalXpRequired} XP 필요, 현재 ${totalXp} XP)`,
         code: 'insufficientXp',
       });
     }
@@ -514,7 +519,7 @@ router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) 
       });
     }
 
-    character.xp -= req_data.xpCost;
+    // XP 차감 없음 — 누적 도달만 확인
     character.evolvedStage = nextStage;
     character.displayStage = null;
     await character.save();
@@ -527,8 +532,8 @@ router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) 
       evolvedStage: nextStage,
       stageName: STAGE_NAMES[nextStage],
       badge: STAGE_BADGES[nextStage],
-      xpSpent: req_data.xpCost,
-      remainingXp: character.xp,
+      totalXp,
+      xp: character.xp,
     });
   } catch (err) {
     console.error('Evolve error:', err);
