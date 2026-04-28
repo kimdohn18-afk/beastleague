@@ -222,3 +222,30 @@ internalRouter.post('/games/:gameId/resettle', async (req: Request, res: Respons
   }
 });
 
+// POST /internal/sync-xp — 기존 유저 XP 동기화
+internalRouter.post('/sync-xp', async (req: Request, res: Response) => {
+  try {
+    const { Character } = await import('../models/Character');
+    const characters = await Character.find({});
+    let updated = 0;
+
+    for (const char of characters) {
+      const currentXp = char.xp || 0;
+      // totalXp가 xp보다 작으면 xp 값으로 맞춤
+      if ((char.totalXp || 0) < currentXp) {
+        char.totalXp = currentXp;
+      }
+      // currentXp가 설정 안 됐으면 xp로 맞춤
+      if (!char.currentXp && char.currentXp !== 0) {
+        char.currentXp = currentXp;
+      }
+      await char.save();
+      updated++;
+    }
+
+    res.json({ success: true, updated });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
