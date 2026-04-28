@@ -874,8 +874,8 @@ router.post('/:id/feed', authenticateUser, async (req: Request, res: Response) =
 
     await Feed.create({ fromUserId: userId, toCharacterId: targetChar._id, date: today, xpCost, xpGiven, isSelf });
 
-    if (!isSelf) await Character.findByIdAndUpdate(myChar._id, { $inc: { xp: -xpCost } });
-    await Character.findByIdAndUpdate(targetChar._id, { $inc: { xp: xpGiven, totalFeeds: 1 } });
+        if (!isSelf) await Character.findByIdAndUpdate(myChar._id, { $inc: { xp: -xpCost, currentXp: -xpCost } });
+    await Character.findByIdAndUpdate(targetChar._id, { $inc: { xp: xpGiven, currentXp: xpGiven, totalXp: xpGiven } });
 
     const updatedMyChar = await Character.findById(myChar._id);
     const updatedTarget = await Character.findById(targetChar._id);
