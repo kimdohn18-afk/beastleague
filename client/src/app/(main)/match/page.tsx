@@ -30,26 +30,13 @@ interface Placement {
   xpFromPlayer?: number;
   xpFromPrediction?: number;
   xpBreakdown?: any;
-  result?: {
-    netXp?: number;
-    winCorrect?: boolean;
-    xpFromWin?: number;
-    xpFromPlayer?: number;
-    xpFromTeamWin?: number;
-    xpFromWinPredict?: number;
-    batterResult?: {
-      playerName?: string;
-      atBats?: number;
-      hits?: number;
-      homeRuns?: number;
-      rbi?: number;
-      runs?: number;
-      stolenBases?: number;
-      doubles?: number;
-      triples?: number;
-    };
+  game?: {
+    homeTeam: string;
+    awayTeam: string;
+    status: string;
+    homeScore?: number;
+    awayScore?: number;
   };
-  game?: Game;
 }
 
 interface CharacterInfo {
@@ -128,15 +115,16 @@ export default function MatchPage() {
       ]);
       if (gamesRes.ok) setGames(await gamesRes.json());
       if (placementsRes.ok) {
-        const data: Placement[] = await placementsRes.json();
-        setPlacements(data);
-        const sel: typeof selections = {};
-        for (const p of data) {
-          if (p.team && p.battingOrder) {
-            sel[p.gameId] = { team: p.team, battingOrder: p.battingOrder };
+        const data = await placementsRes.json();
+        // /today는 단일 객체 또는 null을 반환
+        if (data) {
+          setPlacements([data]);
+          if (data.team && data.battingOrder) {
+            setSelections({ [data.gameId]: { team: data.team, battingOrder: data.battingOrder } });
           }
+        } else {
+          setPlacements([]);
         }
-        setSelections(sel);
       }
       if (charRes.ok) {
         const c = await charRes.json();
@@ -154,7 +142,10 @@ export default function MatchPage() {
       const res = await fetch(`${apiUrl}/api/placements/history`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) setHistoryData(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryData(Array.isArray(data) ? data : []);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -191,16 +182,15 @@ export default function MatchPage() {
     }));
   }
 
+  // XP 계산 헬퍼
+  function getNetXp(p: Placement): number {
+    return (p.xpFromPlayer || 0) + (p.xpFromPrediction || 0);
+  }
+
   async function handleSubmit(gameId: string) {
     const sel = selections[gameId];
-    if (!sel?.team) {
-      showToast('팀을 선택해주세요');
-      return;
-    }
-    if (!sel?.battingOrder) {
-      showToast('타순을 선택해주세요');
-      return;
-    }
+    if (!sel?.team) { showToast('팀을 선택해주세요'); return; }
+    if (!sel?.battingOrder) { showToast('타순을 선택해주세요'); return; }
 
     setSubmitting(true);
     try {
@@ -267,16 +257,9 @@ export default function MatchPage() {
   const placedCount = placements.filter((p) => p.status === 'active').length;
   const isMaxPlaced = placedCount >= MAX_PLACEMENTS;
 
-  const historySettled = historyData.filter(
-    (p) => p.status === 'settled' && p.result
-  );
-  const historyTotalNetXp = historySettled.reduce(
-    (s, p) => s + (p.result?.netXp || 0),
-    0
-  );
-  const historyCorrectCount = historySettled.filter(
-    (p) => p.result?.winCorrect
-  ).length;
+  const historySettled = historyData.filter((p) => p.status === 'settled');
+  const historyTotalNetXp = historySettled.reduce((s, p) => s + getNetXp(p), 0);
+  const historyCorrectCount = historySettled.filter((p) => p.isCorrect).length;
   const historyAccuracy =
     historySettled.length > 0
       ? Math.round((historyCorrectCount / historySettled.length) * 100)
@@ -307,9 +290,7 @@ export default function MatchPage() {
         <button
           onClick={() => handleTabChange('today')}
           className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
-            tab === 'today'
-              ? 'bg-white text-orange-500 shadow-sm'
-              : 'text-gray-400'
+            tab === 'today' ? 'bg-white text-orange-500 shadow-sm' : 'text-gray-400'
           }`}
         >
           오늘 경기
@@ -317,9 +298,7 @@ export default function MatchPage() {
         <button
           onClick={() => handleTabChange('history')}
           className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
-            tab === 'history'
-              ? 'bg-white text-orange-500 shadow-sm'
-              : 'text-gray-400'
+            tab === 'history' ? 'bg-white text-orange-500 shadow-sm' : 'text-gray-400'
           }`}
         >
           내 기록
@@ -352,9 +331,7 @@ export default function MatchPage() {
           )}
 
           {games.length === 0 ? (
-            <p className="text-gray-400 text-center mt-20">
-              오늘 경기가 없습니다
-            </p>
+            <p className="text-gray-400 text-center mt-20">오늘 경기가 없습니다</p>
           ) : (
             <div className="space-y-3">
               {games.map((game) => {
@@ -397,95 +374,44 @@ export default function MatchPage() {
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span
-                          className={`font-medium flex-1 text-center ${
-                            isCancelled
-                              ? 'text-gray-400 line-through'
-                              : 'text-gray-800'
-                          }`}
-                        >
+                        <span className={`font-medium flex-1 text-center ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                           {awayDisplay}
                         </span>
                         <span className="text-gray-300 text-sm mx-3">
-                          {isCancelled
-                            ? '취소'
-                            : game.status === 'finished'
-                            ? `${game.awayScore} : ${game.homeScore}`
-                            : isLocked
-                            ? '진행 중'
-                            : game.startTime || 'vs'}
+                          {isCancelled ? '취소' : game.status === 'finished' ? `${game.awayScore} : ${game.homeScore}` : isLocked ? '진행 중' : game.startTime || 'vs'}
                         </span>
-                        <span
-                          className={`font-medium flex-1 text-center ${
-                            isCancelled
-                              ? 'text-gray-400 line-through'
-                              : 'text-gray-800'
-                          }`}
-                        >
+                        <span className={`font-medium flex-1 text-center ${isCancelled ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                           {homeDisplay}
                         </span>
                       </div>
 
-                      {isSettled && placement?.result && (
+                      {isSettled && (
                         <div className="mt-2 pt-2 border-t border-gray-100">
                           <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
-                              <span
-                                className={
-                                  placement.result.winCorrect
-                                    ? 'text-emerald-500 text-xs font-bold'
-                                    : 'text-red-400 text-xs'
-                                }
-                              >
-                                {placement.result.winCorrect ? '✅ 적중' : '❌ 실패'}
+                              <span className={placement.isCorrect ? 'text-emerald-500 text-xs font-bold' : 'text-red-400 text-xs'}>
+                                {placement.isCorrect ? '✅ 적중' : '❌ 실패'}
                               </span>
                               {placement.battingOrder && (
-                                <span className="text-gray-400 text-xs">
-                                  {placement.battingOrder}번 타자
-                                </span>
+                                <span className="text-gray-400 text-xs">{placement.battingOrder}번 타자</span>
                               )}
                             </div>
-                            <span
-                              className={`text-sm font-bold ${
-                                (placement.result.netXp || 0) >= 0
-                                  ? 'text-emerald-500'
-                                  : 'text-red-400'
-                              }`}
-                            >
-                              {(placement.result.netXp || 0) >= 0 ? '+' : ''}
-                              {placement.result.netXp} XP
+                            <span className={`text-sm font-bold ${getNetXp(placement) >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                              {getNetXp(placement) >= 0 ? '+' : ''}{getNetXp(placement)} XP
                             </span>
                           </div>
-                          {placement.result.batterResult?.playerName && (
-                            <p className="text-gray-400 text-xs mt-1">
-                              {placement.result.batterResult.playerName}:{' '}
-                              {placement.result.batterResult.atBats}타수{' '}
-                              {placement.result.batterResult.hits}안타
-                              {(placement.result.batterResult.homeRuns || 0) > 0 &&
-                                ` ${placement.result.batterResult.homeRuns}홈런`}
-                              {(placement.result.batterResult.rbi || 0) > 0 &&
-                                ` ${placement.result.batterResult.rbi}타점`}
-                              {(placement.result.batterResult.stolenBases || 0) > 0 &&
-                                ` ${placement.result.batterResult.stolenBases}도루`}
-                            </p>
-                          )}
                         </div>
                       )}
 
                       {hasPlacement && !isSettled && (
                         <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between items-center">
                           <span className="text-orange-500 text-xs">
-                            {getDisplayName(
-                              (placement!.team as any) || (placement!.predictedWinner as any)
-                            )}{' '}
+                            {getDisplayName((placement!.team as any) || (placement!.predictedWinner as any))}{' '}
                             {placement!.battingOrder}번 타자 배치
                           </span>
                           {!isLocked && (
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCancel(game.gameId);
-                              }}
+                              onClick={(e) => { e.stopPropagation(); handleCancel(game.gameId); }}
                               className="text-xs text-red-400 underline"
                             >
                               취소
@@ -495,84 +421,56 @@ export default function MatchPage() {
                       )}
                     </div>
 
-                    {isExpanded &&
-                      !isCancelled &&
-                      !isSettled &&
-                      !isLocked &&
-                      !isBlocked && (
-                        <div className="bg-white border-t border-gray-100 p-4 space-y-4">
+                    {isExpanded && !isCancelled && !isSettled && !isLocked && !isBlocked && (
+                      <div className="bg-white border-t border-gray-100 p-4 space-y-4">
+                        <div>
+                          <p className="text-gray-400 text-xs mb-2">응원할 팀을 선택하세요</p>
+                          <div className="flex gap-3">
+                            {[game.awayTeam, game.homeTeam].map((t) => (
+                              <button
+                                key={t}
+                                onClick={() => updateSelection(game.gameId, { team: t, battingOrder: null })}
+                                className={`flex-1 py-3 rounded-xl text-sm font-medium transition ${
+                                  sel?.team === t ? 'bg-orange-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'
+                                }`}
+                              >
+                                {getDisplayName(t as any)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {sel?.team && (
                           <div>
-                            <p className="text-gray-400 text-xs mb-2">
-                              응원할 팀을 선택하세요
-                            </p>
-                            <div className="flex gap-3">
-                              {[game.awayTeam, game.homeTeam].map((t) => (
+                            <p className="text-gray-400 text-xs mb-2">타순을 선택하세요 (1~9번)</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((order) => (
                                 <button
-                                  key={t}
-                                  onClick={() =>
-                                    updateSelection(game.gameId, {
-                                      team: t,
-                                      battingOrder: null,
-                                    })
-                                  }
-                                  className={`flex-1 py-3 rounded-xl text-sm font-medium transition ${
-                                    sel?.team === t
-                                      ? 'bg-orange-400 text-white shadow-md'
-                                      : 'bg-gray-100 text-gray-500'
+                                  key={order}
+                                  onClick={() => updateSelection(game.gameId, { battingOrder: order })}
+                                  className={`py-3 rounded-xl font-bold text-sm transition ${
+                                    sel?.battingOrder === order ? 'bg-yellow-400 text-gray-900 shadow-md' : 'bg-gray-100 text-gray-500'
                                   }`}
                                 >
-                                  {getDisplayName(t as any)}
+                                  {order}번
                                 </button>
                               ))}
                             </div>
+                            <p className="text-gray-300 text-[11px] mt-2 text-center">
+                              경기 종료 후 해당 타자의 실제 성적으로 XP가 계산됩니다
+                            </p>
                           </div>
+                        )}
 
-                          {sel?.team && (
-                            <div>
-                              <p className="text-gray-400 text-xs mb-2">
-                                타순을 선택하세요 (1~9번)
-                              </p>
-                              <div className="grid grid-cols-3 gap-2">
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((order) => (
-                                  <button
-                                    key={order}
-                                    onClick={() =>
-                                      updateSelection(game.gameId, {
-                                        battingOrder: order,
-                                      })
-                                    }
-                                    className={`py-3 rounded-xl font-bold text-sm transition ${
-                                      sel?.battingOrder === order
-                                        ? 'bg-yellow-400 text-gray-900 shadow-md'
-                                        : 'bg-gray-100 text-gray-500'
-                                    }`}
-                                  >
-                                    {order}번
-                                  </button>
-                                ))}
-                              </div>
-                              <p className="text-gray-300 text-[11px] mt-2 text-center">
-                                경기 종료 후 해당 타자의 실제 성적으로 XP가
-                                계산됩니다
-                              </p>
-                            </div>
-                          )}
-
-                          <button
-                            onClick={() => handleSubmit(game.gameId)}
-                            disabled={
-                              submitting || !sel?.team || !sel?.battingOrder
-                            }
-                            className="w-full bg-orange-400 text-white py-3 rounded-2xl font-bold text-sm disabled:opacity-40 shadow-md active:scale-[0.98] transition"
-                          >
-                            {submitting
-                              ? '처리 중...'
-                              : hasPlacement
-                              ? '배치 수정'
-                              : '배치 확정'}
-                          </button>
-                        </div>
-                      )}
+                        <button
+                          onClick={() => handleSubmit(game.gameId)}
+                          disabled={submitting || !sel?.team || !sel?.battingOrder}
+                          className="w-full bg-orange-400 text-white py-3 rounded-2xl font-bold text-sm disabled:opacity-40 shadow-md active:scale-[0.98] transition"
+                        >
+                          {submitting ? '처리 중...' : hasPlacement ? '배치 수정' : '배치 확정'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -582,8 +480,8 @@ export default function MatchPage() {
       )}
 
       {/* ===== 내 기록 탭 ===== */}
-      {tab === 'history' &&
-        (historyLoading ? (
+      {tab === 'history' && (
+        historyLoading ? (
           <div className="flex justify-center py-20">
             <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
           </div>
@@ -592,13 +490,8 @@ export default function MatchPage() {
             <div className="flex gap-3 mb-4">
               <div className="flex-1 bg-orange-50 rounded-2xl p-4 text-center">
                 <p className="text-gray-400 text-xs mb-1">총 획득</p>
-                <p
-                  className={`text-xl font-bold ${
-                    historyTotalNetXp >= 0 ? 'text-orange-500' : 'text-red-400'
-                  }`}
-                >
-                  {historyTotalNetXp >= 0 ? '+' : ''}
-                  {historyTotalNetXp} XP
+                <p className={`text-xl font-bold ${historyTotalNetXp >= 0 ? 'text-orange-500' : 'text-red-400'}`}>
+                  {historyTotalNetXp >= 0 ? '+' : ''}{historyTotalNetXp} XP
                 </p>
               </div>
               <div className="flex-1 bg-emerald-50 rounded-2xl p-4 text-center">
@@ -609,9 +502,7 @@ export default function MatchPage() {
               </div>
               <div className="flex-1 bg-blue-50 rounded-2xl p-4 text-center">
                 <p className="text-gray-400 text-xs mb-1">적중률</p>
-                <p className="text-blue-500 text-xl font-bold">
-                  {historyAccuracy}%
-                </p>
+                <p className="text-blue-500 text-xl font-bold">{historyAccuracy}%</p>
               </div>
             </div>
 
@@ -627,37 +518,21 @@ export default function MatchPage() {
               </div>
             ) : (
               dateGroups.map(([date, pls]) => {
-                const isOpen =
-                  expandedDate === date ||
-                  (expandedDate === null && date === dateGroups[0]?.[0]);
-                const settled = pls.filter(
-                  (p) => p.status === 'settled' && p.result
-                );
-                const netXp = settled.reduce(
-                  (s, p) => s + (p.result?.netXp || 0),
-                  0
-                );
-                const correct = settled.filter(
-                  (p) => p.result?.winCorrect
-                ).length;
+                const isOpen = expandedDate === date || (expandedDate === null && date === dateGroups[0]?.[0]);
+                const settled = pls.filter((p) => p.status === 'settled');
+                const netXp = settled.reduce((s, p) => s + getNetXp(p), 0);
+                const correct = settled.filter((p) => p.isCorrect).length;
                 const [y, m, d] = date.split('-').map(Number);
                 const dayName = weekdays[new Date(y, m - 1, d).getDay()];
 
                 return (
-                  <div
-                    key={date}
-                    className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
-                  >
+                  <div key={date} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                     <button
-                      onClick={() =>
-                        setExpandedDate(isOpen ? '__close__' : date)
-                      }
+                      onClick={() => setExpandedDate(isOpen ? '__close__' : date)}
                       className="w-full px-4 py-4 flex items-center justify-between"
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-gray-900 font-bold">
-                          {m}월 {d}일 ({dayName})
-                        </span>
+                        <span className="text-gray-900 font-bold">{m}월 {d}일 ({dayName})</span>
                         {settled.length > 0 && (
                           <span className="text-xs text-gray-400">
                             {correct === settled.length ? '✅' : `적중 ${correct}/${settled.length}`}
@@ -666,26 +541,13 @@ export default function MatchPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         {settled.length > 0 ? (
-                          <span
-                            className={`text-sm font-bold ${
-                              netXp >= 0 ? 'text-emerald-500' : 'text-red-400'
-                            }`}
-                          >
-                            {netXp >= 0 ? '+' : ''}
-                            {netXp} XP
+                          <span className={`text-sm font-bold ${netXp >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                            {netXp >= 0 ? '+' : ''}{netXp} XP
                           </span>
                         ) : (
-                          <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full">
-                            대기중
-                          </span>
+                          <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full">대기중</span>
                         )}
-                        <span
-                          className={`text-gray-400 transition-transform ${
-                            isOpen ? 'rotate-180' : ''
-                          }`}
-                        >
-                          ▼
-                        </span>
+                        <span className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
                       </div>
                     </button>
 
@@ -693,38 +555,23 @@ export default function MatchPage() {
                       <div className="border-t border-gray-50 px-3 pb-3 space-y-2">
                         {pls.map((p) => {
                           const pSettled = p.status === 'settled';
-                          const pNetXp = p.result?.netXp || 0;
+                          const pNetXp = getNetXp(p);
                           const isDetail = expandedId === p._id;
                           const matchLabel = p.game
                             ? `${getDisplayName(p.game.awayTeam as any)} vs ${getDisplayName(p.game.homeTeam as any)}`
                             : p.gameId;
 
                           return (
-                            <div
-                              key={p._id}
-                              className="bg-gray-50 rounded-xl overflow-hidden"
-                            >
+                            <div key={p._id} className="bg-gray-50 rounded-xl overflow-hidden">
                               <div className="p-3">
                                 <div className="flex justify-between items-center mb-1">
-                                  <p className="font-semibold text-gray-900 text-sm">
-                                    {matchLabel}
-                                  </p>
-                                  {pSettled && (
-                                    <span
-                                      className={`text-sm font-bold ${
-                                        pNetXp >= 0
-                                          ? 'text-emerald-500'
-                                          : 'text-red-400'
-                                      }`}
-                                    >
-                                      {pNetXp >= 0 ? '+' : ''}
-                                      {pNetXp}
+                                  <p className="font-semibold text-gray-900 text-sm">{matchLabel}</p>
+                                  {pSettled ? (
+                                    <span className={`text-sm font-bold ${pNetXp >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                                      {pNetXp >= 0 ? '+' : ''}{pNetXp}
                                     </span>
-                                  )}
-                                  {!pSettled && (
-                                    <span className="text-xs text-yellow-600">
-                                      대기중
-                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-yellow-600">대기중</span>
                                   )}
                                 </div>
 
@@ -736,28 +583,15 @@ export default function MatchPage() {
 
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="bg-orange-100 text-orange-700 text-xs px-1.5 py-0.5 rounded-full">
-                                    {getDisplayName(
-                                      (p.team || p.predictedWinner) as any
-                                    )}{' '}
-                                    {p.battingOrder
-                                      ? `${p.battingOrder}번 타자`
-                                      : '승'}
-                                    {pSettled &&
-                                      p.result &&
-                                      (p.result.winCorrect ? ' ✅' : ' ❌')}
+                                    {getDisplayName((p.team || p.predictedWinner) as any)}{' '}
+                                    {p.battingOrder ? `${p.battingOrder}번 타자` : '승'}
+                                    {pSettled && (p.isCorrect ? ' ✅' : ' ❌')}
                                   </span>
-                                  {p.result?.batterResult?.playerName && (
-                                    <span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">
-                                      {p.result.batterResult.playerName}
-                                    </span>
-                                  )}
                                 </div>
 
-                                {pSettled && p.result && (
+                                {pSettled && (
                                   <button
-                                    onClick={() =>
-                                      setExpandedId(isDetail ? null : p._id)
-                                    }
+                                    onClick={() => setExpandedId(isDetail ? null : p._id)}
                                     className="text-xs text-gray-400 underline mt-2"
                                   >
                                     {isDetail ? '접기' : '상세'}
@@ -765,104 +599,65 @@ export default function MatchPage() {
                                 )}
                               </div>
 
-                              {isDetail && pSettled && p.result && (
+                              {isDetail && pSettled && (
                                 <div className="border-t border-gray-200 px-3 py-2 bg-white space-y-1.5 text-xs">
-                                  {p.result.batterResult?.playerName && (
-                                    <div className="pb-1.5 border-b border-gray-100">
-                                      <p className="text-gray-700 font-bold mb-1">
-                                        {p.result.batterResult.playerName} 성적
-                                      </p>
-                                      <p className="text-gray-500">
-                                        {p.result.batterResult.atBats}타수{' '}
-                                        {p.result.batterResult.hits}안타
-                                        {(p.result.batterResult.doubles || 0) >
-                                          0 &&
-                                          ` · 2루타 ${p.result.batterResult.doubles}`}
-                                        {(p.result.batterResult.triples || 0) >
-                                          0 &&
-                                          ` · 3루타 ${p.result.batterResult.triples}`}
-                                        {(p.result.batterResult.homeRuns || 0) >
-                                          0 &&
-                                          ` · 홈런 ${p.result.batterResult.homeRuns}`}
-                                        {(p.result.batterResult.rbi || 0) > 0 &&
-                                          ` · ${p.result.batterResult.rbi}타점`}
-                                        {(p.result.batterResult.runs || 0) >
-                                          0 &&
-                                          ` · ${p.result.batterResult.runs}득점`}
-                                        {(p.result.batterResult.stolenBases ||
-                                          0) > 0 &&
-                                          ` · ${p.result.batterResult.stolenBases}도루`}
-                                      </p>
+                                  {p.xpBreakdown && (
+                                    <div className="pb-1.5 border-b border-gray-100 space-y-1">
+                                      <p className="text-gray-700 font-bold mb-1">XP 상세</p>
+                                      {(p.xpBreakdown.hits || 0) > 0 && (
+                                        <div className="flex justify-between"><span className="text-gray-500">⚾ 안타</span><span className="text-emerald-500">+{p.xpBreakdown.hits}</span></div>
+                                      )}
+                                      {(p.xpBreakdown.double || 0) > 0 && (
+                                        <div className="flex justify-between"><span className="text-gray-500">💫 2루타</span><span className="text-emerald-500">+{p.xpBreakdown.double}</span></div>
+                                      )}
+                                      {(p.xpBreakdown.triple || 0) > 0 && (
+                                        <div className="flex justify-between"><span className="text-gray-500">🌟 3루타</span><span className="text-emerald-500">+{p.xpBreakdown.triple}</span></div>
+                                      )}
+                                      {(p.xpBreakdown.homeRun || 0) > 0 && (
+                                        <div className="flex justify-between"><span className="text-gray-500">💥 홈런</span><span className="text-emerald-500">+{p.xpBreakdown.homeRun}</span></div>
+                                      )}
+                                      {(p.xpBreakdown.rbi || 0) > 0 && (
+                                        <div className="flex justify-between"><span className="text-gray-500">🎯 타점</span><span className="text-emerald-500">+{p.xpBreakdown.rbi}</span></div>
+                                      )}
+                                      {(p.xpBreakdown.runs || 0) > 0 && (
+                                        <div className="flex justify-between"><span className="text-gray-500">🏃 득점</span><span className="text-emerald-500">+{p.xpBreakdown.runs}</span></div>
+                                      )}
+                                      {(p.xpBreakdown.stolenBase || 0) > 0 && (
+                                        <div className="flex justify-between"><span className="text-gray-500">💨 도루</span><span className="text-emerald-500">+{p.xpBreakdown.stolenBase}</span></div>
+                                      )}
+                                      {(p.xpBreakdown.walkOff || 0) > 0 && (
+                                        <div className="flex justify-between"><span className="text-gray-500">🎬 끝내기</span><span className="text-emerald-500">+{p.xpBreakdown.walkOff}</span></div>
+                                      )}
+                                      {(p.xpBreakdown.teamResult || 0) > 0 && (
+                                        <div className="flex justify-between"><span className="text-gray-500">🏆 팀 승리</span><span className="text-emerald-500">+{p.xpBreakdown.teamResult}</span></div>
+                                      )}
+                                      {(p.xpBreakdown.noHitPenalty || 0) < 0 && (
+                                        <div className="flex justify-between"><span className="text-gray-500">😢 무안타</span><span className="text-red-400">{p.xpBreakdown.noHitPenalty}</span></div>
+                                      )}
                                     </div>
                                   )}
 
-                                  {p.result.xpFromPlayer !== undefined && (
+                                  {(p.xpFromPlayer || 0) !== 0 && (
                                     <div className="flex justify-between">
-                                      <span className="text-gray-500">
-                                        타자 성적 XP
-                                      </span>
-                                      <span
-                                        className={
-                                          p.result.xpFromPlayer >= 0
-                                            ? 'text-emerald-500'
-                                            : 'text-red-400'
-                                        }
-                                      >
-                                        {p.result.xpFromPlayer >= 0 ? '+' : ''}
-                                        {p.result.xpFromPlayer}
+                                      <span className="text-gray-500">타자 성적 XP</span>
+                                      <span className={(p.xpFromPlayer || 0) >= 0 ? 'text-emerald-500' : 'text-red-400'}>
+                                        {(p.xpFromPlayer || 0) >= 0 ? '+' : ''}{p.xpFromPlayer}
                                       </span>
                                     </div>
                                   )}
-                                  {p.result.xpFromTeamWin !== undefined && (
+                                  {(p.xpFromPrediction || 0) !== 0 && (
                                     <div className="flex justify-between">
-                                      <span className="text-gray-500">
-                                        팀 승리 XP
-                                      </span>
-                                      <span
-                                        className={
-                                          p.result.xpFromTeamWin > 0
-                                            ? 'text-emerald-500'
-                                            : 'text-gray-400'
-                                        }
-                                      >
-                                        {p.result.xpFromTeamWin > 0
-                                          ? `+${p.result.xpFromTeamWin}`
-                                          : '0'}
-                                      </span>
-                                    </div>
-                                  )}
-                                  {p.result.xpFromWinPredict !== undefined && (
-                                    <div className="flex justify-between">
-                                      <span className="text-gray-500">
-                                        승리 예측 XP
-                                      </span>
-                                      <span
-                                        className={
-                                          p.result.xpFromWinPredict > 0
-                                            ? 'text-emerald-500'
-                                            : p.result.xpFromWinPredict < 0
-                                            ? 'text-red-400'
-                                            : 'text-gray-400'
-                                        }
-                                      >
-                                        {p.result.xpFromWinPredict >= 0
-                                          ? `+${p.result.xpFromWinPredict}`
-                                          : p.result.xpFromWinPredict}
+                                      <span className="text-gray-500">예측 XP</span>
+                                      <span className={(p.xpFromPrediction || 0) >= 0 ? 'text-emerald-500' : 'text-red-400'}>
+                                        {(p.xpFromPrediction || 0) >= 0 ? '+' : ''}{p.xpFromPrediction}
                                       </span>
                                     </div>
                                   )}
 
                                   <div className="pt-1.5 border-t border-gray-100 flex justify-between font-bold">
                                     <span className="text-gray-700">합계</span>
-                                    <span
-                                      className={
-                                        pNetXp >= 0
-                                          ? 'text-emerald-500'
-                                          : 'text-red-400'
-                                      }
-                                    >
-                                      {pNetXp >= 0 ? '+' : ''}
-                                      {pNetXp} XP
+                                    <span className={pNetXp >= 0 ? 'text-emerald-500' : 'text-red-400'}>
+                                      {pNetXp >= 0 ? '+' : ''}{pNetXp} XP
                                     </span>
                                   </div>
                                 </div>
@@ -877,7 +672,8 @@ export default function MatchPage() {
               })
             )}
           </div>
-        ))}
+        )
+      )}
     </div>
   );
 }
