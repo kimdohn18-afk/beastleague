@@ -198,6 +198,51 @@ router.get('/me/history', authenticateUser, async (req: Request, res: Response) 
   }
 });
 
+/* ───── GET /me/guestbook — 내 캐릭터에 달린 방명록 ───── */
+router.get('/me/guestbook', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const character = await Character.findOne({ userId });
+    if (!character) {
+      return res.status(404).json({ error: '캐릭터가 없습니다' });
+    }
+
+    const entries = await GuestBook.find({ toCharacterId: character._id })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+
+    // 작성자 정보 붙이기
+    const writerIds = [...new Set(entries.map((e: any) => e.fromUserId.toString()))];
+    const writers = await Character.find(
+      { userId: { $in: writerIds } },
+      { userId: 1, name: 1, animalType: 1 }
+    ).lean();
+
+    const writerMap: Record<string, { name: string; animalType: string }> = {};
+    for (const w of writers) {
+      writerMap[w.userId.toString()] = { name: w.name, animalType: w.animalType };
+    }
+
+    const result = entries.map((e: any) => {
+      const writer = writerMap[e.fromUserId.toString()];
+      return {
+        _id: e._id,
+        message: e.message,
+        createdAt: e.createdAt,
+        fromUserId: e.fromUserId,
+        writerName: writer?.name || '알 수 없음',
+        writerAnimal: writer?.animalType || 'bear',
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error('Guestbook fetch error:', err);
+    res.status(500).json({ error: '방명록 조회 실패' });
+  }
+});
+
 /* ───── GET /achievements/all — 전체 업적 목록 ───── */
 router.get('/achievements/all', async (_req: Request, res: Response) => {
   try {
