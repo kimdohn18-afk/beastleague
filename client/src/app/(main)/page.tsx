@@ -190,6 +190,9 @@ export default function MainPage() {
   const shareCardRef = useRef<HTMLDivElement>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
+  
+  /* 방명록 */
+  const [guestbookEntries, setGuestbookEntries] = useState<any[]>([]);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
@@ -329,6 +332,25 @@ export default function MainPage() {
     checkFeedStatus();
   }, [character?._id, token]);
 
+  /* ─── 방명록 로드 ─── */
+useEffect(() => {
+  if (!character?._id || !token) return;
+  const fetchGuestbook = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/api/characters/me/guestbook`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGuestbookEntries(data);
+      }
+    } catch (e) {
+      console.error('Guestbook fetch failed:', e);
+    }
+  };
+  fetchGuestbook();
+}, [character?._id, token]);
+  
   /* ─── 튜토리얼 XP 구슬 ─── */
   useEffect(() => {
     const tutorialXp = searchParams.get('tutorialXp');
@@ -802,6 +824,49 @@ export default function MainPage() {
         >
           {selfFed ? '🍖 오늘 밥 완료!' : '🍖 밥주기 (+3 XP)'}
         </button>
+              </button>
+      </div>    {/* ← 캐릭터 정보 flex div 닫기 */}
+
+      {/* ─── 방명록 ─── */}
+      <div className="mx-4 mt-6 relative z-10">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-bold text-gray-700">📝 방명록</h2>
+          <span className="text-xs text-gray-400">{guestbookEntries.length}개</span>
+        </div>
+
+        {guestbookEntries.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
+            <p className="text-sm text-gray-400">아직 방명록이 없어요</p>
+            <p className="text-xs text-gray-300 mt-1">다른 사람의 프로필에서 방명록을 남기면<br />여기에 표시됩니다!</p>
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {guestbookEntries.map((entry: any) => {
+              const writerEmoji = ANIMAL_EMOJI[entry.writerAnimal] || '🐾';
+              const timeAgo = (() => {
+                const diff = Date.now() - new Date(entry.createdAt).getTime();
+                const mins = Math.floor(diff / 60000);
+                if (mins < 1) return '방금';
+                if (mins < 60) return `${mins}분 전`;
+                const hours = Math.floor(mins / 60);
+                if (hours < 24) return `${hours}시간 전`;
+                const days = Math.floor(hours / 24);
+                return `${days}일 전`;
+              })();
+
+              return (
+                <div key={entry._id} className="bg-white rounded-xl border border-gray-100 px-4 py-3 shadow-sm">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm">{writerEmoji}</span>
+                    <span className="text-sm font-bold text-gray-700">{entry.writerName}</span>
+                    <span className="text-xs text-gray-300 ml-auto">{timeAgo}</span>
+                  </div>
+                  <p className="text-sm text-gray-600 leading-relaxed">{entry.message}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ─── FAB 메뉴 ─── */}
