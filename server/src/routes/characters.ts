@@ -358,7 +358,7 @@ router.post('/me/share-reward', authenticateUser, async (req: Request, res: Resp
     }
 
     await Character.findByIdAndUpdate(character._id, {
-      $inc: { xp: 10 },
+      $inc: { xp: 10, currentXp: 10, totalXp: 10 },
       lastShareDate: today,
     });
 
@@ -608,7 +608,7 @@ router.put('/me/animal', authenticateUser, async (req: Request, res: Response) =
 
     await Character.findByIdAndUpdate(character._id, {
       animalType,
-      $inc: { xp: -COST },
+      $inc: { xp: -COST, currentXp: -COST },
     });
 
     const updated = await Character.findById(character._id);
