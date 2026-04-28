@@ -895,16 +895,15 @@ const showReactionDialogue = useCallback((text: string) => {
       </div>
 
       {/* 걷는 캐릭터 */}
-         <div onClick={handleCharacterTap} className="cursor-pointer">
-        <WalkingCharacter
-          ref={walkingCharRef}
-          animalType={character.animalType}
-          characterSize={characterSize}
-          isPixelArt={PIXEL_ART_ANIMALS.includes(character.animalType)}
-          emoji={emoji}
-          stage={displayStage}
-        />
-      </div>
+      <WalkingCharacter
+        ref={walkingCharRef}
+        animalType={character.animalType}
+        characterSize={characterSize}
+        isPixelArt={PIXEL_ART_ANIMALS.includes(character.animalType)}
+        emoji={emoji}
+        stage={displayStage}
+        onTap={handleCharacterTap}
+      />
 
       {/* 캐릭터 정보 */}
       <div className="flex flex-col items-center justify-center pt-8 pb-4 relative z-10">
