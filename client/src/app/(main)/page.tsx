@@ -916,9 +916,14 @@ useEffect(() => {
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
               });
               const data = await res.json();
-              if (res.ok) {
-                setCharacter(prev => prev ? { ...prev, xp: data.character.xp, evolvedStage: data.character.evolvedStage } : prev);
-                setEvolutionToast(`✨ ${data.character.evolvedStage}단계로 진화!`);
+if (res.ok) {
+  setCharacter(prev => prev ? {
+    ...prev,
+    xp: data.remainingXp ?? prev.xp,
+    evolvedStage: data.evolvedStage ?? prev.evolvedStage,
+    displayStage: null,
+  } : prev);
+  setEvolutionToast(`✨ ${data.evolvedStage}단계로 진화!`);
                 setTimeout(() => setEvolutionToast(''), 3000);
                 setShowEvolution(false);
               } else {
