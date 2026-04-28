@@ -18,7 +18,7 @@ interface Game {
   awayScore?: number;
 }
 
-interface Prediction {
+interface Placement {
   _id: string;
   gameId: string;
   predictedWinner: string;
@@ -26,6 +26,10 @@ interface Prediction {
   battingOrder?: number;
   date: string;
   status: string;
+  isCorrect?: boolean;
+  xpFromPlayer?: number;
+  xpFromPrediction?: number;
+  xpBreakdown?: any;
   result?: {
     netXp?: number;
     winCorrect?: boolean;
@@ -74,7 +78,7 @@ function isGameStartedByTime(game: Game): boolean {
 const todayKST = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 
-const MAX_PLACEMENTS = 1; // 하루 최대 배치 수
+const MAX_PLACEMENTS = 1;
 
 // ─── 컴포넌트 ───
 
@@ -83,7 +87,7 @@ export default function MatchPage() {
   const router = useRouter();
 
   const [games, setGames] = useState<Game[]>([]);
-  const [predictions, setPredictions] = useState<Prediction[]>([]);
+  const [placements, setPlacements] = useState<Placement[]>([]);
   const [character, setCharacter] = useState<CharacterInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -95,7 +99,7 @@ export default function MatchPage() {
   >({});
 
   const [tab, setTab] = useState<'today' | 'history'>('today');
-  const [historyData, setHistoryData] = useState<Prediction[]>([]);
+  const [historyData, setHistoryData] = useState<Placement[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -117,17 +121,17 @@ export default function MatchPage() {
   async function fetchAll() {
     setLoading(true);
     try {
-      const [gamesRes, predsRes, charRes] = await Promise.all([
+      const [gamesRes, placementsRes, charRes] = await Promise.all([
         fetch(`${apiUrl}/api/games?date=${todayKST()}`, { headers }),
-        fetch(`${apiUrl}/api/predictions/today`, { headers }),
+        fetch(`${apiUrl}/api/placements/today`, { headers }),
         fetch(`${apiUrl}/api/characters/me`, { headers }),
       ]);
       if (gamesRes.ok) setGames(await gamesRes.json());
-      if (predsRes.ok) {
-        const preds: Prediction[] = await predsRes.json();
-        setPredictions(preds);
+      if (placementsRes.ok) {
+        const data: Placement[] = await placementsRes.json();
+        setPlacements(data);
         const sel: typeof selections = {};
-        for (const p of preds) {
+        for (const p of data) {
           if (p.team && p.battingOrder) {
             sel[p.gameId] = { team: p.team, battingOrder: p.battingOrder };
           }
@@ -147,7 +151,7 @@ export default function MatchPage() {
   async function fetchHistory() {
     setHistoryLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/api/predictions/history`, {
+      const res = await fetch(`${apiUrl}/api/placements/history`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) setHistoryData(await res.json());
@@ -169,8 +173,8 @@ export default function MatchPage() {
     setTimeout(() => setToast(null), 2500);
   }
 
-  function getPrediction(gameId: string) {
-    return predictions.find((p) => p.gameId === gameId);
+  function getPlacement(gameId: string) {
+    return placements.find((p) => p.gameId === gameId);
   }
 
   function updateSelection(
@@ -200,7 +204,7 @@ export default function MatchPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${apiUrl}/api/predictions`, {
+      const res = await fetch(`${apiUrl}/api/placements`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -226,7 +230,7 @@ export default function MatchPage() {
 
   async function handleCancel(gameId: string) {
     try {
-      const res = await fetch(`${apiUrl}/api/predictions/${gameId}`, {
+      const res = await fetch(`${apiUrl}/api/placements/${gameId}`, {
         method: 'DELETE',
         headers,
       });
@@ -260,7 +264,7 @@ export default function MatchPage() {
   // ─── 계산 ───
 
   const activeGames = games.filter((g) => g.status !== 'cancelled');
-  const placedCount = predictions.filter((p) => p.status === 'active').length;
+  const placedCount = placements.filter((p) => p.status === 'active').length;
   const isMaxPlaced = placedCount >= MAX_PLACEMENTS;
 
   const historySettled = historyData.filter(
@@ -278,7 +282,7 @@ export default function MatchPage() {
       ? Math.round((historyCorrectCount / historySettled.length) * 100)
       : 0;
 
-  const dateGroupMap = new Map<string, Prediction[]>();
+  const dateGroupMap = new Map<string, Placement[]>();
   for (const p of historyData) {
     const arr = dateGroupMap.get(p.date) || [];
     arr.push(p);
@@ -339,7 +343,6 @@ export default function MatchPage() {
             </div>
           </div>
 
-          {/* 배치 완료 안내 */}
           {isMaxPlaced && (
             <div className="bg-orange-50 border border-orange-200 rounded-2xl p-3 mb-4 text-center">
               <p className="text-orange-600 text-sm font-medium">
@@ -358,13 +361,11 @@ export default function MatchPage() {
                 const isCancelled = game.status === 'cancelled';
                 const isExpanded = expandedGame === game.gameId;
                 const isLocked = isGameStartedByTime(game);
-                const pred = getPrediction(game.gameId);
-                const isSettled = pred?.status === 'settled';
-                const hasPrediction = !!pred;
+                const placement = getPlacement(game.gameId);
+                const isSettled = placement?.status === 'settled';
+                const hasPlacement = !!placement;
                 const sel = selections[game.gameId];
-
-                // 이미 다른 경기에 배치했고 이 경기는 배치 안 한 경우
-                const isBlocked = isMaxPlaced && !hasPrediction;
+                const isBlocked = isMaxPlaced && !hasPlacement;
 
                 const homeDisplay = getDisplayName(game.homeTeam as any);
                 const awayDisplay = getDisplayName(game.awayTeam as any);
@@ -375,12 +376,11 @@ export default function MatchPage() {
                     className={`rounded-2xl overflow-hidden shadow-sm ${
                       isCancelled || isBlocked
                         ? 'opacity-50'
-                        : hasPrediction
+                        : hasPlacement
                         ? 'ring-2 ring-orange-400'
                         : ''
                     }`}
                   >
-                    {/* 경기 헤더 */}
                     <div
                       onClick={() => {
                         if (isCancelled || isSettled) return;
@@ -426,61 +426,59 @@ export default function MatchPage() {
                         </span>
                       </div>
 
-                      {/* 정산 완료 결과 */}
-                      {isSettled && pred?.result && (
+                      {isSettled && placement?.result && (
                         <div className="mt-2 pt-2 border-t border-gray-100">
                           <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
                               <span
                                 className={
-                                  pred.result.winCorrect
+                                  placement.result.winCorrect
                                     ? 'text-emerald-500 text-xs font-bold'
                                     : 'text-red-400 text-xs'
                                 }
                               >
-                                {pred.result.winCorrect ? '✅ 적중' : '❌ 실패'}
+                                {placement.result.winCorrect ? '✅ 적중' : '❌ 실패'}
                               </span>
-                              {pred.battingOrder && (
+                              {placement.battingOrder && (
                                 <span className="text-gray-400 text-xs">
-                                  {pred.battingOrder}번 타자
+                                  {placement.battingOrder}번 타자
                                 </span>
                               )}
                             </div>
                             <span
                               className={`text-sm font-bold ${
-                                (pred.result.netXp || 0) >= 0
+                                (placement.result.netXp || 0) >= 0
                                   ? 'text-emerald-500'
                                   : 'text-red-400'
                               }`}
                             >
-                              {(pred.result.netXp || 0) >= 0 ? '+' : ''}
-                              {pred.result.netXp} XP
+                              {(placement.result.netXp || 0) >= 0 ? '+' : ''}
+                              {placement.result.netXp} XP
                             </span>
                           </div>
-                          {pred.result.batterResult?.playerName && (
+                          {placement.result.batterResult?.playerName && (
                             <p className="text-gray-400 text-xs mt-1">
-                              {pred.result.batterResult.playerName}:{' '}
-                              {pred.result.batterResult.atBats}타수{' '}
-                              {pred.result.batterResult.hits}안타
-                              {(pred.result.batterResult.homeRuns || 0) > 0 &&
-                                ` ${pred.result.batterResult.homeRuns}홈런`}
-                              {(pred.result.batterResult.rbi || 0) > 0 &&
-                                ` ${pred.result.batterResult.rbi}타점`}
-                              {(pred.result.batterResult.stolenBases || 0) > 0 &&
-                                ` ${pred.result.batterResult.stolenBases}도루`}
+                              {placement.result.batterResult.playerName}:{' '}
+                              {placement.result.batterResult.atBats}타수{' '}
+                              {placement.result.batterResult.hits}안타
+                              {(placement.result.batterResult.homeRuns || 0) > 0 &&
+                                ` ${placement.result.batterResult.homeRuns}홈런`}
+                              {(placement.result.batterResult.rbi || 0) > 0 &&
+                                ` ${placement.result.batterResult.rbi}타점`}
+                              {(placement.result.batterResult.stolenBases || 0) > 0 &&
+                                ` ${placement.result.batterResult.stolenBases}도루`}
                             </p>
                           )}
                         </div>
                       )}
 
-                      {/* 배치 중 (미정산) */}
-                      {hasPrediction && !isSettled && (
+                      {hasPlacement && !isSettled && (
                         <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between items-center">
                           <span className="text-orange-500 text-xs">
                             {getDisplayName(
-                              (pred!.team as any) || (pred!.predictedWinner as any)
+                              (placement!.team as any) || (placement!.predictedWinner as any)
                             )}{' '}
-                            {pred!.battingOrder}번 타자 배치
+                            {placement!.battingOrder}번 타자 배치
                           </span>
                           {!isLocked && (
                             <button
@@ -497,14 +495,12 @@ export default function MatchPage() {
                       )}
                     </div>
 
-                    {/* ===== 배치 UI (확장) ===== */}
                     {isExpanded &&
                       !isCancelled &&
                       !isSettled &&
                       !isLocked &&
                       !isBlocked && (
                         <div className="bg-white border-t border-gray-100 p-4 space-y-4">
-                          {/* 팀 선택 */}
                           <div>
                             <p className="text-gray-400 text-xs mb-2">
                               응원할 팀을 선택하세요
@@ -531,7 +527,6 @@ export default function MatchPage() {
                             </div>
                           </div>
 
-                          {/* 타순 선택 */}
                           {sel?.team && (
                             <div>
                               <p className="text-gray-400 text-xs mb-2">
@@ -563,7 +558,6 @@ export default function MatchPage() {
                             </div>
                           )}
 
-                          {/* 제출 버튼 */}
                           <button
                             onClick={() => handleSubmit(game.gameId)}
                             disabled={
@@ -573,7 +567,7 @@ export default function MatchPage() {
                           >
                             {submitting
                               ? '처리 중...'
-                              : hasPrediction
+                              : hasPlacement
                               ? '배치 수정'
                               : '배치 확정'}
                           </button>
@@ -632,11 +626,11 @@ export default function MatchPage() {
                 </button>
               </div>
             ) : (
-              dateGroups.map(([date, preds]) => {
+              dateGroups.map(([date, pls]) => {
                 const isOpen =
                   expandedDate === date ||
                   (expandedDate === null && date === dateGroups[0]?.[0]);
-                const settled = preds.filter(
+                const settled = pls.filter(
                   (p) => p.status === 'settled' && p.result
                 );
                 const netXp = settled.reduce(
@@ -697,7 +691,7 @@ export default function MatchPage() {
 
                     {isOpen && (
                       <div className="border-t border-gray-50 px-3 pb-3 space-y-2">
-                        {preds.map((p) => {
+                        {pls.map((p) => {
                           const pSettled = p.status === 'settled';
                           const pNetXp = p.result?.netXp || 0;
                           const isDetail = expandedId === p._id;
