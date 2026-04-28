@@ -191,8 +191,15 @@ export default function MainPage() {
   const [shareLoading, setShareLoading] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
   
-  /* 방명록 */
-  const [guestbookEntries, setGuestbookEntries] = useState<any[]>([]);
+ /* 방명록 */
+const [guestbookEntries, setGuestbookEntries] = useState<any[]>([]);
+
+/* 캐릭터 대사 */
+const [dialogue, setDialogue] = useState<{ name: string; text: string } | null>(null);
+const dialogueTimer = useRef<NodeJS.Timeout | null>(null);
+const lastDialogue = useRef<string>('');
+const tapCount = useRef<number>(0);
+const tapResetTimer = useRef<NodeJS.Timeout | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
@@ -427,6 +434,122 @@ useEffect(() => {
     checkUnclaimed();
   }, [character?._id, token]);
 
+  /* ─── 캐릭터 대사 시스템 ─── */
+const showDialogue = useCallback((text: string) => {
+  if (dialogueTimer.current) clearTimeout(dialogueTimer.current);
+  setDialogue(character ? { name: character.name, text } : null);
+  lastDialogue.current = text;
+  dialogueTimer.current = setTimeout(() => setDialogue(null), 3000);
+}, [character]);
+
+const getContextDialogue = useCallback((): string => {
+  if (!character) return '';
+
+  const streak = character.streak ?? 0;
+  const xp = character.totalXp ?? character.xp ?? 0;
+  const hour = new Date(Date.now() + 9 * 3600 * 1000).getUTCHours();
+
+  const pool: string[] = [];
+
+  // 시간대
+  if (hour >= 6 && hour < 12) {
+    pool.push('좋은 아침! 오늘 경기 기대된다~', '으아~ 아직 졸려...', '아침부터 접속하다니 부지런하네!');
+  } else if (hour >= 12 && hour < 18) {
+    pool.push('오후 경기 시작이다! 집중!', '점심 먹었어? 나도 배고파...', '낮 경기도 좋더라~');
+  } else if (hour >= 18 && hour < 23) {
+    pool.push('야구는 역시 밤이지!', '오늘 경기 결과 어떨까~', '치킨 시켜놓고 야구 보자!');
+  } else {
+    pool.push('이 시간에도 오다니... 진심이구나!', '잠은 자야지... 내일도 경기 있어!', '야행성이야? 나도!');
+  }
+
+  // 밥 상태
+  if (!selfFed) {
+    pool.push('배고파... 밥 좀 줘! 🍖', '꼬르륵... 밥 안 줄 거야?', '밥 주면 기분 좋아질 텐데~');
+  } else {
+    pool.push('밥 맛있었어! 고마워~', '배부르다~ 행복해!');
+  }
+
+  // 스트릭
+  if (streak >= 30) {
+    pool.push(`${streak}일 연속이라니... 레전드야!`, '우리 같이 전설 찍자!');
+  } else if (streak >= 7) {
+    pool.push(`${streak}일째! 이 기세 유지하자!`, '매일 와줘서 고마워!');
+  } else if (streak >= 3) {
+    pool.push(`${streak}일 연속이야! 좋은 흐름~`);
+  }
+
+  // XP 구간
+  if (xp >= 10000) {
+    pool.push('신화 등급... 우리 정말 멀리 왔다!', '정상이 보여!');
+  } else if (xp >= 3000) {
+    pool.push('전설의 영역이야!', '여기까지 오다니 대단해!');
+  } else if (xp >= 1000) {
+    pool.push('많이 성장했다! 계속 가보자!', '슬슬 강해지는 느낌!');
+  } else if (xp < 100) {
+    pool.push('아직 시작이야! 같이 성장하자!', '매일 배치하면 금방 커!');
+  }
+
+  // 방명록
+  if (guestbookEntries.length > 0) {
+    pool.push('누가 방명록 남겼어! 확인해봐~', '방명록에 새 글이 있는 것 같은데?');
+  }
+
+  // 일반
+  pool.push(
+    '오늘 누가 홈런 칠까~', '야구는 9회말 2아웃부터야!',
+    '나 좀 귀엽지 않아? 😏', '다른 친구들 프로필도 구경해봐!',
+    '업적 모으는 거 재밌지 않아?', '오늘 예측 자신 있어?',
+    '같이 1등 하자!', '헤헤~ 심심했는데 잘 왔어!',
+    '오늘 컨디션 최고야!', '나 많이 컸지?',
+  );
+
+  // 중복 방지
+  const filtered = pool.filter(t => t !== lastDialogue.current);
+  return filtered[Math.floor(Math.random() * filtered.length)] || pool[0];
+}, [character, selfFed, guestbookEntries]);
+
+const handleCharacterTap = useCallback(() => {
+  if (!character || harvestMode) return;
+
+  // 연속 탭 감지
+  tapCount.current += 1;
+  if (tapResetTimer.current) clearTimeout(tapResetTimer.current);
+  tapResetTimer.current = setTimeout(() => { tapCount.current = 0; }, 2000);
+
+  let text: string;
+  const taps = tapCount.current;
+
+  if (taps >= 10) {
+    const rage = [
+      '그만 눌러!!! 😡', '아파!!! 진짜 그만!!!',
+      '... 나 화났어', '신고한다?',
+    ];
+    text = rage[Math.floor(Math.random() * rage.length)];
+  } else if (taps >= 7) {
+    const annoyed = [
+      '야!! 그만 좀 눌러!! 😤', '진짜 계속 누를 거야?!',
+      '아프다고!! 😠', '너 이거 재밌어...?',
+    ];
+    text = annoyed[Math.floor(Math.random() * annoyed.length)];
+  } else if (taps >= 4) {
+    const bothered = [
+      '왜 자꾸 눌러... 😑', '슬슬 짜증나는데?',
+      '할 일 없어...?', '그만 좀...!',
+    ];
+    text = bothered[Math.floor(Math.random() * bothered.length)];
+  } else {
+    text = getContextDialogue();
+  }
+
+  showDialogue(text);
+}, [character, harvestMode, getContextDialogue, showDialogue]);
+
+// 반응형 대사 (외부에서 호출)
+const showReactionDialogue = useCallback((text: string) => {
+  if (!character) return;
+  showDialogue(text);
+}, [character, showDialogue]);
+
   /* ─── 핸들러: 밥주기 ─── */
   const handleSelfFeed = async () => {
     if (!character || !token || selfFed) return;
@@ -442,10 +565,14 @@ useEffect(() => {
         setTimeout(() => setFeedAnimation(false), 1800);
         setCharacter((prev) => prev ? { ...prev, xp: data.theirXp, totalFeeds: data.totalFeeds } : prev);
         setFeedToast('🍖 냠냠! +3 XP');
+                showReactionDialogue('냠냠! 맛있어~! 고마워! 😋');
+
         setTimeout(() => setFeedToast(''), 2500);
       } else {
         if (data.code === 'alreadyFed') setSelfFed(true);
         setFeedToast(data.error || '밥주기 실패');
+                showReactionDialogue('어... 뭔가 잘못됐어 😢');
+
         setTimeout(() => setFeedToast(''), 2500);
       }
     } catch (e) {
@@ -767,14 +894,16 @@ useEffect(() => {
       </div>
 
       {/* 걷는 캐릭터 */}
-      <WalkingCharacter
-        ref={walkingCharRef}
-        animalType={character.animalType}
-        characterSize={characterSize}
-        isPixelArt={PIXEL_ART_ANIMALS.includes(character.animalType)}
-        emoji={emoji}
-        stage={displayStage}
-      />
+         <div onClick={handleCharacterTap} className="cursor-pointer">
+        <WalkingCharacter
+          ref={walkingCharRef}
+          animalType={character.animalType}
+          characterSize={characterSize}
+          isPixelArt={PIXEL_ART_ANIMALS.includes(character.animalType)}
+          emoji={emoji}
+          stage={displayStage}
+        />
+      </div>
 
       {/* 캐릭터 정보 */}
       <div className="flex flex-col items-center justify-center pt-8 pb-4 relative z-10">
@@ -864,11 +993,24 @@ useEffect(() => {
           </div>
         )}
       </div>
+      
+      {/* ─── 캐릭터 대사 ─── */}
+      {dialogue && (
+        <div
+          className="fixed bottom-20 left-4 right-4 z-30 animate-fadeIn cursor-pointer"
+          onClick={() => { if (dialogueTimer.current) clearTimeout(dialogueTimer.current); setDialogue(null); }}
+        >
+          <div className="bg-white/95 backdrop-blur rounded-2xl border border-orange-200 shadow-lg px-4 py-3" style={{ minHeight: '84px' }}>
+            <p className="text-xs font-bold text-orange-500 mb-1">{dialogue.name}</p>
+            <p className="text-sm text-gray-700 leading-relaxed">{dialogue.text}</p>
+          </div>
+        </div>
+      )}
 
       {/* ─── FAB 메뉴 ─── */}
-      <div className="fixed bottom-24 right-4 z-50">
+      <div className="fixed top-14 right-4 z-50">
         {menuOpen && (
-          <div className="absolute bottom-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-2">
+          <div className="absolute top-16 right-0 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mt-2">
             <button onClick={handlePushSetup} disabled={pushStatus === 'loading'} className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 border-b border-gray-50 ${pushStatus === 'denied' ? 'text-red-400' : 'text-gray-700'}`}>
               {pushStatus === 'granted' ? '✅ 알림 설정됨' : pushStatus === 'loading' ? '⏳ 설정 중...' : pushStatus === 'denied' ? '🔕 알림 차단됨' : '🔔 알림 설정'}
             </button>
@@ -1025,6 +1167,8 @@ if (res.ok) {
         @keyframes feedFly0 { 0% { top: 20%; opacity: 1; } 100% { top: 50%; opacity: 0; transform: scale(0.3); } }
         @keyframes feedFly1 { 0% { top: 15%; opacity: 1; } 100% { top: 50%; opacity: 0; transform: scale(0.3); } }
         @keyframes feedFly2 { 0% { top: 25%; opacity: 1; } 100% { top: 50%; opacity: 0; transform: scale(0.3); } }
+        @keyframes fadeIn { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
         @keyframes nomnom { 0% { opacity: 0; transform: translate(-50%, 0) scale(0.5); } 30% { opacity: 1; transform: translate(-50%, 0) scale(1.2); } 100% { opacity: 0; transform: translate(-50%, -30px) scale(0.8); } }
         @keyframes orbFloat { 0%, 100% { transform: translate(-50%, -50%) translateY(0); } 50% { transform: translate(-50%, -50%) translateY(-10px); } }
         @keyframes twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
