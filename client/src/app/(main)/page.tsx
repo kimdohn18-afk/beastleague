@@ -824,7 +824,6 @@ useEffect(() => {
         >
           {selfFed ? '🍖 오늘 밥 완료!' : '🍖 밥주기 (+3 XP)'}
         </button>
-              </button>
       </div>    {/* ← 캐릭터 정보 flex div 닫기 */}
 
       {/* ─── 방명록 ─── */}
