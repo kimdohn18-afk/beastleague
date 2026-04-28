@@ -824,8 +824,8 @@ useEffect(() => {
         >
           {selfFed ? '🍖 오늘 밥 완료!' : '🍖 밥주기 (+3 XP)'}
         </button>
-      </div>    {/* ← 캐릭터 정보 flex div 닫기 */}
-
+      </div>  
+      
       {/* ─── 방명록 ─── */}
       <div className="mx-4 mt-6 relative z-10">
         <div className="flex items-center justify-between mb-3">
