@@ -295,18 +295,7 @@ export default function PublicProfilePage() {
         emoji={emoji}
       />
 
-      <div className="flex flex-col items-center pt-10 pb-6">
-        {(() => {
-          const evo = getEvolutionStage(character.xp);
-          return (
-            <div className="flex items-center gap-2 mb-1 justify-center">
-              <span className="text-lg">{evo.badge}</span>
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${evo.bgColor} ${evo.color}`}>
-                {evo.stage}단계 · {evo.name}
-              </span>
-            </div>
-          );
-        })()}
+      <div className="flex flex-col items-center pt-10 pb-6">        
         <h2 className="text-xl font-bold text-gray-800 mt-4">{character.name}</h2>
         <p className="text-sm text-gray-400 mt-1">{animalName} · {character.xp.toLocaleString()} XP</p>
         {character.streak > 0 && <p className="text-xs text-orange-400 mt-1">🔥 {character.streak}일 연속</p>}
@@ -387,9 +376,9 @@ export default function PublicProfilePage() {
                   </div>
                 )}
 
-                <div className="space-y-1.5">
+                                <div className="space-y-1.5">
                   <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                    <span className="text-xs text-gray-400">배치 팀</span>
+                    <span className="text-xs text-gray-400">응원 팀</span>
                     <span className="text-sm font-bold">{getDisplayName(todayPlacement.team as any)}</span>
                   </div>
 
@@ -404,11 +393,6 @@ export default function PublicProfilePage() {
                       <span className="text-sm font-bold text-blue-600">{todayPlacement.playerName}</span>
                     </div>
                   )}
-
-                  <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                    <span className="text-xs text-gray-400">승리 예측</span>
-                    <span className="text-sm font-bold">{getDisplayName(todayPlacement.predictedWinner as any)}</span>
-                  </div>
                 </div>
 
                 {todayPlacement.status === 'settled' && (
