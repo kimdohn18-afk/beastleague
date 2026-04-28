@@ -105,7 +105,6 @@ function getEvolutionStage(xp: number) {
   return current;
 }
 
-
 /* ───── POST / — 캐릭터 생성 ───── */
 router.post('/', authenticateUser, async (req: Request, res: Response) => {
   try {
@@ -233,13 +232,10 @@ router.get('/me/achievements', authenticateUser, async (req: Request, res: Respo
       earned: earnedSet.has(a.id),
     }));
 
-    // ── 팀 충성도 계산 ──
     const teamAchievements = await getTeamAchievements(userId);
 
-    // ── activeTrait 해석 (일반 업적 or 팀 업적) ──
     let activeTrait = result.activeTrait;
     if (!activeTrait && character.activeTrait) {
-      // 팀 ID로 설정된 경우
       const teamInfo = ALL_TEAMS[character.activeTrait];
       const teamAch = teamAchievements.find(ta => ta.teamId === character.activeTrait);
       if (teamInfo && teamAch) {
@@ -276,16 +272,13 @@ router.put('/me/active-trait', authenticateUser, async (req: Request, res: Respo
       return res.status(404).json({ error: '캐릭터가 없습니다' });
     }
 
-    // 해제
     if (traitId === null || traitId === undefined) {
       await Character.findByIdAndUpdate(character._id, { activeTrait: null });
       return res.json({ activeTrait: null });
     }
 
-    // 일반 업적 검증
     const earnedGeneral = (character.earnedAchievements || []).includes(traitId);
 
-    // 팀 업적 검증 — 클라이언트는 teamId("samsung" 등)를 보냄
     let earnedTeam = false;
     if (!earnedGeneral && ALL_TEAMS[traitId]) {
       const teamAchievements = await getTeamAchievements(userId);
@@ -331,7 +324,7 @@ router.post('/me/share-reward', authenticateUser, async (req: Request, res: Resp
   }
 });
 
-/* ───── GET /me/unclaimed-xp — 미수확 XP (어제 정산 결과) ───── */
+/* ───── GET /me/unclaimed-xp — 미수확 XP ───── */
 router.get('/me/unclaimed-xp', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -542,13 +535,7 @@ router.put('/me/animal', authenticateUser, async (req: Request, res: Response) =
     const userId = req.user!.userId;
     const { animalType } = req.body;
 
-    const ALL_ANIMALS = [
-      'turtle', 'eagle', 'lion', 'dinosaur', 'dog',
-      'fox', 'penguin', 'shark', 'bear', 'tiger',
-      'seagull', 'dragon', 'cat', 'rabbit', 'gorilla', 'elephant',
-    ];
-
-    if (!animalType || !ALL_ANIMALS.includes(animalType)) {
+    if (!animalType || !VALID_ANIMALS.includes(animalType)) {
       return res.status(400).json({ error: '유효하지 않은 동물 타입입니다' });
     }
 
@@ -591,7 +578,6 @@ router.put('/me/animal', authenticateUser, async (req: Request, res: Response) =
   }
 });
 
-
 /* ───── GET /:id/public — 공개 프로필 ───── */
 router.get('/:id/public', async (req: Request, res: Response) => {
   try {
@@ -610,7 +596,6 @@ router.get('/:id/public', async (req: Request, res: Response) => {
 
     const today = todayKST();
 
-    /* ── 오늘의 배치 ── */
     const todayPlacement = await Placement.findOne({
       userId: character.userId,
       date: today,
@@ -655,7 +640,6 @@ router.get('/:id/public', async (req: Request, res: Response) => {
       };
     }
 
-    /* ── 오늘의 방명록 ── */
     const guestBookEntries = await GuestBook.find({
       toCharacterId: id,
       date: today,
@@ -700,11 +684,9 @@ router.post('/:id/guestbook', authenticateUser, async (req: Request, res: Respon
     if (!mongoose.Types.ObjectId.isValid(targetId)) {
       return res.status(400).json({ error: '잘못된 ID입니다' });
     }
-
     if (!message || message.trim().length === 0) {
       return res.status(400).json({ error: '메시지를 입력해주세요' });
     }
-
     if (message.length > 100) {
       return res.status(400).json({ error: '메시지는 100자 이내로 입력해주세요' });
     }
@@ -719,11 +701,7 @@ router.post('/:id/guestbook', authenticateUser, async (req: Request, res: Respon
       return res.status(400).json({ error: '캐릭터가 없습니다' });
     }
 
-    const existing = await GuestBook.findOne({
-      toCharacterId: targetId,
-      fromUserId: userId,
-      date: today,
-    });
+    const existing = await GuestBook.findOne({ toCharacterId: targetId, fromUserId: userId, date: today });
     if (existing) {
       return res.status(400).json({ error: '오늘 이미 방명록을 남겼어요', code: 'alreadyWritten' });
     }
@@ -753,29 +731,18 @@ router.post('/:id/guestbook', authenticateUser, async (req: Request, res: Respon
   }
 });
 
-/* ───── DELETE /:id/guestbook/:entryId — 방명록 삭제 ───── */
+/* ───── DELETE /:id/guestbook/:entryId ───── */
 router.delete('/:id/guestbook/:entryId', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { id: targetId, entryId } = req.params;
 
     const character = await Character.findById(targetId);
-    if (!character) {
-      return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
-    }
+    if (!character) return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
+    if (String(character.userId) !== userId) return res.status(403).json({ error: '프로필 주인만 삭제할 수 있습니다' });
 
-    if (String(character.userId) !== userId) {
-      return res.status(403).json({ error: '프로필 주인만 삭제할 수 있습니다' });
-    }
-
-    const entry = await GuestBook.findOneAndDelete({
-      _id: entryId,
-      toCharacterId: targetId,
-    });
-
-    if (!entry) {
-      return res.status(404).json({ error: '방명록을 찾을 수 없습니다' });
-    }
+    const entry = await GuestBook.findOneAndDelete({ _id: entryId, toCharacterId: targetId });
+    if (!entry) return res.status(404).json({ error: '방명록을 찾을 수 없습니다' });
 
     res.json({ deleted: true });
   } catch (err) {
@@ -784,34 +751,21 @@ router.delete('/:id/guestbook/:entryId', authenticateUser, async (req: Request, 
   }
 });
 
-/* ───── POST /:id/like — 좋아요 ───── */
+/* ───── POST /:id/like ───── */
 router.post('/:id/like', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const targetId = req.params.id;
     const today = todayKST();
 
-    if (!mongoose.Types.ObjectId.isValid(targetId)) {
-      return res.status(400).json({ error: '잘못된 ID입니다' });
-    }
+    if (!mongoose.Types.ObjectId.isValid(targetId)) return res.status(400).json({ error: '잘못된 ID입니다' });
 
     const targetChar = await Character.findById(targetId);
-    if (!targetChar) {
-      return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
-    }
+    if (!targetChar) return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
+    if (String(targetChar.userId) === userId) return res.status(400).json({ error: '자신에게는 좋아요를 할 수 없습니다' });
 
-    if (String(targetChar.userId) === userId) {
-      return res.status(400).json({ error: '자신에게는 좋아요를 할 수 없습니다' });
-    }
-
-    const alreadyLiked = await Like.findOne({
-      fromUserId: userId,
-      toCharacterId: targetId,
-      date: today,
-    });
-    if (alreadyLiked) {
-      return res.status(400).json({ error: '오늘 이미 좋아요를 눌렀어요', code: 'alreadyLiked' });
-    }
+    const alreadyLiked = await Like.findOne({ fromUserId: userId, toCharacterId: targetId, date: today });
+    if (alreadyLiked) return res.status(400).json({ error: '오늘 이미 좋아요를 눌렀어요', code: 'alreadyLiked' });
 
     await Like.create({ fromUserId: userId, toCharacterId: targetId, date: today });
     await Character.findByIdAndUpdate(targetId, { $inc: { totalLikes: 1 } });
@@ -824,19 +778,12 @@ router.post('/:id/like', authenticateUser, async (req: Request, res: Response) =
   }
 });
 
-/* ───── GET /:id/like-status — 좋아요 상태 ───── */
+/* ───── GET /:id/like-status ───── */
 router.get('/:id/like-status', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const targetId = req.params.id;
     const today = todayKST();
-
-    const liked = await Like.findOne({
-      fromUserId: userId,
-      toCharacterId: targetId,
-      date: today,
-    });
-
+    const liked = await Like.findOne({ fromUserId: userId, toCharacterId: req.params.id, date: today });
     res.json({ liked: !!liked });
   } catch (err) {
     console.error('Like status error:', err);
@@ -844,76 +791,41 @@ router.get('/:id/like-status', authenticateUser, async (req: Request, res: Respo
   }
 });
 
-/* ───── POST /:id/feed — 밥주기 ───── */
+/* ───── POST /:id/feed ───── */
 router.post('/:id/feed', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const targetId = req.params.id;
     const today = todayKST();
 
-    if (!mongoose.Types.ObjectId.isValid(targetId)) {
-      return res.status(400).json({ error: '잘못된 ID입니다' });
-    }
+    if (!mongoose.Types.ObjectId.isValid(targetId)) return res.status(400).json({ error: '잘못된 ID입니다' });
 
     const myChar = await Character.findOne({ userId });
-    if (!myChar) {
-      return res.status(404).json({ error: '내 캐릭터가 없습니다' });
-    }
+    if (!myChar) return res.status(404).json({ error: '내 캐릭터가 없습니다' });
 
     const targetChar = await Character.findById(targetId);
-    if (!targetChar) {
-      return res.status(404).json({ error: '대상 캐릭터를 찾을 수 없습니다' });
-    }
+    if (!targetChar) return res.status(404).json({ error: '대상 캐릭터를 찾을 수 없습니다' });
 
     const isSelf = String(myChar._id) === String(targetChar._id);
     const xpCost = isSelf ? 0 : 5;
     const xpGiven = 3;
 
-    if (!isSelf && myChar.xp < xpCost) {
-      return res.status(400).json({ error: 'XP가 부족합니다 (5 XP 필요)' });
-    }
+    if (!isSelf && myChar.xp < xpCost) return res.status(400).json({ error: 'XP가 부족합니다 (5 XP 필요)' });
 
-    const alreadyFed = await Feed.findOne({
-      fromUserId: userId,
-      toCharacterId: targetChar._id,
-      date: today,
-    });
-    if (alreadyFed) {
-      return res.status(400).json({ error: '오늘 이미 밥을 줬어요', code: 'alreadyFed' });
-    }
+    const alreadyFed = await Feed.findOne({ fromUserId: userId, toCharacterId: targetChar._id, date: today });
+    if (alreadyFed) return res.status(400).json({ error: '오늘 이미 밥을 줬어요', code: 'alreadyFed' });
 
     let remainingFeeds = 3;
     if (!isSelf) {
-      const todayFeedCount = await Feed.countDocuments({
-        fromUserId: userId,
-        date: today,
-        isSelf: false,
-      });
-      if (todayFeedCount >= 3) {
-        return res.status(400).json({
-          error: '오늘 밥주기 횟수를 모두 사용했어요 (3회)',
-          code: 'limitReached',
-        });
-      }
+      const todayFeedCount = await Feed.countDocuments({ fromUserId: userId, date: today, isSelf: false });
+      if (todayFeedCount >= 3) return res.status(400).json({ error: '오늘 밥주기 횟수를 모두 사용했어요 (3회)', code: 'limitReached' });
       remainingFeeds = 3 - todayFeedCount - 1;
     }
 
-    await Feed.create({
-      fromUserId: userId,
-      toCharacterId: targetChar._id,
-      date: today,
-      xpCost,
-      xpGiven,
-      isSelf,
-    });
+    await Feed.create({ fromUserId: userId, toCharacterId: targetChar._id, date: today, xpCost, xpGiven, isSelf });
 
-    if (!isSelf) {
-      await Character.findByIdAndUpdate(myChar._id, { $inc: { xp: -xpCost } });
-    }
-
-    await Character.findByIdAndUpdate(targetChar._id, {
-      $inc: { xp: xpGiven, totalFeeds: 1 },
-    });
+    if (!isSelf) await Character.findByIdAndUpdate(myChar._id, { $inc: { xp: -xpCost } });
+    await Character.findByIdAndUpdate(targetChar._id, { $inc: { xp: xpGiven, totalFeeds: 1 } });
 
     const updatedMyChar = await Character.findById(myChar._id);
     const updatedTarget = await Character.findById(targetChar._id);
@@ -934,29 +846,16 @@ router.post('/:id/feed', authenticateUser, async (req: Request, res: Response) =
   }
 });
 
-/* ───── GET /:id/feed-status — 밥주기 상태 확인 ───── */
+/* ───── GET /:id/feed-status ───── */
 router.get('/:id/feed-status', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const targetId = req.params.id;
     const today = todayKST();
 
-    const fed = await Feed.findOne({
-      fromUserId: userId,
-      toCharacterId: targetId,
-      date: today,
-    });
+    const fed = await Feed.findOne({ fromUserId: userId, toCharacterId: req.params.id, date: today });
+    const todayFeedCount = await Feed.countDocuments({ fromUserId: userId, date: today, isSelf: false });
 
-    const todayFeedCount = await Feed.countDocuments({
-      fromUserId: userId,
-      date: today,
-      isSelf: false,
-    });
-
-    res.json({
-      fed: !!fed,
-      remainingFeeds: Math.max(0, 3 - todayFeedCount),
-    });
+    res.json({ fed: !!fed, remainingFeeds: Math.max(0, 3 - todayFeedCount) });
   } catch (err) {
     console.error('Feed status error:', err);
     res.status(500).json({ error: '상태 확인 실패' });
