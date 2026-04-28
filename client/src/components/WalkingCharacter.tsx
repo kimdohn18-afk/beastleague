@@ -12,6 +12,7 @@ interface WalkingCharacterProps {
   isPixelArt: boolean;
   emoji: string;
    stage?: number;
+    onTap?: () => void;
 }
 
 type Direction = 'left' | 'right';
@@ -23,6 +24,7 @@ const WalkingCharacter = forwardRef<WalkingCharacterHandle, WalkingCharacterProp
   isPixelArt,
   emoji,
   stage = 1,
+  onTap, 
 }, ref) {
   const [displaySize, setDisplaySize] = useState(60);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -323,6 +325,7 @@ const WalkingCharacter = forwardRef<WalkingCharacterHandle, WalkingCharacterProp
   // ──────────── 캐릭터 클릭 → 클릭 위치로 이동 ────────────
   const handleTap = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
+    if (onTap) onTap(); 
     if (timerRef.current) clearTimeout(timerRef.current);
 
     stateRef.current = 'jump';
