@@ -297,3 +297,32 @@ placementsRouter.post('/tutorial', authenticateUser, async (req: Request, res: R
     return res.status(500).json({ error: String(err) });
   }
 });
+
+// DELETE /api/placements/:gameId — 배치 취소
+placementsRouter.delete('/:gameId', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { gameId } = req.params;
+    const today = todayKST();
+
+    const placement = await Placement.findOne({ userId, gameId, date: today });
+    if (!placement) {
+      return res.status(404).json({ error: '배치를 찾을 수 없습니다' });
+    }
+
+    if (placement.status === 'settled') {
+      return res.status(400).json({ error: '이미 정산된 배치는 취소할 수 없습니다' });
+    }
+
+    const game = await Game.findOne({ gameId });
+    if (game && isGameStarted(game)) {
+      return res.status(400).json({ error: '이미 시작된 경기의 배치는 취소할 수 없습니다' });
+    }
+
+    await Placement.findByIdAndDelete(placement._id);
+
+    return res.json({ message: '배치가 취소되었습니다' });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
