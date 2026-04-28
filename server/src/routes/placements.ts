@@ -275,6 +275,8 @@ placementsRouter.post('/tutorial', authenticateUser, async (req: Request, res: R
 
     const TUTORIAL_XP = 15;
     character.xp = (character.xp || 0) + TUTORIAL_XP;
+    character.totalXp = (character.totalXp || 0) + TUTORIAL_XP;
+    character.currentXp = (character.currentXp || 0) + TUTORIAL_XP;
     character.totalPlacements = (character.totalPlacements || 0) + 1;
     character.tutorialCompleted = true;
     await character.save();
