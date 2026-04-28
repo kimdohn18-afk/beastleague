@@ -10,6 +10,7 @@ import { GuestBook } from '../models/GuestBook';
 import {
   calculateAchievements,
   getAllAchievements,
+  getAchievementById,
 } from '../services/TraitCalculator';
 
 const router = Router();
@@ -19,6 +20,62 @@ const VALID_ANIMALS = [
   'fox', 'penguin', 'shark', 'bear', 'tiger',
   'seagull', 'dragon', 'cat', 'rabbit', 'gorilla', 'elephant',
 ];
+
+// ━━━ 팀 & 티어 상수 ━━━
+const ALL_TEAMS: Record<string, { name: string; emoji: string }> = {
+  samsung: { name: '삼성 라이온즈', emoji: '🦁' },
+  kia:     { name: '기아 타이거즈', emoji: '🐯' },
+  lg:      { name: 'LG 트윈스',    emoji: '🤞' },
+  doosan:  { name: '두산 베어스',   emoji: '🐻' },
+  kt:      { name: 'KT 위즈',      emoji: '🧙' },
+  ssg:     { name: 'SSG 랜더스',    emoji: '🛬' },
+  lotte:   { name: '롯데 자이언츠', emoji: '🦅' },
+  hanwha:  { name: '한화 이글스',   emoji: '🦅' },
+  nc:      { name: 'NC 다이노스',   emoji: '🦕' },
+  kiwoom:  { name: '키움 히어로즈', emoji: '🦸' },
+};
+
+const TEAM_TIERS = [
+  { tier: 'diamond', minCount: 30, emoji: '💎', label: '다이아' },
+  { tier: 'gold',    minCount: 15, emoji: '🥇', label: '금' },
+  { tier: 'silver',  minCount: 5,  emoji: '🥈', label: '은' },
+  { tier: 'bronze',  minCount: 1,  emoji: '🥉', label: '동' },
+];
+
+// ━━━ 팀 충성도 계산 헬퍼 ━━━
+async function getTeamAchievements(userId: string) {
+  const teamCounts = await Placement.aggregate([
+    { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+    { $group: { _id: '$team', count: { $sum: 1 } } },
+  ]);
+
+  const results = [];
+  for (const tc of teamCounts) {
+    const teamId = tc._id;
+    const count = tc.count;
+    const teamInfo = ALL_TEAMS[teamId];
+    if (!teamInfo) continue;
+
+    let achievedTier = null;
+    for (const t of TEAM_TIERS) {
+      if (count >= t.minCount) {
+        achievedTier = t;
+        break;
+      }
+    }
+
+    if (achievedTier) {
+      results.push({
+        teamId,
+        teamName: teamInfo.name,
+        teamEmoji: teamInfo.emoji,
+        tier: achievedTier,
+        count,
+      });
+    }
+  }
+  return results;
+}
 
 function todayKST(): string {
   const now = new Date();
@@ -153,7 +210,7 @@ router.get('/achievements/all', async (_req: Request, res: Response) => {
   }
 });
 
-/* ───── GET /me/achievements — 내 업적 ───── */
+/* ───── GET /me/achievements — 내 업적 (팀 충성도 포함) ───── */
 router.get('/me/achievements', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -176,11 +233,31 @@ router.get('/me/achievements', authenticateUser, async (req: Request, res: Respo
       earned: earnedSet.has(a.id),
     }));
 
+    // ── 팀 충성도 계산 ──
+    const teamAchievements = await getTeamAchievements(userId);
+
+    // ── activeTrait 해석 (일반 업적 or 팀 업적) ──
+    let activeTrait = result.activeTrait;
+    if (!activeTrait && character.activeTrait) {
+      // 팀 ID로 설정된 경우
+      const teamInfo = ALL_TEAMS[character.activeTrait];
+      const teamAch = teamAchievements.find(ta => ta.teamId === character.activeTrait);
+      if (teamInfo && teamAch) {
+        activeTrait = {
+          id: character.activeTrait,
+          emoji: teamInfo.emoji,
+          name: `${teamInfo.name} ${teamAch.tier.label}`,
+          description: `${teamInfo.name} ${teamAch.count}회 배치 달성`,
+        };
+      }
+    }
+
     res.json({
-      activeTrait: result.activeTrait,
+      activeTrait,
       earnedCount: result.earnedCount,
       totalCount: allAchievements.length,
       achievements,
+      teamAchievements,
     });
   } catch (err) {
     console.error('My achievements error:', err);
@@ -199,15 +276,21 @@ router.put('/me/active-trait', authenticateUser, async (req: Request, res: Respo
       return res.status(404).json({ error: '캐릭터가 없습니다' });
     }
 
+    // 해제
     if (traitId === null || traitId === undefined) {
       await Character.findByIdAndUpdate(character._id, { activeTrait: null });
       return res.json({ activeTrait: null });
     }
 
+    // 일반 업적 검증
     const earnedGeneral = (character.earnedAchievements || []).includes(traitId);
-    const earnedTeam = (character.teamAchievements || []).some(
-      (ta: any) => `team_${ta.teamId}_${ta.tier}` === traitId,
-    );
+
+    // 팀 업적 검증 — 클라이언트는 teamId("samsung" 등)를 보냄
+    let earnedTeam = false;
+    if (!earnedGeneral && ALL_TEAMS[traitId]) {
+      const teamAchievements = await getTeamAchievements(userId);
+      earnedTeam = teamAchievements.some(ta => ta.teamId === traitId);
+    }
 
     if (!earnedGeneral && !earnedTeam) {
       return res.status(400).json({ error: '획득하지 않은 업적은 설정할 수 없습니다' });
@@ -278,15 +361,15 @@ router.get('/me/unclaimed-xp', authenticateUser, async (req: Request, res: Respo
     const orbs: Array<{ label: string; emoji: string; xp: number }> = [];
 
     if (breakdown) {
-      if (breakdown.hits > 0)           orbs.push({ label: '안타', emoji: '⚾', xp: breakdown.hits });
-      if (breakdown.double > 0)         orbs.push({ label: '2루타', emoji: '💫', xp: breakdown.double });
-      if (breakdown.triple > 0)         orbs.push({ label: '3루타', emoji: '🌟', xp: breakdown.triple });
-      if (breakdown.homeRun > 0)        orbs.push({ label: '홈런', emoji: '💥', xp: breakdown.homeRun });
+      if (breakdown.hits > 0)            orbs.push({ label: '안타', emoji: '⚾', xp: breakdown.hits });
+      if (breakdown.double > 0)          orbs.push({ label: '2루타', emoji: '💫', xp: breakdown.double });
+      if (breakdown.triple > 0)          orbs.push({ label: '3루타', emoji: '🌟', xp: breakdown.triple });
+      if (breakdown.homeRun > 0)         orbs.push({ label: '홈런', emoji: '💥', xp: breakdown.homeRun });
       if (breakdown.rbi > 0)            orbs.push({ label: '타점', emoji: '🎯', xp: breakdown.rbi });
       if (breakdown.runs > 0)           orbs.push({ label: '득점', emoji: '🏃', xp: breakdown.runs });
-      if (breakdown.stolenBase > 0)     orbs.push({ label: '도루', emoji: '💨', xp: breakdown.stolenBase });
-      if (breakdown.walkOff > 0)        orbs.push({ label: '끝내기', emoji: '🎬', xp: breakdown.walkOff });
-      if (breakdown.teamResult > 0)     orbs.push({ label: '팀 승리', emoji: '🏆', xp: breakdown.teamResult });
+      if (breakdown.stolenBase > 0)      orbs.push({ label: '도루', emoji: '💨', xp: breakdown.stolenBase });
+      if (breakdown.walkOff > 0)         orbs.push({ label: '끝내기', emoji: '🎬', xp: breakdown.walkOff });
+      if (breakdown.teamResult > 0)      orbs.push({ label: '팀 승리', emoji: '🏆', xp: breakdown.teamResult });
       if (breakdown.noHitPenalty < 0)    orbs.push({ label: '무안타', emoji: '😢', xp: breakdown.noHitPenalty });
       if (breakdown.caughtStealing < 0)  orbs.push({ label: '도루실패', emoji: '⚠️', xp: breakdown.caughtStealing });
     }
@@ -376,18 +459,18 @@ router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) 
       return res.status(400).json({ error: '진화 조건을 찾을 수 없습니다' });
     }
 
-    const earnedCount = (character.earnedAchievements || []).length 
+    const earnedCount = (character.earnedAchievements || []).length
       + (character.teamAchievements || []).length;
 
     if (character.xp < req_data.xpCost) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: `XP가 부족합니다 (${req_data.xpCost} XP 필요, 현재 ${character.xp} XP)`,
         code: 'insufficientXp',
       });
     }
 
     if (earnedCount < req_data.requiredAchievements) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: `업적이 부족합니다 (${req_data.requiredAchievements}개 필요, 현재 ${earnedCount}개)`,
         code: 'insufficientAchievements',
       });
@@ -670,7 +753,7 @@ router.post('/:id/guestbook', authenticateUser, async (req: Request, res: Respon
   }
 });
 
-/* ───── DELETE /:id/guestbook/:entryId — 방명록 삭제 (프로필 주인만) ───── */
+/* ───── DELETE /:id/guestbook/:entryId — 방명록 삭제 ───── */
 router.delete('/:id/guestbook/:entryId', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
