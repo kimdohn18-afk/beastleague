@@ -168,12 +168,14 @@ export async function settleGame(
       // 5. 총 XP
       const netXp = xpFromPlayer + xpFromTeamWin + xpFromPrediction + streakBonus.total;
 
-      // 6. 캐릭터 XP 적용
+       // 6. 캐릭터 XP 적용
       if (netXp > 0) {
         character.totalXp = (character.totalXp || 0) + netXp;
+        character.currentXp = (character.currentXp || 0) + netXp;
+      } else {
+        character.currentXp = Math.max(0, (character.currentXp || 0) + netXp);
       }
       character.xp = Math.max(0, (character.xp || 0) + netXp);
-      character.currentXp = Math.max(0, (character.currentXp || 0) + netXp);
       character.totalPlacements = (character.totalPlacements || 0) + 1;
 
       // 7. 업적 재계산 (10회 배수)
