@@ -781,15 +781,12 @@ useEffect(() => {
         <h1 className="text-2xl font-bold text-gray-800">{character.name}</h1>
         <p className="text-sm text-gray-400 mt-1">{animalName}</p>
 
-        <div className="flex items-center gap-3 mt-1">
-          <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-bold">
-            보유 {(character.currentXp ?? character.xp ?? 0).toLocaleString()} XP
-          </span>
-          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-            누적 {(character.totalXp ?? character.xp ?? 0).toLocaleString()} XP
-          </span>
-        </div>
-
+        <div className="mt-1">
+  <span className="text-xs bg-orange-100 text-orange-600 px-2.5 py-0.5 rounded-full font-bold">
+    {(character.totalXp ?? character.xp ?? 0).toLocaleString()} XP
+  </span>
+</div>
+        
         {character.activeTrait && (
           <div className="mt-3 bg-white/80 backdrop-blur rounded-xl px-4 py-2 border border-orange-100 shadow-sm">
             <p className="text-sm text-gray-700 font-medium">{getTraitDisplay(character.activeTrait)}</p>
@@ -915,11 +912,10 @@ useEffect(() => {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
               });
-              const data = await res.json();
+const data = await res.json();
 if (res.ok) {
   setCharacter(prev => prev ? {
     ...prev,
-    xp: data.remainingXp ?? prev.xp,
     evolvedStage: data.evolvedStage ?? prev.evolvedStage,
     displayStage: null,
   } : prev);
