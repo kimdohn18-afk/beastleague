@@ -15,7 +15,7 @@ rankingsRouter.get('/', authenticateUser, async (req: Request, res: Response) =>
     const limit = Math.min(parseInt(String(req.query.limit ?? '100'), 10), 100);
 
     const characters = await Character.find()
-      .sort({ xp: -1 })
+      .sort({ totalXp: -1 })
       .limit(limit)
       .select('_id userId name animalType xp totalXp activeTrait streak')
       .lean();
@@ -35,8 +35,7 @@ rankingsRouter.get('/', authenticateUser, async (req: Request, res: Response) =>
       userId: String(c.userId),
       name: c.name,
       animalType: c.animalType,
-      totalXp: c.totalXp || c.xp || 0,
-      currentXp: c.xp || 0,
+      xp: c.totalXp || c.xp || 0,
       activeTrait: c.activeTrait,
       streak: c.streak || 0,
       placedToday: placedUserIds.has(String(c.userId)),
@@ -53,8 +52,8 @@ rankingsRouter.get('/me', authenticateUser, async (req: Request, res: Response) 
     const userId = new mongoose.Types.ObjectId(req.user!.userId);
 
     const allCharacters = await Character.find()
-      .sort({ xp: -1 })
-      .select('_id userId xp')
+      .sort({ totalXp: -1 })
+      .select('_id userId totalXp xp')
       .lean();
 
     const rank = allCharacters.findIndex((c) => String(c.userId) === String(userId));
