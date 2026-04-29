@@ -15,12 +15,10 @@ import {
   getEvolutionStage,
   getNextEvolutionStage,
   EVOLUTION_STAGES,
-  CHANGE_ANIMAL_COST,
 } from '@/lib/constants';
 import WalkingCharacter, { WalkingCharacterHandle } from '@/components/WalkingCharacter';
 import HarvestOverlay from '@/components/HarvestOverlay';
 import EvolutionModal from '@/components/EvolutionModal';
-import AnimalChangeModal from '@/components/AnimalChangeModal';
 import ShareMenu from '@/components/ShareMenu';
 import DeleteModal from '@/components/DeleteModal';
 import HelpCards from '@/components/HelpCards';
@@ -33,13 +31,6 @@ interface Character {
   xp: number;
   totalXp?: number;
   currentXp?: number;
-  stats?: {
-    power: number;
-    agility: number;
-    skill: number;
-    stamina: number;
-    mind: number;
-  };
   userId: string;
   activeTrait?: string | null;
   earnedAchievements?: string[];
@@ -168,11 +159,8 @@ export default function MainPage() {
   const [feedAnimation, setFeedAnimation] = useState(false);
   const [feedToast, setFeedToast] = useState('');
 
-  /* 진화 & 동물 변경 */
+  /* 진화 */
   const [showEvolution, setShowEvolution] = useState(false);
-  const [showAnimalChange, setShowAnimalChange] = useState(false);
-  const [selectedNewAnimal, setSelectedNewAnimal] = useState<string | null>(null);
-  const [animalChanging, setAnimalChanging] = useState(false);
   const [evolutionToast, setEvolutionToast] = useState('');
   const [evolving, setEvolving] = useState(false);
 
@@ -191,16 +179,16 @@ export default function MainPage() {
   const shareCardRef = useRef<HTMLDivElement>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
-  
- /* 방명록 */
-const [guestbookEntries, setGuestbookEntries] = useState<any[]>([]);
 
-/* 캐릭터 대사 */
-const [dialogue, setDialogue] = useState<{ name: string; text: string } | null>(null);
-const dialogueTimer = useRef<NodeJS.Timeout | null>(null);
-const lastDialogue = useRef<string>('');
-const tapCount = useRef<number>(0);
-const tapResetTimer = useRef<NodeJS.Timeout | null>(null);
+  /* 방명록 */
+  const [guestbookEntries, setGuestbookEntries] = useState<any[]>([]);
+
+  /* 캐릭터 대사 */
+  const [dialogue, setDialogue] = useState<{ name: string; text: string } | null>(null);
+  const dialogueTimer = useRef<NodeJS.Timeout | null>(null);
+  const lastDialogue = useRef<string>('');
+  const tapCount = useRef<number>(0);
+  const tapResetTimer = useRef<NodeJS.Timeout | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const token = (session as any)?.backendToken || (session as any)?.accessToken;
@@ -258,7 +246,8 @@ const tapResetTimer = useRef<NodeJS.Timeout | null>(null);
     if (!character || !token) return;
     if (typeof window === 'undefined' || !('Notification' in window)) return;
     if (/KAKAOTALK/i.test(navigator.userAgent)) return;
-    if (character.xp === 0) return;
+    const xp = character.totalXp ?? character.xp ?? 0;
+    if (xp === 0) return;
 
     const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
     if (localStorage.getItem('push-prompt-dismissed') === today) return;
@@ -341,24 +330,24 @@ const tapResetTimer = useRef<NodeJS.Timeout | null>(null);
   }, [character?._id, token]);
 
   /* ─── 방명록 로드 ─── */
-useEffect(() => {
-  if (!character?._id || !token) return;
-  const fetchGuestbook = async () => {
-    try {
-      const res = await fetch(`${apiUrl}/api/characters/me/guestbook`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setGuestbookEntries(data);
+  useEffect(() => {
+    if (!character?._id || !token) return;
+    const fetchGuestbook = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/characters/me/guestbook`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setGuestbookEntries(data);
+        }
+      } catch (e) {
+        console.error('Guestbook fetch failed:', e);
       }
-    } catch (e) {
-      console.error('Guestbook fetch failed:', e);
-    }
-  };
-  fetchGuestbook();
-}, [character?._id, token]);
-  
+    };
+    fetchGuestbook();
+  }, [character?._id, token]);
+
   /* ─── 튜토리얼 XP 구슬 ─── */
   useEffect(() => {
     const tutorialXp = searchParams.get('tutorialXp');
@@ -436,120 +425,102 @@ useEffect(() => {
   }, [character?._id, token]);
 
   /* ─── 캐릭터 대사 시스템 ─── */
-const showDialogue = useCallback((text: string) => {
-  if (dialogueTimer.current) clearTimeout(dialogueTimer.current);
-  setDialogue(character ? { name: character.name, text } : null);
-  lastDialogue.current = text;
-  dialogueTimer.current = setTimeout(() => setDialogue(null), 3000);
-}, [character]);
+  const showDialogue = useCallback((text: string) => {
+    if (dialogueTimer.current) clearTimeout(dialogueTimer.current);
+    setDialogue(character ? { name: character.name, text } : null);
+    lastDialogue.current = text;
+    dialogueTimer.current = setTimeout(() => setDialogue(null), 3000);
+  }, [character]);
 
-const getContextDialogue = useCallback((): string => {
-  if (!character) return '';
+  const getContextDialogue = useCallback((): string => {
+    if (!character) return '';
 
-  const streak = character.streak ?? 0;
-  const xp = character.totalXp ?? character.xp ?? 0;
-  const hour = new Date(Date.now() + 9 * 3600 * 1000).getUTCHours();
+    const streak = character.streak ?? 0;
+    const xp = character.totalXp ?? character.xp ?? 0;
+    const hour = new Date(Date.now() + 9 * 3600 * 1000).getUTCHours();
 
-  const pool: string[] = [];
+    const pool: string[] = [];
 
-  // 시간대
-  if (hour >= 6 && hour < 12) {
-    pool.push('좋은 아침! 오늘 경기 기대된다~', '으아~ 아직 졸려...', '아침부터 접속하다니 부지런하네!');
-  } else if (hour >= 12 && hour < 18) {
-    pool.push('오후 경기 시작이다! 집중!', '점심 먹었어? 나도 배고파...', '낮 경기도 좋더라~');
-  } else if (hour >= 18 && hour < 23) {
-    pool.push('야구는 역시 밤이지!', '오늘 경기 결과 어떨까~', '치킨 시켜놓고 야구 보자!');
-  } else {
-    pool.push('이 시간에도 오다니... 진심이구나!', '잠은 자야지... 내일도 경기 있어!', '야행성이야? 나도!');
-  }
+    if (hour >= 6 && hour < 12) {
+      pool.push('좋은 아침! 오늘 경기 기대된다~', '으아~ 아직 졸려...', '아침부터 접속하다니 부지런하네!');
+    } else if (hour >= 12 && hour < 18) {
+      pool.push('오후 경기 시작이다! 집중!', '점심 먹었어? 나도 배고파...', '낮 경기도 좋더라~');
+    } else if (hour >= 18 && hour < 23) {
+      pool.push('야구는 역시 밤이지!', '오늘 경기 결과 어떨까~', '치킨 시켜놓고 야구 보자!');
+    } else {
+      pool.push('이 시간에도 오다니... 진심이구나!', '잠은 자야지... 내일도 경기 있어!', '야행성이야? 나도!');
+    }
 
-  // 밥 상태
-  if (!selfFed) {
-    pool.push('배고파... 밥 좀 줘! 🍖', '꼬르륵... 밥 안 줄 거야?', '밥 주면 기분 좋아질 텐데~');
-  } else {
-    pool.push('밥 맛있었어! 고마워~', '배부르다~ 행복해!');
-  }
+    if (!selfFed) {
+      pool.push('배고파... 밥 좀 줘! 🍖', '꼬르륵... 밥 안 줄 거야?', '밥 주면 기분 좋아질 텐데~');
+    } else {
+      pool.push('밥 맛있었어! 고마워~', '배부르다~ 행복해!');
+    }
 
-  // 스트릭
-  if (streak >= 30) {
-    pool.push(`${streak}일 연속이라니... 레전드야!`, '우리 같이 전설 찍자!');
-  } else if (streak >= 7) {
-    pool.push(`${streak}일째! 이 기세 유지하자!`, '매일 와줘서 고마워!');
-  } else if (streak >= 3) {
-    pool.push(`${streak}일 연속이야! 좋은 흐름~`);
-  }
+    if (streak >= 30) {
+      pool.push(`${streak}일 연속이라니... 레전드야!`, '우리 같이 전설 찍자!');
+    } else if (streak >= 7) {
+      pool.push(`${streak}일째! 이 기세 유지하자!`, '매일 와줘서 고마워!');
+    } else if (streak >= 3) {
+      pool.push(`${streak}일 연속이야! 좋은 흐름~`);
+    }
 
-  // XP 구간
-  if (xp >= 10000) {
-    pool.push('신화 등급... 우리 정말 멀리 왔다!', '정상이 보여!');
-  } else if (xp >= 3000) {
-    pool.push('전설의 영역이야!', '여기까지 오다니 대단해!');
-  } else if (xp >= 1000) {
-    pool.push('많이 성장했다! 계속 가보자!', '슬슬 강해지는 느낌!');
-  } else if (xp < 100) {
-    pool.push('아직 시작이야! 같이 성장하자!', '매일 배치하면 금방 커!');
-  }
+    if (xp >= 10000) {
+      pool.push('신화 등급... 우리 정말 멀리 왔다!', '정상이 보여!');
+    } else if (xp >= 3000) {
+      pool.push('전설의 영역이야!', '여기까지 오다니 대단해!');
+    } else if (xp >= 1000) {
+      pool.push('많이 성장했다! 계속 가보자!', '슬슬 강해지는 느낌!');
+    } else if (xp < 100) {
+      pool.push('아직 시작이야! 같이 성장하자!', '매일 배치하면 금방 커!');
+    }
 
-  // 방명록
-  if (guestbookEntries.length > 0) {
-    pool.push('누가 방명록 남겼어! 확인해봐~', '방명록에 새 글이 있는 것 같은데?');
-  }
+    if (guestbookEntries.length > 0) {
+      pool.push('누가 방명록 남겼어! 확인해봐~', '방명록에 새 글이 있는 것 같은데?');
+    }
 
-  // 일반
-  pool.push(
-    '오늘 누가 홈런 칠까~', '야구는 9회말 2아웃부터야!',
-    '나 좀 귀엽지 않아? 😏', '다른 친구들 프로필도 구경해봐!',
-    '업적 모으는 거 재밌지 않아?', '오늘 예측 자신 있어?',
-    '같이 1등 하자!', '헤헤~ 심심했는데 잘 왔어!',
-    '오늘 컨디션 최고야!', '나 많이 컸지?',
-  );
+    pool.push(
+      '오늘 누가 홈런 칠까~', '야구는 9회말 2아웃부터야!',
+      '나 좀 귀엽지 않아? 😏', '다른 친구들 프로필도 구경해봐!',
+      '업적 모으는 거 재밌지 않아?', '오늘 예측 자신 있어?',
+      '같이 1등 하자!', '헤헤~ 심심했는데 잘 왔어!',
+      '오늘 컨디션 최고야!', '나 많이 컸지?',
+    );
 
-  // 중복 방지
-  const filtered = pool.filter(t => t !== lastDialogue.current);
-  return filtered[Math.floor(Math.random() * filtered.length)] || pool[0];
-}, [character, selfFed, guestbookEntries]);
+    const filtered = pool.filter(t => t !== lastDialogue.current);
+    return filtered[Math.floor(Math.random() * filtered.length)] || pool[0];
+  }, [character, selfFed, guestbookEntries]);
 
-const handleCharacterTap = useCallback(() => {
-  if (!character || harvestMode) return;
+  const handleCharacterTap = useCallback(() => {
+    if (!character || harvestMode) return;
 
-  // 연속 탭 감지
-  tapCount.current += 1;
-  if (tapResetTimer.current) clearTimeout(tapResetTimer.current);
-  tapResetTimer.current = setTimeout(() => { tapCount.current = 0; }, 2000);
+    tapCount.current += 1;
+    if (tapResetTimer.current) clearTimeout(tapResetTimer.current);
+    tapResetTimer.current = setTimeout(() => { tapCount.current = 0; }, 2000);
 
-  let text: string;
-  const taps = tapCount.current;
+    let text: string;
+    const taps = tapCount.current;
 
-  if (taps >= 10) {
-    const rage = [
-      '그만 눌러!!! 😡', '아파!!! 진짜 그만!!!',
-      '... 나 화났어', '신고한다?',
-    ];
-    text = rage[Math.floor(Math.random() * rage.length)];
-  } else if (taps >= 7) {
-    const annoyed = [
-      '야!! 그만 좀 눌러!! 😤', '진짜 계속 누를 거야?!',
-      '아프다고!! 😠', '너 이거 재밌어...?',
-    ];
-    text = annoyed[Math.floor(Math.random() * annoyed.length)];
-  } else if (taps >= 4) {
-    const bothered = [
-      '왜 자꾸 눌러... 😑', '슬슬 짜증나는데?',
-      '할 일 없어...?', '그만 좀...!',
-    ];
-    text = bothered[Math.floor(Math.random() * bothered.length)];
-  } else {
-    text = getContextDialogue();
-  }
+    if (taps >= 10) {
+      const rage = ['그만 눌러!!! 😡', '아파!!! 진짜 그만!!!', '... 나 화났어', '신고한다?'];
+      text = rage[Math.floor(Math.random() * rage.length)];
+    } else if (taps >= 7) {
+      const annoyed = ['야!! 그만 좀 눌러!! 😤', '진짜 계속 누를 거야?!', '아프다고!! 😠', '너 이거 재밌어...?'];
+      text = annoyed[Math.floor(Math.random() * annoyed.length)];
+    } else if (taps >= 4) {
+      const bothered = ['왜 자꾸 눌러... 😑', '슬슬 짜증나는데?', '할 일 없어...?', '그만 좀...!'];
+      text = bothered[Math.floor(Math.random() * bothered.length)];
+    } else {
+      text = getContextDialogue();
+    }
 
-  showDialogue(text);
-}, [character, harvestMode, getContextDialogue, showDialogue]);
+    showDialogue(text);
+  }, [character, harvestMode, getContextDialogue, showDialogue]);
 
-// 반응형 대사 (외부에서 호출)
-const showReactionDialogue = useCallback((text: string) => {
-  if (!character) return;
-  showDialogue(text);
-}, [character, showDialogue]);
+  const showReactionDialogue = useCallback((text: string) => {
+    if (!character) return;
+    showDialogue(text);
+  }, [character, showDialogue]);
 
   /* ─── 핸들러: 밥주기 ─── */
   const handleSelfFeed = async () => {
@@ -564,55 +535,24 @@ const showReactionDialogue = useCallback((text: string) => {
         setSelfFed(true);
         setFeedAnimation(true);
         setTimeout(() => setFeedAnimation(false), 1800);
-        setCharacter((prev) => prev ? { ...prev, xp: data.theirXp, totalFeeds: data.totalFeeds } : prev);
+        setCharacter((prev) => prev ? {
+          ...prev,
+          totalXp: data.theirXp ?? prev.totalXp,
+          xp: data.theirXp ?? prev.xp,
+          totalFeeds: data.totalFeeds,
+        } : prev);
         setFeedToast('🍖 냠냠! +3 XP');
-                showReactionDialogue('냠냠! 맛있어~! 고마워! 😋');
-
+        showReactionDialogue('냠냠! 맛있어~! 고마워! 😋');
         setTimeout(() => setFeedToast(''), 2500);
       } else {
         if (data.code === 'alreadyFed') setSelfFed(true);
         setFeedToast(data.error || '밥주기 실패');
-                showReactionDialogue('어... 뭔가 잘못됐어 😢');
-
+        showReactionDialogue('어... 뭔가 잘못됐어 😢');
         setTimeout(() => setFeedToast(''), 2500);
       }
     } catch (e) {
       setFeedToast('네트워크 오류');
       setTimeout(() => setFeedToast(''), 2500);
-    }
-  };
-
-  /* ─── 핸들러: 동물 변경 ─── */
-  const handleAnimalChange = async () => {
-    if (!character || !token || !selectedNewAnimal || animalChanging) return;
-    if (character.xp < CHANGE_ANIMAL_COST) {
-      setEvolutionToast(`XP가 부족합니다 (${CHANGE_ANIMAL_COST} XP 필요)`);
-      setTimeout(() => setEvolutionToast(''), 2500);
-      return;
-    }
-    setAnimalChanging(true);
-    try {
-      const res = await fetch(`${apiUrl}/api/characters/me/animal`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ animalType: selectedNewAnimal }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setCharacter(prev => prev ? { ...prev, animalType: data.character.animalType, xp: data.character.xp } : prev);
-        setEvolutionToast(`✨ ${ANIMAL_NAMES[data.character.animalType] || data.character.animalType}(으)로 변신! -${data.cost} XP`);
-        setTimeout(() => setEvolutionToast(''), 3000);
-        setShowAnimalChange(false);
-        setSelectedNewAnimal(null);
-      } else {
-        setEvolutionToast(data.error || '변경 실패');
-        setTimeout(() => setEvolutionToast(''), 2500);
-      }
-    } catch {
-      setEvolutionToast('네트워크 오류');
-      setTimeout(() => setEvolutionToast(''), 2500);
-    } finally {
-      setAnimalChanging(false);
     }
   };
 
@@ -759,6 +699,7 @@ const showReactionDialogue = useCallback((text: string) => {
   /* ─── 핸들러: 공유 ─── */
   const handleShare = async (target: 'kakao' | 'instagram' | 'download') => {
     if (!character) return;
+    const xp = character.totalXp ?? character.xp ?? 0;
     let shareSuccess = false;
 
     if (target === 'kakao') {
@@ -768,7 +709,7 @@ const showReactionDialogue = useCallback((text: string) => {
         animalName: ANIMAL_NAMES[character.animalType] || character.animalType,
         animalEmoji: ANIMAL_EMOJI[character.animalType] || '🐾',
         animalType: character.animalType,
-        xp: character.xp,
+        xp,
         traitName: character.activeTrait ? getTraitDisplay(character.activeTrait) || undefined : undefined,
       });
       shareSuccess = true;
@@ -807,7 +748,7 @@ const showReactionDialogue = useCallback((text: string) => {
           const data = await res.json();
           if (data.rewarded) {
             alert(`공유 보상 +${data.added} XP! (${data.xpBefore} → ${data.xpAfter})`);
-            setCharacter((prev) => prev ? { ...prev, xp: data.xpAfter } : prev);
+            setCharacter((prev) => prev ? { ...prev, totalXp: data.xpAfter, xp: data.xpAfter } : prev);
           }
         }
       } catch (e) {
@@ -815,7 +756,6 @@ const showReactionDialogue = useCallback((text: string) => {
       }
     }
   };
-
   /* ─── 로딩 / 에러 렌더 ─── */
   if (loading || status === 'loading') {
     return (
@@ -837,7 +777,8 @@ const showReactionDialogue = useCallback((text: string) => {
   /* ─── 파생 값 ─── */
   const emoji = ANIMAL_EMOJI[character.animalType] || '🐾';
   const animalName = ANIMAL_NAMES[character.animalType] || character.animalType;
-  const characterSize = character.displaySize ?? getCharacterSize(character.xp);
+  const xp = character.totalXp ?? character.xp ?? 0;
+  const characterSize = character.displaySize ?? getCharacterSize(xp);
   const evolvedStage = character.evolvedStage ?? 1;
   const displayStage = character.displayStage ?? evolvedStage;
   const earnedCount = (character.earnedAchievements || []).length + (character.teamAchievements || []).length;
@@ -911,11 +852,11 @@ const showReactionDialogue = useCallback((text: string) => {
         <p className="text-sm text-gray-400 mt-1">{animalName}</p>
 
         <div className="mt-1">
-  <span className="text-xs bg-orange-100 text-orange-600 px-2.5 py-0.5 rounded-full font-bold">
-    {(character.totalXp ?? character.xp ?? 0).toLocaleString()} XP
-  </span>
-</div>
-        
+          <span className="text-xs bg-orange-100 text-orange-600 px-2.5 py-0.5 rounded-full font-bold">
+            {xp.toLocaleString()} XP
+          </span>
+        </div>
+
         {character.activeTrait && (
           <div className="mt-3 bg-white/80 backdrop-blur rounded-xl px-4 py-2 border border-orange-100 shadow-sm">
             <p className="text-sm text-gray-700 font-medium">{getTraitDisplay(character.activeTrait)}</p>
@@ -950,8 +891,8 @@ const showReactionDialogue = useCallback((text: string) => {
         >
           {selfFed ? '🍖 오늘 밥 완료!' : '🍖 밥주기 (+3 XP)'}
         </button>
-      </div>  
-      
+      </div>
+
       {/* ─── 방명록 ─── */}
       <div className="mx-4 mt-6 relative z-10">
         <div className="flex items-center justify-between mb-3">
@@ -993,7 +934,7 @@ const showReactionDialogue = useCallback((text: string) => {
           </div>
         )}
       </div>
-      
+
       {/* ─── 캐릭터 대사 ─── */}
       {dialogue && (
         <div
@@ -1018,52 +959,70 @@ const showReactionDialogue = useCallback((text: string) => {
             <button onClick={() => { router.push('/achievements'); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">🏆 내 업적</button>
             <button onClick={() => { setShowEvolution(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">
               {(() => {
-                const evo = EVOLUTION_STAGES[evolvedStage - 1];
+                const evo = EVOLUTION_STAGES[evolvedStage - 1] || EVOLUTION_STAGES[0];
                 return evolvedStage >= 5
-                  ? `💎 신화 · ${character.xp.toLocaleString()} XP`
-                  : `${evo.badge} ${evo.stage}단계 · ${character.xp.toLocaleString()} XP`;
+                  ? `💎 신화 · ${xp.toLocaleString()} XP`
+                  : `${evo?.badge || '🥚'} ${evo?.stage || evolvedStage}단계 · ${xp.toLocaleString()} XP`;
               })()}
             </button>
-            <button onClick={() => { setShowAnimalChange(true); setSelectedNewAnimal(null); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">🔄 캐릭터 변경 ({CHANGE_ANIMAL_COST} XP)</button>
             <button onClick={() => { setShowShareMenu(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-50">📢 공유하기</button>
             <button onClick={() => { setShowDelete(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-50">🗑️ 캐릭터 삭제</button>
           </div>
         )}
+
         <button
-          onClick={() => { setMenuOpen(!menuOpen); setShowDelete(false); setShowHelp(false); }}
-          className={`w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg flex items-center justify-center text-2xl transition-transform duration-300 hover:bg-orange-600 active:scale-95 ${menuOpen ? 'rotate-45' : ''}`}
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="w-14 h-14 bg-orange-400 text-white rounded-full shadow-lg flex items-center justify-center text-2xl hover:bg-orange-500 active:scale-95 transition-all"
         >
-          +
+          {menuOpen ? '✕' : '+'}
         </button>
       </div>
 
-      {menuOpen && <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />}
+      {/* 메뉴 백드롭 */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+      )}
+
+      {/* ─── 공유 카드 (숨김) ─── */}
+      <div className="fixed -left-[9999px] -top-[9999px]">
+        <ShareCard
+          ref={shareCardRef}
+          characterName={character.name}
+          animalType={character.animalType}
+          animalEmoji={emoji}
+          xp={xp}
+          traitName={character.activeTrait ? getTraitDisplay(character.activeTrait) || undefined : undefined}
+        />
+      </div>
 
       {/* ─── 모달들 ─── */}
-      {showHelp && <HelpCards onClose={() => setShowHelp(false)} />}
+      {showHelp && (
+        <HelpCards page={helpPage} setPage={setHelpPage} onClose={() => setShowHelp(false)} />
+      )}
 
-      {showEvolution && character && (
+      {showEvolution && (
         <EvolutionModal
           character={character}
           onClose={() => setShowEvolution(false)}
           onEvolve={async () => {
-            if (!token || evolving) return;
+            if (evolving) return;
             setEvolving(true);
             try {
               const res = await fetch(`${apiUrl}/api/characters/me/evolve`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
               });
-const data = await res.json();
-if (res.ok) {
-  setCharacter(prev => prev ? {
-    ...prev,
-    evolvedStage: data.evolvedStage ?? prev.evolvedStage,
-    displayStage: null,
-  } : prev);
-  setEvolutionToast(`✨ ${data.evolvedStage}단계로 진화!`);
+              const data = await res.json();
+              if (res.ok) {
+                setCharacter(prev => prev ? {
+                  ...prev,
+                  evolvedStage: data.evolvedStage ?? prev.evolvedStage,
+                  displayStage: null,
+                } : prev);
+                setEvolutionToast(`✨ ${data.evolvedStage}단계 ${data.stageName}(으)로 진화!`);
                 setTimeout(() => setEvolutionToast(''), 3000);
                 setShowEvolution(false);
+                showReactionDialogue('우와! 나 진화했어! 🎉');
               } else {
                 setEvolutionToast(data.error || '진화 실패');
                 setTimeout(() => setEvolutionToast(''), 2500);
@@ -1075,104 +1034,91 @@ if (res.ok) {
               setEvolving(false);
             }
           }}
-          onDisplayStageChange={(stage) => setCharacter(prev => prev ? { ...prev, displayStage: stage } : prev)}
-          onDisplaySizeChange={(size) => setCharacter(prev => prev ? { ...prev, displaySize: size } : prev)}
-          evolving={evolving}
-          getCharacterSize={getCharacterSize}
-          apiUrl={apiUrl}
-          token={token}
-        />
-      )}
-
-      {showAnimalChange && (
-        <AnimalChangeModal
-          currentAnimal={character.animalType}
-          xp={character.xp}
-          onClose={() => setShowAnimalChange(false)}
-          onConfirm={async (animal) => {
-            setSelectedNewAnimal(animal);
-            await handleAnimalChange();
-          }}
-          changing={animalChanging}
-        />
-      )}
-
-      {showDelete && (
-        <DeleteModal
-          characterName={character.name}
-          onConfirm={handleDelete}
-          onClose={() => setShowDelete(false)}
-          deleting={deleting}
         />
       )}
 
       {showShareMenu && (
-        <ShareMenu
-          onShare={handleShare}
-          onClose={() => setShowShareMenu(false)}
-          shareLoading={shareLoading}
-        />
+        <ShareMenu onClose={() => setShowShareMenu(false)} onShare={handleShare} loading={shareLoading} />
+      )}
+
+      {showDelete && (
+        <DeleteModal onClose={() => setShowDelete(false)} onConfirm={handleDelete} deleting={deleting} />
       )}
 
       {/* 푸시 프롬프트 */}
       {showPushPrompt && (
-        <div className="fixed bottom-28 left-4 right-4 z-50 bg-white rounded-2xl shadow-lg border border-gray-100 p-4">
-          <p className="text-sm font-bold text-gray-800 mb-1">🔔 알림을 받으시겠어요?</p>
-          <p className="text-xs text-gray-500 mb-3">배치 미완료, 경기 결과 등을 알려드려요.</p>
-          <div className="flex gap-2">
-            <button onClick={handlePushPromptDismiss} className="flex-1 py-2 bg-gray-100 rounded-xl text-xs text-gray-500">다음에</button>
-            <button onClick={handlePushPromptAccept} className="flex-1 py-2 bg-orange-400 text-white rounded-xl text-xs font-bold">허용하기</button>
+        <div className="fixed inset-0 z-[70] bg-black/40 flex items-end justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <div className="text-center mb-4">
+              <div className="text-4xl mb-2">🔔</div>
+              <h3 className="text-lg font-bold text-gray-800">알림을 켜볼까요?</h3>
+              <p className="text-sm text-gray-500 mt-1">정산 결과, 배치 알림 등을<br />실시간으로 받아보세요!</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={handlePushPromptDismiss} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-gray-500 bg-gray-100 hover:bg-gray-200">나중에</button>
+              <button onClick={handlePushPromptAccept} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-orange-400 hover:bg-orange-500">알림 켜기</button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* 알림 차단 안내 */}
+      {/* 알림 차단 가이드 */}
       {showBlockedGuide && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-5 text-center">
-            <div className="text-4xl mb-3">🔕</div>
-            <h2 className="text-lg font-bold text-gray-800 mb-2">알림이 차단되어 있어요</h2>
-            <p className="text-sm text-gray-500 mb-4 leading-relaxed">브라우저 설정에서 알림을 허용해주세요.<br />설정 → 사이트 설정 → 알림</p>
-            <button onClick={() => setShowBlockedGuide(false)} className="w-full py-2.5 bg-gray-100 rounded-xl text-sm text-gray-500 font-medium">닫기</button>
+        <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <div className="text-center mb-4">
+              <div className="text-4xl mb-2">🔕</div>
+              <h3 className="text-lg font-bold text-gray-800">알림이 차단되어 있어요</h3>
+              <p className="text-sm text-gray-500 mt-2 leading-relaxed">
+                브라우저 설정에서 알림을 허용해주세요.<br />
+                주소창 왼쪽 🔒 아이콘 → 알림 → 허용
+              </p>
+            </div>
+            <button onClick={() => setShowBlockedGuide(false)} className="w-full py-2.5 rounded-xl text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">확인</button>
           </div>
         </div>
       )}
 
       {/* 웰컴 모달 */}
       {showWelcome && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center">
+        <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl text-center">
             <div className="text-5xl mb-3">{emoji}</div>
-            <h2 className="text-xl font-bold text-gray-800 mb-2">환영합니다!</h2>
-            <p className="text-sm text-gray-500 mb-4">{character.name}의 모험이 시작됩니다!</p>
-            <button onClick={() => setShowWelcome(false)} className="w-full py-2.5 bg-orange-400 text-white rounded-xl text-sm font-bold">시작하기</button>
+            <h3 className="text-lg font-bold text-gray-800">{character.name} 탄생!</h3>
+            <p className="text-sm text-gray-500 mt-2 leading-relaxed">
+              매일 KBO 경기에 배치하고<br />XP를 모아 캐릭터를 키워보세요!
+            </p>
+            <button onClick={() => setShowWelcome(false)} className="mt-4 w-full py-2.5 rounded-xl text-sm font-bold text-white bg-orange-400 hover:bg-orange-500">시작하기!</button>
           </div>
         </div>
       )}
 
-      {/* 공유 카드 (숨김) */}
-      <div className="hidden">
-        <ShareCard
-          ref={shareCardRef}
-          characterName={character.name}
-          animalType={character.animalType}
-          animalName={animalName}
-          xp={character.xp}
-          characterSize={characterSize}
-          traitName={character.activeTrait ? getTraitDisplay(character.activeTrait) || undefined : undefined}
-        />
-      </div>
-
+      {/* ─── CSS 애니메이션 ─── */}
       <style jsx global>{`
-        @keyframes feedFly0 { 0% { top: 20%; opacity: 1; } 100% { top: 50%; opacity: 0; transform: scale(0.3); } }
-        @keyframes feedFly1 { 0% { top: 15%; opacity: 1; } 100% { top: 50%; opacity: 0; transform: scale(0.3); } }
-        @keyframes feedFly2 { 0% { top: 25%; opacity: 1; } 100% { top: 50%; opacity: 0; transform: scale(0.3); } }
-        @keyframes fadeIn { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
-        .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
-        @keyframes nomnom { 0% { opacity: 0; transform: translate(-50%, 0) scale(0.5); } 30% { opacity: 1; transform: translate(-50%, 0) scale(1.2); } 100% { opacity: 0; transform: translate(-50%, -30px) scale(0.8); } }
-        @keyframes orbFloat { 0%, 100% { transform: translate(-50%, -50%) translateY(0); } 50% { transform: translate(-50%, -50%) translateY(-10px); } }
-        @keyframes twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        @keyframes harvestComplete { 0% { opacity: 0; transform: scale(0.5); } 30% { opacity: 1; transform: scale(1.1); } 50% { transform: scale(1); } 100% { opacity: 0; transform: scale(0.8) translateY(-20px); } }
+        @keyframes feedFly0 {
+          0% { top: 80%; opacity: 1; transform: scale(1); }
+          100% { top: 30%; opacity: 0; transform: scale(0.3); }
+        }
+        @keyframes feedFly1 {
+          0% { top: 85%; opacity: 1; transform: scale(1); }
+          100% { top: 25%; opacity: 0; transform: scale(0.3); }
+        }
+        @keyframes feedFly2 {
+          0% { top: 82%; opacity: 1; transform: scale(1); }
+          100% { top: 28%; opacity: 0; transform: scale(0.3); }
+        }
+        @keyframes nomnom {
+          0% { opacity: 0; transform: translate(-50%, 0) scale(0.5); }
+          30% { opacity: 1; transform: translate(-50%, -20px) scale(1.2); }
+          100% { opacity: 0; transform: translate(-50%, -60px) scale(0.8); }
+        }
+        @keyframes fadeIn {
+          0% { opacity: 0; transform: translateY(10px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out forwards;
+        }
       `}</style>
     </div>
   );
