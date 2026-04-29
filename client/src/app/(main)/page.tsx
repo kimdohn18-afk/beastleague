@@ -989,6 +989,8 @@ export default function MainPage() {
           ref={shareCardRef}
           characterName={character.name}
           animalType={character.animalType}
+          animalName={animalName}
+          characterSize={characterSize}
           xp={xp}
           traitName={character.activeTrait ? getTraitDisplay(character.activeTrait) || undefined : undefined}
         />
