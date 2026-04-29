@@ -212,7 +212,6 @@ router.get('/me/guestbook', authenticateUser, async (req: Request, res: Response
       .limit(20)
       .lean();
 
-    // 작성자 정보 붙이기
     const writerIds = [...new Set(entries.map((e: any) => e.fromUserId.toString()))];
     const writers = await Character.find(
       { userId: { $in: writerIds } },
@@ -357,12 +356,14 @@ router.post('/me/share-reward', authenticateUser, async (req: Request, res: Resp
       return res.status(400).json({ error: '오늘 이미 공유 보상을 받았습니다' });
     }
 
+    const xpBefore = character.totalXp ?? character.xp ?? 0;
+
     await Character.findByIdAndUpdate(character._id, {
       $inc: { xp: 10, currentXp: 10, totalXp: 10 },
       lastShareDate: today,
     });
 
-    res.json({ reward: 10, message: '공유 보상 10 XP 지급!' });
+    res.json({ reward: 10, rewarded: true, added: 10, xpBefore, xpAfter: xpBefore + 10, message: '공유 보상 10 XP 지급!' });
   } catch (err) {
     console.error('Share reward error:', err);
     res.status(500).json({ error: '공유 보상 실패' });
@@ -461,7 +462,6 @@ router.get('/me/evolution', authenticateUser, async (req: Request, res: Response
 
     res.json({
       totalXp,
-      xp: character.xp,
       currentStage: current,
       nextStage: next,
       xpToNext: next ? next.minXp - totalXp : 0,
@@ -486,7 +486,6 @@ router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) 
       return res.status(400).json({ error: '이미 최고 단계입니다' });
     }
 
-    // 누적 XP 기준 진화 조건 (소모 없음)
     const EVOLVE_REQUIREMENTS = [
       null,
       null,
@@ -520,7 +519,6 @@ router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) 
       });
     }
 
-    // XP 차감 없음 — 누적 도달만 확인
     character.evolvedStage = nextStage;
     character.displayStage = null;
     await character.save();
@@ -534,7 +532,6 @@ router.post('/me/evolve', authenticateUser, async (req: Request, res: Response) 
       stageName: STAGE_NAMES[nextStage],
       badge: STAGE_BADGES[nextStage],
       totalXp,
-      xp: character.xp,
     });
   } catch (err) {
     console.error('Evolve error:', err);
@@ -561,7 +558,7 @@ router.put('/me/display', authenticateUser, async (req: Request, res: Response) 
     }
 
     if (displaySize !== null && displaySize !== undefined) {
-      const maxSize = getCharacterSize(character.xp);
+      const maxSize = getCharacterSize(character.totalXp ?? character.xp ?? 0);
       if (displaySize < 60 || displaySize > maxSize) {
         return res.status(400).json({ error: '현재 크기보다 클 수 없습니다' });
       }
@@ -580,55 +577,6 @@ router.put('/me/display', authenticateUser, async (req: Request, res: Response) 
   }
 });
 
-/* ───── PUT /me/animal — 캐릭터 동물 변경 ───── */
-router.put('/me/animal', authenticateUser, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const { animalType } = req.body;
-
-    if (!animalType || !VALID_ANIMALS.includes(animalType)) {
-      return res.status(400).json({ error: '유효하지 않은 동물 타입입니다' });
-    }
-
-    const character = await Character.findOne({ userId });
-    if (!character) {
-      return res.status(404).json({ error: '캐릭터가 없습니다' });
-    }
-
-    if (character.animalType === animalType) {
-      return res.status(400).json({ error: '이미 같은 동물입니다' });
-    }
-
-    const COST = 100;
-    if (character.xp < COST) {
-      return res.status(400).json({
-        error: `XP가 부족합니다 (${COST} XP 필요, 현재 ${character.xp} XP)`,
-        code: 'insufficientXp',
-      });
-    }
-
-    await Character.findByIdAndUpdate(character._id, {
-      animalType,
-      $inc: { xp: -COST, currentXp: -COST },
-    });
-
-    const updated = await Character.findById(character._id);
-
-    res.json({
-      success: true,
-      cost: COST,
-      character: {
-        animalType: updated?.animalType,
-        xp: updated?.xp,
-        name: updated?.name,
-      },
-    });
-  } catch (err) {
-    console.error('Animal change error:', err);
-    res.status(500).json({ error: '캐릭터 변경 실패' });
-  }
-});
-
 /* ───── GET /:id/public — 공개 프로필 ───── */
 router.get('/:id/public', async (req: Request, res: Response) => {
   try {
@@ -639,7 +587,7 @@ router.get('/:id/public', async (req: Request, res: Response) => {
     }
 
     const character = await Character.findById(id).select(
-      'userId name animalType xp activeTrait totalPlacements streak totalLikes totalFeeds createdAt',
+      'userId name animalType xp totalXp activeTrait totalPlacements streak totalLikes totalFeeds createdAt',
     );
     if (!character) {
       return res.status(404).json({ error: '캐릭터를 찾을 수 없습니다' });
@@ -701,7 +649,7 @@ router.get('/:id/public', async (req: Request, res: Response) => {
         id: String(character._id),
         name: character.name,
         animalType: character.animalType,
-        xp: character.xp,
+        xp: character.totalXp ?? character.xp ?? 0,
         activeTrait: character.activeTrait,
         totalPlacements: character.totalPlacements || 0,
         streak: character.streak || 0,
@@ -842,7 +790,7 @@ router.get('/:id/like-status', authenticateUser, async (req: Request, res: Respo
   }
 });
 
-/* ───── POST /:id/feed ───── */
+/* ───── POST /:id/feed — 밥주기 (XP 소모 없음) ───── */
 router.post('/:id/feed', authenticateUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -858,10 +806,7 @@ router.post('/:id/feed', authenticateUser, async (req: Request, res: Response) =
     if (!targetChar) return res.status(404).json({ error: '대상 캐릭터를 찾을 수 없습니다' });
 
     const isSelf = String(myChar._id) === String(targetChar._id);
-    const xpCost = isSelf ? 0 : 5;
     const xpGiven = 3;
-
-    if (!isSelf && myChar.xp < xpCost) return res.status(400).json({ error: 'XP가 부족합니다 (5 XP 필요)' });
 
     const alreadyFed = await Feed.findOne({ fromUserId: userId, toCharacterId: targetChar._id, date: today });
     if (alreadyFed) return res.status(400).json({ error: '오늘 이미 밥을 줬어요', code: 'alreadyFed' });
@@ -873,21 +818,19 @@ router.post('/:id/feed', authenticateUser, async (req: Request, res: Response) =
       remainingFeeds = 3 - todayFeedCount - 1;
     }
 
-    await Feed.create({ fromUserId: userId, toCharacterId: targetChar._id, date: today, xpCost, xpGiven, isSelf });
+    await Feed.create({ fromUserId: userId, toCharacterId: targetChar._id, date: today, xpCost: 0, xpGiven, isSelf });
 
-        if (!isSelf) await Character.findByIdAndUpdate(myChar._id, { $inc: { xp: -xpCost, currentXp: -xpCost } });
-    await Character.findByIdAndUpdate(targetChar._id, { $inc: { xp: xpGiven, currentXp: xpGiven, totalXp: xpGiven } });
+    // 받는 쪽만 +3 XP (주는 쪽 소모 없음)
+    await Character.findByIdAndUpdate(targetChar._id, { $inc: { xp: xpGiven, currentXp: xpGiven, totalXp: xpGiven, totalFeeds: 1 } });
 
-    const updatedMyChar = await Character.findById(myChar._id);
     const updatedTarget = await Character.findById(targetChar._id);
 
     res.json({
       fed: true,
       isSelf,
-      cost: xpCost,
+      cost: 0,
       given: xpGiven,
-      myXp: updatedMyChar?.xp ?? myChar.xp,
-      theirXp: updatedTarget?.xp ?? targetChar.xp,
+      theirXp: updatedTarget?.totalXp ?? targetChar.totalXp ?? targetChar.xp ?? 0,
       totalFeeds: updatedTarget?.totalFeeds ?? 0,
       remainingFeeds: isSelf ? null : remainingFeeds,
     });
