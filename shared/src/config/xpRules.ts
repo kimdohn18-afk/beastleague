@@ -10,6 +10,7 @@ export const BATTER_XP = {
   RUN: 8,            // 득점
   SB: 15,            // 도루
   SB_FAIL: -10,      // 도루실패
+  WALK: 10,         // 볼넷
   WALK_OFF: 25,      // 끝내기 안타
   NO_HIT_PENALTY: -15, // 무안타 (3타석 이상)
 } as const;
