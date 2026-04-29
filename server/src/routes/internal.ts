@@ -223,29 +223,44 @@ internalRouter.post('/games/:gameId/resettle', async (req: Request, res: Respons
 });
 
 // POST /internal/sync-xp — 기존 유저 XP 동기화
-internalRouter.post('/sync-xp', async (req: Request, res: Response) => {
+internalRouter.post('/sync-xp', async (_req, res) => {
   try {
     const { Character } = await import('../models/Character');
+    const { Placement } = await import('../models/Placement');
+    
     const characters = await Character.find({});
     let updated = 0;
-
+    
     for (const char of characters) {
-      const currentXp = char.xp || 0;
-      // totalXp가 xp보다 작으면 xp 값으로 맞춤
-      if ((char.totalXp || 0) < currentXp) {
-        char.totalXp = currentXp;
+      // 정산된 배치에서 실제 누적 XP 계산
+      const placements = await Placement.find({ 
+        userId: char.userId, 
+        status: 'settled' 
+      }).lean();
+      
+      let earnedXp = 0;
+      for (const p of placements) {
+        const fromPlayer = p.xpFromPlayer || 0;
+        const fromPrediction = p.xpFromPrediction || 0;
+        earnedXp += fromPlayer + fromPrediction;
       }
-      // currentXp가 설정 안 됐으면 xp로 맞춤
-      if (!char.currentXp && char.currentXp !== 0) {
-        char.currentXp = currentXp;
-      }
+      
+      // 튜토리얼 XP (15) + 공유보상 + 밥받은 XP 등은 추적 불가하므로
+      // 최소한 정산 XP + 현재 xp 중 큰 값을 totalXp로
+      const bestTotal = Math.max(earnedXp, char.xp || 0, char.totalXp || 0);
+      
+      char.totalXp = bestTotal;
+      // currentXp는 totalXp에서 소모한 만큼 뺀 값
+      // 소모 내역 추적이 안 되므로 현재 xp를 currentXp로
+      char.currentXp = char.xp || 0;
+      
       await char.save();
       updated++;
     }
-
+    
     res.json({ success: true, updated });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
   }
 });
 
