@@ -995,11 +995,11 @@ export default function MainPage() {
       </div>
 
       {/* ─── 모달들 ─── */}
-            {showHelp && (
+      {showHelp && (
         <HelpCards onClose={() => setShowHelp(false)} />
       )}
 
-            {showEvolution && (
+      {showEvolution && (
         <EvolutionModal
           character={{
             ...character,
@@ -1050,11 +1050,11 @@ export default function MainPage() {
       )}
 
       {showShareMenu && (
-        <ShareMenu onClose={() => setShowShareMenu(false)} onShare={handleShare} loading={shareLoading} />
+        <ShareMenu onClose={() => setShowShareMenu(false)} onShare={handleShare} shareLoading={shareLoading} />
       )}
 
       {showDelete && (
-        <DeleteModal onClose={() => setShowDelete(false)} onConfirm={handleDelete} deleting={deleting} />
+        <DeleteModal characterName={character.name} onClose={() => setShowDelete(false)} onConfirm={handleDelete} deleting={deleting} />
       )}
 
       {/* 푸시 프롬프트 */}
