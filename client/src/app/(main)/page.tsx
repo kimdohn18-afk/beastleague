@@ -999,9 +999,12 @@ export default function MainPage() {
         <HelpCards onClose={() => setShowHelp(false)} />
       )}
 
-      {showEvolution && (
+            {showEvolution && (
         <EvolutionModal
-          character={character}
+          character={{
+            ...character,
+            xp: xp,
+          }}
           onClose={() => setShowEvolution(false)}
           onEvolve={async () => {
             if (evolving) return;
@@ -1033,6 +1036,16 @@ export default function MainPage() {
               setEvolving(false);
             }
           }}
+          onDisplayStageChange={(stage) => {
+            setCharacter(prev => prev ? { ...prev, displayStage: stage } : prev);
+          }}
+          onDisplaySizeChange={(size) => {
+            setCharacter(prev => prev ? { ...prev, displaySize: size } : prev);
+          }}
+          evolving={evolving}
+          getCharacterSize={getCharacterSize}
+          apiUrl={apiUrl}
+          token={token}
         />
       )}
 
