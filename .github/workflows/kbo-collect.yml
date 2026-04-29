@@ -8,9 +8,10 @@ on:
         required: false
         default: ''
   schedule:
-    - cron: '0 22 * * *'
     - cron: '30 13 * * *'
     - cron: '30 14 * * *'
+    - cron: '0 16 * * *'
+    - cron: '0 22 * * *'
 
 jobs:
   collect:
@@ -36,6 +37,9 @@ jobs:
           else
             TODAY=$(TZ=Asia/Seoul date +%Y%m%d)
             python collector/kbo_collector.py "$TODAY"
+
+            YESTERDAY=$(TZ=Asia/Seoul date -d '1 day ago' +%Y%m%d 2>/dev/null || TZ=Asia/Seoul date -v-1d +%Y%m%d)
+            python collector/kbo_collector.py "$YESTERDAY"
           fi
 
       - name: Upload CSV
