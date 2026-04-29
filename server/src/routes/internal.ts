@@ -12,7 +12,7 @@ export const internalRouter = Router();
 internalRouter.use(internalLimiter);
 internalRouter.use(authenticateInternal);
 
-// POST /internal/games — GameData 또는 GameData[] upsert
+// POST /internal/games — GameData upsert
 internalRouter.post('/games', async (req: Request, res: Response) => {
   try {
     const body = req.body as GameData | GameData[];
@@ -78,10 +78,10 @@ internalRouter.post('/cleanup-tokens', async (req: Request, res: Response) => {
   try {
     const { PushSubscription } = await import('../models/PushSubscription');
     const all = await PushSubscription.find().lean();
-    
+
     const seen = new Set<string>();
     const duplicateIds: string[] = [];
-    
+
     for (const sub of all) {
       const key = `${sub.userId}-${sub.fcmToken}`;
       if (seen.has(key)) {
@@ -90,8 +90,7 @@ internalRouter.post('/cleanup-tokens', async (req: Request, res: Response) => {
         seen.add(key);
       }
     }
-    
-    // 같은 유저의 오래된 토큰도 정리 (유저당 최신 1개만 유지)
+
     const userTokens = new Map<string, { id: string; date: Date }>();
     for (const sub of all) {
       const uid = sub.userId.toString();
@@ -103,17 +102,17 @@ internalRouter.post('/cleanup-tokens', async (req: Request, res: Response) => {
         duplicateIds.push(sub._id.toString());
       }
     }
-    
+
     const deleted = await PushSubscription.deleteMany({ _id: { $in: duplicateIds } });
     const remaining = await PushSubscription.countDocuments();
-    
+
     return res.json({ success: true, deleted: deleted.deletedCount, remaining });
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
 });
 
-// 구독자 통계 확인
+// 구독자 통계
 internalRouter.get('/push-stats', async (req: Request, res: Response) => {
   try {
     const { PushSubscription } = await import('../models/PushSubscription');
@@ -157,40 +156,32 @@ internalRouter.post('/recalculate-traits', async (req, res) => {
   }
 });
 
-// server/src/routes/internal.ts 에 추가
-
-// POST /internal/games/:gameId/score — 경기 결과 입력 (수동)
+// POST /internal/games/:gameId/score — 경기 결과 입력
 internalRouter.post('/games/:gameId/score', async (req: Request, res: Response) => {
   try {
     const { homeScore, awayScore } = req.body;
-    
+
     if (typeof homeScore !== 'number' || typeof awayScore !== 'number') {
       return res.status(400).json({ error: 'homeScore, awayScore (number) 필수' });
     }
-    
+
     const game = await Game.findOneAndUpdate(
       { gameId: req.params.gameId },
-      { 
-        $set: { 
-          homeScore, 
-          awayScore, 
-          status: 'finished' 
-        } 
-      },
+      { $set: { homeScore, awayScore, status: 'finished' } },
       { new: true }
     );
-    
+
     if (!game) {
       return res.status(404).json({ error: '경기를 찾을 수 없습니다' });
     }
-    
+
     return res.json({ success: true, game });
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
 });
 
-// GET /api/internal/games?date=YYYY-MM-DD — 날짜별 경기 조회
+// GET /internal/games?date=YYYY-MM-DD
 internalRouter.get('/games', async (req: Request, res: Response) => {
   try {
     const { date } = req.query;
@@ -222,45 +213,49 @@ internalRouter.post('/games/:gameId/resettle', async (req: Request, res: Respons
   }
 });
 
-// POST /internal/sync-xp — 기존 유저 XP 동기화
+// POST /internal/sync-xp — 기존 유저 XP 동기화 (소모 없는 체계)
 internalRouter.post('/sync-xp', async (_req, res) => {
   try {
     const { Character } = await import('../models/Character');
     const { Placement } = await import('../models/Placement');
-    
+
     const characters = await Character.find({});
     let updated = 0;
-    
+    const details: Array<{ name: string; before: number; after: number }> = [];
+
     for (const char of characters) {
-      // 정산된 배치에서 실제 누적 XP 계산
-      const placements = await Placement.find({ 
-        userId: char.userId, 
-        status: 'settled' 
+      const placements = await Placement.find({
+        userId: char.userId,
+        status: 'settled',
       }).lean();
-      
-      let earnedXp = 0;
+
+      let earnedFromPlacements = 0;
       for (const p of placements) {
         const fromPlayer = p.xpFromPlayer || 0;
         const fromPrediction = p.xpFromPrediction || 0;
-        earnedXp += fromPlayer + fromPrediction;
+        // 마이너스는 누적에 반영하지 않음
+        const net = fromPlayer + fromPrediction;
+        if (net > 0) earnedFromPlacements += net;
       }
-      
-      // 튜토리얼 XP (15) + 공유보상 + 밥받은 XP 등은 추적 불가하므로
-      // 최소한 정산 XP + 현재 xp 중 큰 값을 totalXp로
-      const bestTotal = Math.max(earnedXp, char.xp || 0, char.totalXp || 0);
-      
+
+      // 현재 저장된 값들 중 가장 큰 값과 정산 합산 중 큰 값
+      const currentMax = Math.max(char.xp || 0, char.totalXp || 0, char.currentXp || 0);
+      const bestTotal = Math.max(earnedFromPlacements, currentMax);
+
+      const before = char.totalXp || 0;
+
+      // 세 필드 모두 동일하게 통일
       char.totalXp = bestTotal;
-      // currentXp는 totalXp에서 소모한 만큼 뺀 값
-      // 소모 내역 추적이 안 되므로 현재 xp를 currentXp로
-      char.currentXp = char.xp || 0;
-      
+      char.xp = bestTotal;
+      char.currentXp = bestTotal;
+
       await char.save();
       updated++;
+      details.push({ name: char.name, before, after: bestTotal });
     }
-    
-    res.json({ success: true, updated });
+
+    res.json({ success: true, updated, details });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
 });
-
