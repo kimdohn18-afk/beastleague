@@ -10,6 +10,7 @@ export interface IXpBreakdown {
   triple: number;
   stolenBase: number;
   caughtStealing: number;
+  walk: number;
   walkOff: number;
   teamResult: number;
   total: number;
@@ -42,6 +43,7 @@ const xpBreakdownSchema = new Schema<IXpBreakdown>(
     triple:         { type: Number, default: 0 },
     stolenBase:     { type: Number, default: 0 },
     caughtStealing: { type: Number, default: 0 },
+    walk:           { type: Number, default: 0 },
     walkOff:        { type: Number, default: 0 },
     teamResult:     { type: Number, default: 0 },
     total:          { type: Number, default: 0 },
