@@ -406,6 +406,7 @@ router.get('/me/unclaimed-xp', authenticateUser, async (req: Request, res: Respo
       if (breakdown.rbi > 0)            orbs.push({ label: '타점', emoji: '🎯', xp: breakdown.rbi });
       if (breakdown.runs > 0)           orbs.push({ label: '득점', emoji: '🏃', xp: breakdown.runs });
       if (breakdown.stolenBase > 0)      orbs.push({ label: '도루', emoji: '💨', xp: breakdown.stolenBase });
+      if (breakdown.walk > 0)            orbs.push({ label: '볼넷', emoji: '👁️', xp: breakdown.walk });
       if (breakdown.walkOff > 0)         orbs.push({ label: '끝내기', emoji: '🎬', xp: breakdown.walkOff });
       if (breakdown.teamResult > 0)      orbs.push({ label: '팀 승리', emoji: '🏆', xp: breakdown.teamResult });
       if (breakdown.noHitPenalty < 0)    orbs.push({ label: '무안타', emoji: '😢', xp: breakdown.noHitPenalty });
