@@ -145,7 +145,6 @@ export default function MainPage() {
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [helpPage, setHelpPage] = useState(0);
   const [showWelcome, setShowWelcome] = useState(false);
   const [showBlockedGuide, setShowBlockedGuide] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
@@ -997,8 +996,8 @@ export default function MainPage() {
       </div>
 
       {/* ─── 모달들 ─── */}
-      {showHelp && (
-        <HelpCards page={helpPage} setPage={setHelpPage} onClose={() => setShowHelp(false)} />
+            {showHelp && (
+        <HelpCards onClose={() => setShowHelp(false)} />
       )}
 
       {showEvolution && (
