@@ -3,7 +3,7 @@ import { authenticateUser } from '../middleware/auth';
 
 export const statsRouter = Router();
 
-// 능력치 시스템 — 추후 구현 예정
+// 능력치 시스템 – 추후 구현 예정
 statsRouter.get('/', authenticateUser, async (_req: Request, res: Response) => {
   return res.json({
     stats: { power: 1, agility: 1, skill: 1, stamina: 1, mind: 1 },
