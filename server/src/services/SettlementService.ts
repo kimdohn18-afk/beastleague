@@ -82,7 +82,7 @@ function calculateBatterXp(batter: any): { xpFromPlayer: number; xpBreakdown: an
   const runs = parseInt(batter.runs) || 0;
   const stolenBases = parseInt(batter.stolenBases) || 0;
   const stolenBaseFails = parseInt(batter.stolenBaseFails) || 0;
-  const walks = parseInt(batter.walks) || 0;          // ← 추가
+  const walks = parseInt(batter.walks) || 0;
   const walkOff = !!batter.walkOff;
 
   const singles = Math.max(0, hits - doubles - triples - homeRuns);
@@ -96,7 +96,7 @@ function calculateBatterXp(batter: any): { xpFromPlayer: number; xpBreakdown: an
     runs: runs * BATTER_XP.RUN,
     stolenBase: stolenBases * BATTER_XP.SB,
     caughtStealing: stolenBaseFails * BATTER_XP.SB_FAIL,
-    walk: walks * BATTER_XP.WALK,                     // ← 추가
+    walk: walks * BATTER_XP.WALK,
     walkOff: walkOff ? BATTER_XP.WALK_OFF : 0,
     noHitPenalty: (atBats >= 3 && hits === 0) ? BATTER_XP.NO_HIT_PENALTY : 0,
     teamResult: 0,
@@ -105,7 +105,6 @@ function calculateBatterXp(batter: any): { xpFromPlayer: number; xpBreakdown: an
   const xpFromPlayer = breakdown.hits + breakdown.double + breakdown.triple +
     breakdown.homeRun + breakdown.rbi + breakdown.runs + breakdown.stolenBase +
     breakdown.caughtStealing + breakdown.walk + breakdown.walkOff + breakdown.noHitPenalty;
-                                                        // ↑ breakdown.walk 추가
 
   return { xpFromPlayer, xpBreakdown: breakdown };
 }
@@ -171,14 +170,13 @@ export async function settleGame(
       // 5. 총 XP
       const netXp = xpFromPlayer + xpFromTeamWin + xpFromPrediction + streakBonus.total;
 
-       // 6. 캐릭터 XP 적용
+      // 6. 캐릭터 XP 적용 — totalXp는 절대 감소하지 않음
       if (netXp > 0) {
         character.totalXp = (character.totalXp || 0) + netXp;
-        character.currentXp = (character.currentXp || 0) + netXp;
-      } else {
-        character.currentXp = Math.max(0, (character.currentXp || 0) + netXp);
       }
-      character.xp = Math.max(0, (character.xp || 0) + netXp);
+      // xp, currentXp는 totalXp와 동기화 (하위 호환)
+      character.xp = character.totalXp || 0;
+      character.currentXp = character.totalXp || 0;
       character.totalPlacements = (character.totalPlacements || 0) + 1;
 
       // 7. 업적 재계산 (10회 배수)
